@@ -1,10 +1,10 @@
 import { createRoot } from 'react-dom/client';
-import NxWelcome from '../../../web/src/app/nx-welcome';
+import { NxWelcome } from '../../../web/src/app/nx-welcome.tsx';
 
 function App() {
   return (
     <>
-      <NxWelcome title="@monorepo/desktop" />
+      <NxWelcome title="desktop" />
     </>
   );
 }
