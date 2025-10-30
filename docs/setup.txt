@@ -1,0 +1,78 @@
+=============================================================
+### React-Native Setup in Nx MonoRepo Project
+=============================================================
+
+==> nx g @nx/react-native:app apps/mobile
+=============================================================
+==> Error white setting react-native cli after setting up nx.
+(https://nx.dev/docs/technologies/react/react-native/introduction)
+=============================================================
+1. npx nx reset
+=============================================================
+2. nx g @nx/react-native:app apps/mobile
+or
+$env:NX_DAEMON="false"; nx g @nx/react-native:app apps/mobile
+or
+nx g @nx/react-native:app apps/mobile --verbose
+==> now fix nx.json and repeat over
+==> Still error:
+So: 
+3. npx nx migrate latest
+4. npm install
+=============================================================
+Now run again:
+==> nx g @nx/react-native:app apps/mobile
+=============================================================
+Now run mobile app using commands:
+1. nx start mobile
+2. nx run-ios mobile
+3. nx run-android mobile
+4. nx build-ios mobile
+5. nx build-android mobile
+
+
+=============================================================
+### React-(Vite) Setup in Nx MonoRepo Project
+=============================================================
+
+1. nx add @nx/react
+=============================================================
+
+2. nx g @nx/react:app apps/web
+=============================================================
+
+3. Commands:
+==> nx build web
+==> nx serve web
+
+
+=============================================================
+### Electron-(Vite) Setup in Nx MonoRepo Project
+=============================================================
+
+Project name: @monorepo/desktop
+Targets: dev, start, build (run-commands that invoke npm scripts in apps/desktop)
+
+1. Install desktop app deps in apps/desktop (example):
+   cd apps/desktop
+   npm install
+   # Ensure package.json in apps/desktop defines scripts: "dev" and "build"
+
+2. Nx targets are configured in apps/desktop/project.json:
+   - dev/start: runs "npm run dev" in apps/desktop
+   - build: runs "npm run build" in apps/desktop
+
+3. Commands (from repo root):
+==> nx run @monorepo/desktop:dev
+==> nx run @monorepo/desktop:start
+==> nx run @monorepo/desktop:build
+
+4. Optional root scripts (add to root package.json):
+   "start:desktop": "nx run @monorepo/desktop:dev",
+   "build:desktop": "nx run @monorepo/desktop:build"
+
+5. Notes:
+   - This setup delegates to the app-local npm scripts (apps/desktop/package.json).
+   - Use Vite/Electron configs maintained inside apps/desktop.
+=============================================================
+

@@ -1,0 +1,39 @@
+{
+  "name": "@monorepo/desktop",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron .",
+    "make:win": "electron-builder --win",
+    "make:win:portable": "electron-builder --win portable",
+    "make:win:msi": "electron-builder --win msi"
+  },
+  "devDependencies": {
+    "electron": "^32.2.7",
+    "electron-vite": "^2.3.0",
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {},
+  "build": {
+    "appId": "com.monorepo.desktop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}

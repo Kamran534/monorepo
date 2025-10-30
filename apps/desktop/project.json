@@ -1,0 +1,29 @@
+{
+  "name": "@monorepo/desktop",
+  "projectType": "application",
+  "sourceRoot": "apps/desktop/src",
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run dev",
+        "cwd": "apps/desktop"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run build",
+        "cwd": "apps/desktop"
+      }
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run dev",
+        "cwd": "apps/desktop"
+      }
+    }
+  },
+  "tags": ["type:app", "platform:desktop"]
+}
