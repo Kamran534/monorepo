@@ -1,89 +1,106 @@
-# Monorepo
+# PayFlow Monorepo
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+This is an Nx-powered monorepo containing Web, Desktop, and Mobile applications for PayFlow, plus shared libraries.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is almost ready ✨.
+### Apps
+- **Web (`apps/web`)**: React + Vite PWA scaffold (tests/jest set up). Built output under `dist/apps/web`.
+- **Desktop (`apps/desktop`)**: Electron app using electron-vite. Windows installers produced in `apps/desktop/release`.
+- **Mobile (`apps/mobile`)**: React Native app with iOS and Android native projects, Tailwind via NativeWind.
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/nx-api/js?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+### Shared Libraries
+- **`libs/shared/hooks/scanner`**: Barcode scanner React hook and component. See `README.md` and `VISUAL_GUIDE.md` inside.
+- **`libs/shared/assets`**: Shared images/assets with `USAGE.md`.
 
-## Finish your CI setup
+## Getting started
 
-[Click here to finish setting up your workspace!](https://cloud.nx.app)
+Prerequisites: Node 18+.
 
-## Run tasks
-
-To run tasks with Nx use:
-
-```sh
-npx nx <target> <project-name>
-```
-
-For example:
+Install dependencies at the repo root:
 
 ```sh
-npx nx build myproject
+npm ci
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+## Running apps
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Versioning and releasing
-
-To version and release the library use
-
-```
-npx nx release
-```
-
-Pass `--dry-run` to see what would happen without actually releasing the library.
-
-[Learn more about Nx release &raquo;](hhttps://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Add new projects
-
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
-
-To install a new plugin you can use the `nx add` command. Here's an example of adding the React plugin:
+Desktop (Electron):
 
 ```sh
-npx nx add @nx/react
+npm run start              # alias for nx run desktop:dev
+# or
+npm run start:desktop      # alias for nx run desktop:start
 ```
 
-Use the plugin's generator to create new projects. For example, to create a new React app or library:
+Web (Vite + React):
 
 ```sh
-# Genenerate an app
-npx nx g @nx/react:app demo
-
-# Generate a library
-npx nx g @nx/react:lib some-lib
+npm run start:web          # nx serve web
 ```
 
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
+Mobile (React Native):
 
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+```sh
+npm run start:mobile       # starts Metro / RN dev server
+npm run mobile:android     # run on Android emulator/device
+npm run mobile:ios         # run on iOS simulator (macOS required)
+```
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## Building
 
-## Install Nx Console
+Desktop build and packaging:
 
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
+```sh
+npm run build:desktop      # builds Electron app (electron-vite)
+npm run make:desktop       # build Windows installer (NSIS)
+npm run make:desktop:portable
+npm run make:desktop:msi
+```
 
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Web build:
 
-## Useful links
+```sh
+npm run build:web          # outputs to dist/apps/web
+```
 
-Learn more:
+Mobile builds (via Nx React Native plugin):
 
-- [Learn more about this workspace setup](https://nx.dev/nx-api/js?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+```sh
+npm run build:android-mobile
+npm run build:ios-mobile
+```
 
-And join the Nx community:
+## Repository structure
 
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+```
+apps/
+  web/        # Vite + React PWA
+  desktop/    # Electron (electron-vite, electron-builder)
+  mobile/     # React Native (iOS/Android)
+libs/
+  shared/
+    hooks/scanner/  # Barcode scanner hook/component + docs
+    assets/         # Shared images/assets
+docs/               # Setup and PWA notes
+```
+
+## Progress so far
+
+- Desktop app builds and produces Windows installers under `apps/desktop/release` (e.g., `PayFlow Setup 0.0.1.exe`).
+- Web app scaffolded with PWA assets; production build artifacts are in `dist/apps/web`.
+- Mobile app scaffolded with Android and iOS projects; RN dev scripts wired in root `package.json`.
+- Shared barcode scanner hook available with integration docs in `libs/shared/hooks/scanner`.
+- Shared assets library created with usage guide.
+
+## Useful scripts
+
+```sh
+npm run update-icons  # sync/update app icons (script in scripts/update-icons.js)
+```
+
+## Notes
+
+This workspace uses Nx 22 and Vite 7 at the root. For the full project graph, run:
+
+```sh
+npx nx graph
+```

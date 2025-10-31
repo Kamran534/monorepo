@@ -23,10 +23,7 @@ if (!fs.existsSync(SHARED_LOGO)) {
   process.exit(1);
 }
 
-async function main() {
-  console.log('🎨 Updating all app icons from shared logo...\n');
-
-  // Web App PWA Icons
+function generateWebIcons() {
   console.log('📱 Generating Web PWA icons...');
   const webIcons = [
     { output: 'apps/web/public/logo.png', size: 1000 },
@@ -36,7 +33,6 @@ async function main() {
     { output: 'apps/web/public/favicon-32x32.png', size: 32 },
     { output: 'apps/web/public/favicon-16x16.png', size: 16 },
   ];
-
   webIcons.forEach(({ output, size }) => {
     try {
       const cmd = `npx sharp-cli -i ${SHARED_LOGO} -o ${output} resize ${size} ${size}`;
@@ -46,27 +42,26 @@ async function main() {
       console.error(`  ✗ Failed to generate ${output}:`, error.message);
     }
   });
+}
 
-  // Desktop App Icon
+function updateDesktopIcons() {
   console.log('\n🖥️  Updating Desktop app icon...');
   try {
-    // Generate multiple sizes for better quality on different DPIs
     const desktopSizes = [
       { output: 'apps/desktop/resources/icon.png', size: 512 },
       { output: 'apps/desktop/resources/icon-256.png', size: 256 },
     ];
-    
     desktopSizes.forEach(({ output, size }) => {
       const cmd = `npx sharp-cli -i ${SHARED_LOGO} -o ${output} resize ${size} ${size}`;
       execSync(cmd, { stdio: 'pipe' });
     });
-    
     console.log('  ✓ Desktop icons updated (512px, 256px)');
   } catch (error) {
     console.error('  ✗ Failed to update desktop icon:', error.message);
   }
+}
 
-  // Mobile App Icon
+function updateMobileIcon() {
   console.log('\n📱 Updating Mobile app icon...');
   try {
     fs.copyFileSync(SHARED_LOGO, 'apps/mobile/src/assets/logo.png');
@@ -74,8 +69,64 @@ async function main() {
   } catch (error) {
     console.error('  ✗ Failed to update mobile icon:', error.message);
   }
+}
 
-  console.log('\n✅ All icons updated successfully!');
+function promptSelection() {
+  return new Promise((resolve) => {
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    console.log('🎨 Update icons from shared logo');
+    console.log('\nSelect target to update:');
+    console.log('  1) Web');
+    console.log('  2) Desktop');
+    console.log('  3) Mobile');
+    console.log('  4) All');
+    console.log('  5) Exit');
+    rl.question('\nEnter choice [1-5]: ', (answer) => {
+      rl.close();
+      const choice = String(answer || '').trim();
+      resolve(choice);
+    });
+  });
+}
+
+async function main() {
+  const choice = await promptSelection();
+  switch (choice) {
+    case '1':
+    case 'web':
+    case 'Web':
+      console.log('\n🎯 Target: Web');
+      generateWebIcons();
+      break;
+    case '2':
+    case 'desktop':
+    case 'Desktop':
+      console.log('\n🎯 Target: Desktop');
+      updateDesktopIcons();
+      break;
+    case '3':
+    case 'mobile':
+    case 'Mobile':
+      console.log('\n🎯 Target: Mobile');
+      updateMobileIcon();
+      break;
+    case '5':
+    case 'exit':
+    case 'Exit':
+      console.log('\n👋 Exiting without changes.');
+      return;
+    case '4':
+    case 'all':
+    case 'All':
+    default:
+      console.log('\n🎯 Target: All');
+      generateWebIcons();
+      updateDesktopIcons();
+      updateMobileIcon();
+      break;
+  }
+  console.log('\n✅ Icon update complete.');
   console.log('\n💡 Remember to commit the updated icons to version control.');
 }
 
