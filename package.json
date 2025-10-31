@@ -20,7 +20,8 @@
     "start": "nx run desktop:dev",
     "start:desktop": "nx run desktop:start",
     "dev:desktop": "nx run desktop:dev",
-    "build:desktop": "nx run desktop:build"
+    "build:desktop": "nx run desktop:build",
+    "update-icons": "node scripts/update-icons.js"
   },
   "private": true,
   "devDependencies": {
@@ -50,6 +51,7 @@
     "@types/react-dom": "^19.0.6",
     "@vitejs/plugin-react": "^4.2.0",
     "@vitest/ui": "^3.0.0",
+    "ajv": "^8.0.0",
     "autoprefixer": "10.4.13",
     "babel-jest": "^30.0.2",
     "eslint": "^9.8.0",
@@ -79,8 +81,11 @@
     "typescript": "5.9.3",
     "typescript-eslint": "^8.40.0",
     "vite": "^7.0.0",
+    "vite-plugin-dts": "~4.5.0",
+    "vite-plugin-pwa": "^1.1.0",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "workbox-window": "^7.3.0"
   },
   "dependencies": {
     "@react-native-community/cli": "18.0.0",

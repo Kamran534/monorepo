@@ -21,19 +21,28 @@
   },
   "dependencies": {},
   "build": {
-    "appId": "com.monorepo.desktop",
+    "appId": "com.payflow.desktop",
+    "productName": "PayFlow",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**",
+      "resources/**",
       "package.json"
     ],
     "asar": true,
     "win": {
+      "icon": "resources/icon.png",
       "target": [
         "nsis"
       ]
+    },
+    "mac": {
+      "icon": "resources/icon.png"
+    },
+    "linux": {
+      "icon": "resources/icon.png"
     }
   }
 }

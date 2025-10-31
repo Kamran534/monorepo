@@ -7,6 +7,8 @@ async function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: 'PayFlow',
+    icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/preload.mjs'),
     },

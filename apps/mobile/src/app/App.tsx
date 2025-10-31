@@ -579,6 +579,31 @@ export const App = () => {
                 </Text>
               </View>
             </View>
+
+            {/* NativeWind Verification Section */}
+            <View className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-3xl p-6 my-6">
+              <Text className="text-white text-2xl font-bold text-center mb-4">
+                ✨ NativeWind is Working! (Native Mobile)
+              </Text>
+              <View className="space-y-3">
+                <View className="bg-white/20 rounded-xl p-4">
+                  <Text className="text-white text-3xl mb-2">🎨</Text>
+                  <Text className="text-white font-semibold mb-1">Colors</Text>
+                  <Text className="text-white/90 text-sm">Gradient backgrounds working</Text>
+                </View>
+                <View className="bg-white/20 rounded-xl p-4">
+                  <Text className="text-white text-3xl mb-2">📱</Text>
+                  <Text className="text-white font-semibold mb-1">Native Styles</Text>
+                  <Text className="text-white/90 text-sm">Tailwind classes on native components</Text>
+                </View>
+                <View className="bg-white/20 rounded-xl p-4">
+                  <Text className="text-white text-3xl mb-2">⚡</Text>
+                  <Text className="text-white font-semibold mb-1">NativeWind</Text>
+                  <Text className="text-white/90 text-sm">All utilities active</Text>
+                </View>
+              </View>
+            </View>
+
             <View style={[styles.listItem, styles.love]}>
               <Text style={styles.textSubtle}>Carefully crafted with </Text>
               <Svg

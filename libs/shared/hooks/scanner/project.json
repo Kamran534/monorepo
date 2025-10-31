@@ -1,0 +1,9 @@
+{
+  "name": "shared-hooks-scanner",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/hooks/scanner/src",
+  "projectType": "library",
+  "tags": ["type:hooks", "scope:shared"],
+  "targets": {}
+}
+

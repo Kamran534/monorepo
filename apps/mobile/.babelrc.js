@@ -21,5 +21,9 @@ module.exports = function (api) {
     presets: [
       ['module:@react-native/babel-preset', { useTransformReactJSX: true }],
     ],
+    plugins: [
+      'nativewind/babel',
+      'react-native-reanimated/plugin',
+    ],
   };
 };
