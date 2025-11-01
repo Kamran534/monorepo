@@ -6,4 +6,9 @@ contextBridge.exposeInMainWorld('electron', {
   },
 });
 
+// Expose print API for silent printing
+contextBridge.exposeInMainWorld('electronAPI', {
+  print: (options: any) => ipcRenderer.invoke('print-content', options),
+});
+
 export {};

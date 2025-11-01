@@ -1,0 +1,9 @@
+{
+  "name": "shared-hooks-keyboard-shortcuts",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/hooks/keyboard-shortcuts/src",
+  "projectType": "library",
+  "tags": ["type:hooks", "scope:shared"],
+  "targets": {}
+}
+

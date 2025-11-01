@@ -46,15 +46,15 @@ function initializeDatabase(): void {
  */
 function closeDatabase(): void {
   try {
-    if (getStmt) {
+    if (getStmt && typeof getStmt.finalize === 'function') {
       getStmt.finalize();
       getStmt = null;
     }
-    if (upsertStmt) {
+    if (upsertStmt && typeof upsertStmt.finalize === 'function') {
       upsertStmt.finalize();
       upsertStmt = null;
     }
-    if (db) {
+    if (db && typeof db.close === 'function') {
       db.close();
       db = null;
       console.log('[Database] Connection closed');
@@ -144,6 +144,55 @@ function setupIpcHandlers(): void {
       return writeCounter(currentValue - 1);
     } catch (error) {
       console.error('[IPC] db/decrement error:', error);
+      throw error;
+    }
+  });
+
+  // Print handler for silent printing
+  ipcMain.handle('print-content', async (event, options) => {
+    try {
+      console.log('[Print] Starting silent print...');
+      
+      // Create a hidden window for printing
+      const printWindow = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+        },
+      });
+
+      // Load the HTML content
+      const htmlContent = options?.htmlContent || '';
+      await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+
+      // Wait for content to be ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Print silently
+      const printOptions = {
+        silent: options?.silent ?? true,
+        printBackground: options?.printBackground ?? true,
+        deviceName: options?.deviceName || '',
+      };
+
+      console.log('[Print] Printing with options:', printOptions);
+
+      return new Promise((resolve, reject) => {
+        printWindow.webContents.print(printOptions, (success, failureReason) => {
+          printWindow.close();
+          
+          if (success) {
+            console.log('[Print] Print successful');
+            resolve({ success: true });
+          } else {
+            console.error('[Print] Print failed:', failureReason);
+            reject(new Error(failureReason || 'Print failed'));
+          }
+        });
+      });
+    } catch (error) {
+      console.error('[IPC] print-content error:', error);
       throw error;
     }
   });

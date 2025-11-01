@@ -1,0 +1,9 @@
+{
+  "name": "shared-hooks-printer",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/hooks/printer/src",
+  "projectType": "library",
+  "tags": ["type:hooks", "scope:shared"],
+  "targets": {}
+}
+

@@ -24,6 +24,12 @@
       "@monorepo/shared-hooks-scanner": [
         "libs/shared/hooks/scanner/src/index.ts"
       ],
+      "@monorepo/shared-hooks-keyboard-shortcuts": [
+        "libs/shared/hooks/keyboard-shortcuts/src/index.ts"
+      ],
+      "@monorepo/shared-hooks-printer": [
+        "libs/shared/hooks/printer/src/index.ts"
+      ],
       "@monorepo/db": [
         "libs/db/src/index.ts"
       ]
