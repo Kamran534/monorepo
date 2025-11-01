@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import path from 'node:path';
@@ -204,9 +204,21 @@ async function createWindow() {
     height: 800,
     title: 'PayFlow',
     icon: join(__dirname, '../../resources/icon.png'),
+    autoHideMenuBar: true, // Hide menu bar (File, Edit, View, etc.)
     webPreferences: {
       preload: join(__dirname, '../preload/preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
     },
+  });
+
+  // Enable DevTools in production for debugging
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('[Window] Failed to load:', errorCode, errorDescription);
+  });
+
+  win.webContents.on('render-process-gone', (event, details) => {
+    console.error('[Window] Renderer process gone:', details.reason);
   });
 
   if (isDev) {
@@ -217,13 +229,20 @@ async function createWindow() {
     await win.loadURL(rendererUrl);
     win.webContents.openDevTools({ mode: 'detach' });
   } else {
-    await win.loadFile(join(__dirname, '../renderer/index.html'));
+    const rendererPath = join(__dirname, '../renderer/index.html');
+    console.log('[Window] Loading renderer from:', rendererPath);
+    await win.loadFile(rendererPath);
+    // Enable DevTools in production for debugging white screen
+    win.webContents.openDevTools({ mode: 'detach' });
   }
 }
 
 // Initialize database and setup IPC handlers once at app startup
 app.whenReady().then(() => {
   try {
+    // Remove the default menu bar completely
+    Menu.setApplicationMenu(null);
+    
     initializeDatabase();
     setupIpcHandlers();
     createWindow();

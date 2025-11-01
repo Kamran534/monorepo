@@ -19,7 +19,10 @@
     "baseUrl": ".",
     "paths": {
       "@monorepo/shared-ui": [
-        "apps/mobile/libs/shared/src/index.ts"
+        "libs/shared/ui/src/index.ts"
+      ],
+      "@monorepo/shared-ui/styles/*": [
+        "libs/shared/ui/src/styles/*"
       ],
       "@monorepo/shared-hooks-scanner": [
         "libs/shared/hooks/scanner/src/index.ts"

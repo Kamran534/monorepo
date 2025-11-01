@@ -1,5 +1,6 @@
 import { defineConfig } from 'electron-vite';
 import { resolve } from 'node:path';
+import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
@@ -27,12 +28,16 @@ export default defineConfig({
     build: {
       outDir: resolve(__dirname, 'dist/renderer'),
       rollupOptions: {
+        input: resolve(__dirname, 'src/renderer/index.html'),
         external: ['react-native', 'react-native-sqlite-storage']
       }
     },
     optimizeDeps: {
       exclude: ['react-native', 'react-native-sqlite-storage']
     },
-    plugins: [tsconfigPaths({ root: resolve(__dirname, '../..') }) as any]
+    plugins: [
+      react(),
+      tsconfigPaths({ root: resolve(__dirname, '../..') }) as any
+    ]
   }
 });

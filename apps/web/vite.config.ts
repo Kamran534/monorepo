@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path';
 
 export default defineConfig(() => ({
   root: __dirname,
@@ -11,6 +12,11 @@ export default defineConfig(() => ({
   server: {
     port: 4200,
     host: 'localhost',
+  },
+  resolve: {
+    alias: {
+      '@monorepo/shared-ui/styles': path.resolve(__dirname, '../../libs/shared/ui/src/styles'),
+    },
   },
   preview: {
     port: 4200,
