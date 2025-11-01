@@ -1,5 +1,7 @@
 import NxWelcome from './nx-welcome';
 import { BarcodeScanner } from '@monorepo/shared-hooks-scanner';
+import { useEffect, useState } from 'react';
+import { getDatabase, DatabaseError } from '@monorepo/db';
 
 export function App() {
   return (
@@ -42,8 +44,145 @@ export function App() {
 
       {/* Barcode Scanner Section */}
       <BarcodeScanner compact={true} />
+
+      {/* SQLite (web driver) status & counter */}
+      <DbStatus />
     </div>
   );
 }
 
 export default App;
+
+function DbStatus() {
+  const db = getDatabase();
+  const [connected, setConnected] = useState(false);
+  const [count, setCount] = useState<number>(0);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeDatabase = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        await db.connect();
+        
+        if (!isMounted) return;
+        
+        const counter = await db.getCounter();
+        setConnected(true);
+        setCount(counter);
+      } catch (err) {
+        if (!isMounted) return;
+        
+        const errorMessage = err instanceof DatabaseError 
+          ? err.message 
+          : err instanceof Error 
+          ? err.message 
+          : 'Failed to connect to database';
+        
+        setError(errorMessage);
+        setConnected(false);
+        console.error('[DbStatus] Connection error:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initializeDatabase();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleIncrement = async () => {
+    if (isLoading || !connected) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      const newCount = await db.increment();
+      setCount(newCount);
+    } catch (err) {
+      const errorMessage = err instanceof DatabaseError 
+        ? err.message 
+        : err instanceof Error 
+        ? err.message 
+        : 'Failed to increment counter';
+      
+      setError(errorMessage);
+      console.error('[DbStatus] Increment error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDecrement = async () => {
+    if (isLoading || !connected) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      const newCount = await db.decrement();
+      setCount(newCount);
+    } catch (err) {
+      const errorMessage = err instanceof DatabaseError 
+        ? err.message 
+        : err instanceof Error 
+        ? err.message 
+        : 'Failed to decrement counter';
+      
+      setError(errorMessage);
+      console.error('[DbStatus] Decrement error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="border-t p-4 mt-6 bg-gray-50">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <div className="text-sm text-gray-600">Database</div>
+            <div className="font-semibold">
+              {isLoading && !connected ? 'Connecting…' : 
+               error ? 'Connection failed' : 
+               connected ? 'SQLite connected successfully' : 
+               'Not connected'}
+            </div>
+            {error && (
+              <div className="text-sm text-red-600 mt-1" role="alert">
+                {error}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition-colors" 
+              onClick={handleDecrement}
+              disabled={isLoading || !connected}
+              aria-label="Decrement counter"
+            >
+              -
+            </button>
+            <div className="min-w-10 text-center font-mono">{count}</div>
+            <button 
+              className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition-colors" 
+              onClick={handleIncrement}
+              disabled={isLoading || !connected}
+              aria-label="Increment counter"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

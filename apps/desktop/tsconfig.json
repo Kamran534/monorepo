@@ -4,6 +4,7 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
     "noEmit": true,
     "lib": ["es2022", "dom"],
     "jsx": "react-jsx",

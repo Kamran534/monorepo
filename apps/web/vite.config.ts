@@ -109,5 +109,11 @@ export default defineConfig(() => ({
     commonjsOptions: {
       transformMixedEsModules: true,
     },
+    rollupOptions: {
+      external: ['react-native', 'react-native-sqlite-storage'],
+    },
+  },
+  optimizeDeps: {
+    exclude: ['react-native', 'react-native-sqlite-storage'],
   },
 }));

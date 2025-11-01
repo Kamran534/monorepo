@@ -23,6 +23,9 @@
       ],
       "@monorepo/shared-hooks-scanner": [
         "libs/shared/hooks/scanner/src/index.ts"
+      ],
+      "@monorepo/db": [
+        "libs/db/src/index.ts"
       ]
     }
   },

@@ -1,5 +1,4 @@
-/* eslint-disable jsx-a11y/accessible-emoji */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   Linking,
 } from 'react-native';
 import Svg, { G, Path } from 'react-native-svg';
+import { getDatabase, DatabaseError } from '@monorepo/db';
 
 export const App = () => {
   const [whatsNextYCoord, setWhatsNextYCoord] = useState<number>(0);
@@ -622,11 +622,152 @@ export const App = () => {
               </Svg>
             </View>
           </View>
+
+          {/* SQLite (mobile driver) status & counter */}
+          <View style={[styles.section, styles.shadowBox]}>
+            <DbStatus />
+          </View>
         </ScrollView>
       </SafeAreaView>
     </>
   );
 };
+
+function DbStatus() {
+  const db = getDatabase();
+  const [connected, setConnected] = useState(false);
+  const [count, setCount] = useState<number>(0);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeDatabase = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        await db.connect();
+        
+        if (!isMounted) return;
+        
+        const counter = await db.getCounter();
+        setConnected(true);
+        setCount(counter);
+      } catch (err) {
+        if (!isMounted) return;
+        
+        const errorMessage = err instanceof DatabaseError 
+          ? err.message 
+          : err instanceof Error 
+          ? err.message 
+          : 'Failed to connect to database';
+        
+        setError(errorMessage);
+        setConnected(false);
+        console.error('[DbStatus] Connection error:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initializeDatabase();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleIncrement = async () => {
+    if (isLoading || !connected) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      const newCount = await db.increment();
+      setCount(newCount);
+    } catch (err) {
+      const errorMessage = err instanceof DatabaseError 
+        ? err.message 
+        : err instanceof Error 
+        ? err.message 
+        : 'Failed to increment counter';
+      
+      setError(errorMessage);
+      console.error('[DbStatus] Increment error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDecrement = async () => {
+    if (isLoading || !connected) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      const newCount = await db.decrement();
+      setCount(newCount);
+    } catch (err) {
+      const errorMessage = err instanceof DatabaseError 
+        ? err.message 
+        : err instanceof Error 
+        ? err.message 
+        : 'Failed to decrement counter';
+      
+      setError(errorMessage);
+      console.error('[DbStatus] Decrement error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <View style={{ gap: 12 }}>
+      <View>
+        <Text style={[styles.textSm, styles.textBold]}>Database</Text>
+        <Text style={styles.textSubtle}>
+          {isLoading && !connected ? 'Connecting…' : 
+           error ? 'Connection failed' : 
+           connected ? 'SQLite connected successfully' : 
+           'Not connected'}
+        </Text>
+        {error && (
+          <Text style={[styles.textSm, { color: '#dc2626', marginTop: 4 }]} accessibilityRole="alert">
+            {error}
+          </Text>
+        )}
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <TouchableOpacity 
+          onPress={handleDecrement} 
+          style={[
+            styles.whatsNextButton, 
+            { width: 48, opacity: isLoading || !connected ? 0.5 : 1 }
+          ]}
+          disabled={isLoading || !connected}
+          accessibilityLabel="Decrement counter"
+        >
+          <Text style={styles.textCenter}>-</Text>
+        </TouchableOpacity>
+        <Text style={[styles.textLg]}>{count}</Text>
+        <TouchableOpacity 
+          onPress={handleIncrement} 
+          style={[
+            styles.whatsNextButton, 
+            { width: 48, opacity: isLoading || !connected ? 0.5 : 1 }
+          ]}
+          disabled={isLoading || !connected}
+          accessibilityLabel="Increment counter"
+        >
+          <Text style={styles.textCenter}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 const styles = StyleSheet.create({
   scrollView: {
     backgroundColor: '#ffffff',

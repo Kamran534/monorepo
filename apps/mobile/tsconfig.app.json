@@ -5,6 +5,9 @@
     "types": ["node"],
     "composite": true
   },
+  "references": [
+    { "path": "../../libs/db" }
+  ],
   "files": ["../../node_modules/@nx/react-native/typings/svg.d.ts"],
   "exclude": [
     "src/**/*.test.ts",
@@ -17,5 +20,11 @@
     "src/**/*.spec.jsx",
     "src/test-setup.ts"
   ],
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx", "nativewind-env.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.js",
+    "src/**/*.jsx",
+    "nativewind-env.d.ts"
+  ]
 }

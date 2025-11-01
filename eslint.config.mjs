@@ -8,7 +8,12 @@ export default [
       "ignores": [
         "**/dist",
         "**/vite.config.*.timestamp*",
-        "**/vitest.config.*.timestamp*"
+        "**/vitest.config.*.timestamp*",
+        "**/*.config.ts",
+        "**/*.config.js",
+        "**/*.config.mjs",
+        "apps/desktop/src/main/**",
+        "apps/desktop/src/preload/**"
       ]
   },
   {
