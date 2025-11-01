@@ -6,4 +6,5 @@
 export * from './variables.js';
 export * from './types.js';
 export * from './components/index.js';
+export * from './hooks/useTheme.js';
 

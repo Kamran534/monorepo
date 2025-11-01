@@ -24,6 +24,7 @@ export function Layout({
 }: LayoutProps) {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const mainContentRef = React.useRef<HTMLElement>(null);
 
   // Prevent body scroll when sidebar is expanded
   useEffect(() => {
@@ -37,6 +38,28 @@ export function Layout({
       document.body.style.overflow = '';
     };
   }, [sidebarExpanded, isClosing]);
+
+  // Convert vertical scroll to horizontal scroll
+  useEffect(() => {
+    const mainElement = mainContentRef.current;
+    if (!mainElement) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Check if content can scroll horizontally
+      const canScrollHorizontally = mainElement.scrollWidth > mainElement.clientWidth;
+      
+      if (canScrollHorizontally && e.deltaY !== 0) {
+        e.preventDefault();
+        mainElement.scrollLeft += e.deltaY;
+      }
+    };
+
+    mainElement.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      mainElement.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   const handleCloseSidebar = () => {
     setIsClosing(true);
@@ -55,7 +78,10 @@ export function Layout({
   };
 
   return (
-    <div className={`flex flex-col h-screen overflow-hidden bg-gray-50 ${className}`}>
+    <div 
+      className={`flex flex-col h-screen overflow-hidden ${className}`}
+      style={{ backgroundColor: 'var(--color-bg-primary)' }}
+    >
       {/* Navbar - Full Width */}
       <div className="relative z-50">
         <Navbar
@@ -69,7 +95,11 @@ export function Layout({
       <div className="flex flex-1 overflow-hidden relative">
         {/* Sidebar - Always visible (collapsed by default) */}
         {showSidebar && (
-          <div className="relative z-20">
+          <div 
+            className={`relative z-20 transition-opacity duration-300 ${
+              sidebarExpanded || isClosing ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
             <Sidebar {...sidebarProps} isExpanded={false} />
           </div>
         )}
@@ -113,8 +143,12 @@ export function Layout({
         )}
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto bg-gray-50">
-          <div className="p-4 lg:p-6">{children}</div>
+        <main 
+          ref={mainContentRef}
+          className="flex-1 overflow-x-auto overflow-y-hidden horizontal-scroll-container" 
+          style={{ backgroundColor: 'var(--color-bg-primary)' }}
+        >
+          <div className="px-4 lg:px-4 py-3 lg:py-3" style={{ color: 'var(--color-text-primary)' }}>{children}</div>
         </main>
       </div>
     </div>

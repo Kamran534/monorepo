@@ -77,23 +77,29 @@
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   box-shadow: var(--shadow-sm);
+  color: var(--color-text-primary);
+  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-header {
   @apply mb-4 pb-4;
   border-bottom: 1px solid var(--color-border-light);
+  transition: border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-title {
   @apply text-xl font-semibold;
   color: var(--color-text-primary);
+  transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ========== Button Styles ========== */
 .btn {
   @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium;
-  @apply transition-all duration-200;
   @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-primary {
@@ -136,10 +142,13 @@
 /* ========== Input Styles ========== */
 .input {
   @apply w-full px-4 py-2 rounded-lg;
-  @apply border transition-colors;
+  @apply border;
   background-color: var(--color-bg-input);
   border-color: var(--color-border-light);
   color: var(--color-text-primary);
+  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .input:focus {
@@ -152,6 +161,8 @@
   background-color: var(--color-bg-input-disabled);
   cursor: not-allowed;
   opacity: 0.6;
+  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ========== Table Styles ========== */
@@ -163,15 +174,20 @@
 .table-header {
   background-color: var(--color-bg-secondary);
   border-bottom: 2px solid var(--color-border-medium);
+  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .table-header th {
   @apply px-4 py-3 text-left text-sm font-semibold;
   color: var(--color-text-primary);
+  transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .table-row {
   border-bottom: 1px solid var(--color-border-light);
+  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .table-row:hover {
@@ -181,11 +197,14 @@
 .table-cell {
   @apply px-4 py-3 text-sm;
   color: var(--color-text-primary);
+  transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ========== Badge Styles ========== */
 .badge {
   @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .badge-primary {

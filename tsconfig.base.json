@@ -24,6 +24,9 @@
       "@monorepo/shared-ui/styles/*": [
         "libs/shared/ui/src/styles/*"
       ],
+      "@monorepo/shared-assets": [
+        "libs/shared/assets/images/index.ts"
+      ],
       "@monorepo/shared-hooks-scanner": [
         "libs/shared/hooks/scanner/src/index.ts"
       ],

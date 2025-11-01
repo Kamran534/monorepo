@@ -16,6 +16,7 @@ export default defineConfig(() => ({
   resolve: {
     alias: {
       '@monorepo/shared-ui/styles': path.resolve(__dirname, '../../libs/shared/ui/src/styles'),
+      '@monorepo/shared-assets': path.resolve(__dirname, '../../libs/shared/assets/images/index.ts'),
     },
   },
   preview: {

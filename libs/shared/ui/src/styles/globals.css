@@ -43,6 +43,17 @@
   }
 }
 
+@keyframes slideInFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-in-out forwards;
   will-change: opacity;
@@ -65,8 +76,54 @@
   backface-visibility: hidden;
 }
 
+/* ========== Global Body Styles ========== */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family-sans);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+              color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ========== Theme Transition Animations ========== */
+/* Smooth transitions for all theme-aware elements */
+*,
+*::before,
+*::after {
+  transition-property: background-color, background, border-color, color, fill, stroke, opacity, box-shadow;
+  transition-duration: 0.4s;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Exclude elements that should not animate during theme change */
+button,
+input,
+select,
+textarea,
+a {
+  transition-duration: 0.2s; /* Faster for interactive elements */
+}
+
+/* Override for animations and transforms - should not be affected by theme transitions */
+.animate-fadeIn,
+.animate-fadeOut,
+.animate-slideInFromLeft,
+.animate-slideOutToLeft {
+  transition: none !important;
+}
+
 /* ========== CSS Custom Properties (Variables) ========== */
-:root {
+:root,
+[data-theme="light"] {
+  /* Theme mode */
+  --theme-mode: light;
+  
   /* ========== Brand Colors ========== */
   /* Primary Blue (from Store Commerce UI) */
   --color-primary-50: #eff6ff;
@@ -105,7 +162,7 @@
   --color-bg-header: #1a202c; /* Dark navy - header */
   --color-bg-header-alt: #212529; /* Alternative dark header */
   --color-bg-dark: #202020; /* Very dark - navigation */
-  --color-bg-nav: #212b36; /* Dark for navigation */
+  --color-bg-nav: #0d1f35; /* Dark blue for navigation (same as dark mode) */
 
   /* Search/Input Backgrounds */
   --color-bg-search: #343a40;
@@ -117,6 +174,13 @@
   --color-bg-tile: #6c757d; /* Muted grey/brown for tiles */
   --color-bg-tile-alt: #8b453a; /* Terracotta/brown */
   --color-bg-tile-dark: #5c4033; /* Dark brown */
+
+  /* Start Section Tile Colors (Terracotta/Brown Palette) */
+  --color-tile-brown-1: #7a4e42; /* Medium brown */
+  --color-tile-brown-2: #9a5c47; /* Lighter terracotta brown */
+  --color-tile-brown-3: #8b4f3d; /* Reddish brown */
+  --color-tile-brown-4: #6b4035; /* Dark brown */
+  --color-tile-brown-5: #a15e4a; /* Light terracotta */
 
   /* Selected/Highlighted */
   --color-bg-selected: #3b82f6; /* Blue for selected items */
@@ -608,6 +672,70 @@ body {
   .m-responsive {
     margin: var(--spacing-lg);
   }
+}
+
+/* ========== Dark Mode Theme (Dark Blue) ========== */
+[data-theme="dark"] {
+  /* Theme mode */
+  --theme-mode: dark;
+  
+  /* ========== Background Colors (Dark Blue Theme) ========== */
+  --color-bg-primary: #0a1929; /* Dark blue background */
+  --color-bg-secondary: #0f2540; /* Slightly lighter dark blue */
+  --color-bg-tertiary: #142d4c; /* Even lighter blue */
+  --color-bg-header: #0d1f30; /* Dark blue header */
+  --color-bg-header-alt: #0f2540;
+  --color-bg-dark: #061220; /* Very dark blue */
+  --color-bg-nav: #0d1f35; /* Dark blue for navigation */
+  
+  /* Search/Input Backgrounds */
+  --color-bg-search: #142d4c;
+  --color-bg-input: #1a3a5c;
+  --color-bg-input-disabled: #0f2540;
+  
+  /* Card/Tile Backgrounds */
+  --color-bg-card: #0f2540;
+  --color-bg-tile: #142d4c;
+  --color-bg-tile-alt: #1a3a5c;
+  --color-bg-tile-dark: #0a1929;
+
+  /* Start Section Tile Colors (Darker versions for dark mode) */
+  --color-tile-brown-1: #5a3832;
+  --color-tile-brown-2: #6a4237;
+  --color-tile-brown-3: #5b3a2d;
+  --color-tile-brown-4: #4b3025;
+  --color-tile-brown-5: #714a3a;
+  
+  /* Selected/Highlighted */
+  --color-bg-selected: #1e4a7a;
+  --color-bg-hover: #1a3a5c;
+  
+  /* ========== Text Colors ========== */
+  --color-text-primary: #e3f2fd; /* Light blue-white - main text */
+  --color-text-secondary: #b3d4f5; /* Medium blue-white */
+  --color-text-tertiary: #7ba5d1; /* Darker blue-grey */
+  --color-text-dark: #e3f2fd; /* Light text in dark mode */
+  --color-text-light: #ffffff; /* White text */
+  --color-text-link: #64b5f6; /* Lighter blue for links */
+  --color-text-link-hover: #90caf9;
+  --color-text-on-dark: #ffffff;
+  
+  /* ========== Border Colors ========== */
+  --color-border-light: #1e3a52;
+  --color-border-medium: #2c4e6a;
+  --color-border-dark: #3a5f7a;
+  --color-border-focus: #64b5f6;
+  --color-border-error: #f87171;
+  
+  /* Adjust accent colors for better visibility in dark mode */
+  --color-success: #4ade80;
+  --color-success-bg: #0a3d20;
+  --color-error: #f87171;
+  --color-error-bg: #5a1a1a;
+  --color-warning: #fbbf24;
+  --color-warning-bg: #4a3510;
+  --color-info: #64b5f6;
+  --color-info-bg: #0d2f5a;
 }
 
 /* ========== Print Styles ========== */

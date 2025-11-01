@@ -25,11 +25,18 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
+    publicDir: resolve(__dirname, 'public'),
+    base: './',
     build: {
       outDir: resolve(__dirname, 'dist/renderer'),
       rollupOptions: {
         input: resolve(__dirname, 'src/renderer/index.html'),
         external: ['react-native', 'react-native-sqlite-storage']
+      }
+    },
+    resolve: {
+      alias: {
+        '@monorepo/shared-assets': resolve(__dirname, '../../libs/shared/assets/images/index.ts'),
       }
     },
     optimizeDeps: {

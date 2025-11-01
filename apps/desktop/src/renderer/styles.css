@@ -2,5 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom horizontal scrollbar styling */
+/* Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  height: 8px; /* Thin scrollbar */
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-nav, #0d1f35);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) var(--color-bg-nav, #0d1f35);
+}
+
+/* Make sure horizontal scrollbar gets pointer cursor */
+.horizontal-scroll-container {
+  cursor: grab;
+}
+
+.horizontal-scroll-container:active {
+  cursor: grabbing;
+}
+
 /* App-specific styles can be added here */
 

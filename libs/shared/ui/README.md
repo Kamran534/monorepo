@@ -33,6 +33,7 @@ See [COMPONENTS.md](./COMPONENTS.md) for detailed documentation on using the Rea
 - **Sidebar** - Responsive navigation sidebar
 - **Navbar** - Header with search, notifications, and user menu
 - **Layout** - Complete app layout wrapper
+- **ImageSlider** - Professional carousel/slider for hero images and banners ([SLIDER_GUIDE.md](./SLIDER_GUIDE.md))
 
 ## Color Palette
 
