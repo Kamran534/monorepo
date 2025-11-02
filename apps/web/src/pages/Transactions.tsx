@@ -187,32 +187,68 @@ export function Transactions() {
 
   return (
     <div
-      className="h-full w-full flex overflow-hidden"
-      style={{ backgroundColor: 'var(--color-bg-primary)' }}
+      className="w-full flex flex-col md:flex-row"
+      style={{ 
+        backgroundColor: 'var(--color-bg-primary)',
+        minHeight: 'calc(100vh - 80px)',
+      }}
     >
-      <TransactionLines
-        lineItems={lineItems}
-        selectedItem={selectedItem}
-        onItemSelect={setSelectedItem}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onAddCustomer={() => console.log('Add customer')}
-      />
+      {/* Mobile/Tablet: Show sections in tabs or stacked */}
+      <div className="flex-1 flex flex-col md:flex-row">
+        <div className="w-full md:flex-1 md:max-w-[500px] lg:max-w-[600px] h-1/2 md:h-full">
+          <TransactionLines
+            lineItems={lineItems}
+            selectedItem={selectedItem}
+            onItemSelect={setSelectedItem}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onAddCustomer={() => console.log('Add customer')}
+          />
+        </div>
 
-      <TransactionNumpad
-        value={numpadValue}
-        onValueChange={setNumpadValue}
-        onAddCustomer={() => console.log('Add customer')}
-      />
+        <div className="w-full md:w-auto md:flex-shrink-0 h-1/2 md:h-full">
+          <TransactionNumpad
+            value={numpadValue}
+            onValueChange={setNumpadValue}
+            onAddCustomer={() => console.log('Add customer')}
+          />
+        </div>
+      </div>
 
-      <TransactionActions 
-        actions={actionButtons}
-        activeSection={activeSection}
-        onSectionClick={(section) => {
-          setActiveSection(section);
-          console.log('Section:', section);
-        }}
-      />
+      <div className="w-full md:w-auto md:flex-shrink-0 hidden md:flex">
+        <TransactionActions
+          actions={actionButtons}
+          activeSection={activeSection}
+          onSectionClick={(section) => {
+            setActiveSection(section);
+            console.log('Section:', section);
+          }}
+        />
+      </div>
+
+      {/* Mobile Action Bar - Show key actions at bottom */}
+      <div className="md:hidden w-full flex gap-2 p-2 bg-gray-800 border-t border-gray-700">
+        <button
+          onClick={() => console.log('Pay cash')}
+          className="flex-1 py-3 rounded bg-green-600 text-white font-semibold flex items-center justify-center gap-2"
+        >
+          <Banknote className="w-5 h-5" />
+          Cash
+        </button>
+        <button
+          onClick={() => console.log('Pay card')}
+          className="flex-1 py-3 rounded bg-green-600 text-white font-semibold flex items-center justify-center gap-2"
+        >
+          <CreditCard className="w-5 h-5" />
+          Card
+        </button>
+        <button
+          onClick={() => console.log('More actions')}
+          className="px-4 py-3 rounded bg-gray-700 text-white font-semibold"
+        >
+          •••
+        </button>
+      </div>
     </div>
   );
 }

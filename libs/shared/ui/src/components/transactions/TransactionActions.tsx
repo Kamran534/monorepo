@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ComponentProps } from '../../types.js';
 import { TransactionVerticalNav } from './TransactionVerticalNav.js';
 
@@ -33,6 +33,59 @@ export function TransactionActions({
   onSectionClick,
   className = '',
 }: TransactionActionsProps) {
+  // Detect fullscreen mode
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const checkFullscreen = () => {
+      // Check if browser is in fullscreen mode (F11)
+      const doc = document as Document & {
+        webkitFullscreenElement?: Element;
+        mozFullScreenElement?: Element;
+        msFullscreenElement?: Element;
+      };
+      const isFS = !!(document.fullscreenElement || 
+                      doc.webkitFullscreenElement || 
+                      doc.mozFullScreenElement || 
+                      doc.msFullscreenElement);
+      setIsFullscreen(isFS);
+    };
+
+    // Check on mount
+    checkFullscreen();
+
+    // Listen for fullscreen changes
+    document.addEventListener('fullscreenchange', checkFullscreen);
+    document.addEventListener('webkitfullscreenchange', checkFullscreen);
+    document.addEventListener('mozfullscreenchange', checkFullscreen);
+    document.addEventListener('MSFullscreenChange', checkFullscreen);
+
+    // Also check on resize (for F11 fullscreen which might not trigger fullscreen events)
+    const handleResize = () => {
+      // Check if viewport height is close to screen height (indicates fullscreen)
+      const isLikelyFullscreen = window.innerHeight >= screen.height * 0.95;
+      const doc = document as Document & {
+        webkitFullscreenElement?: Element;
+        mozFullScreenElement?: Element;
+        msFullscreenElement?: Element;
+      };
+      setIsFullscreen(isLikelyFullscreen || !!(document.fullscreenElement || 
+                      doc.webkitFullscreenElement || 
+                      doc.mozFullScreenElement || 
+                      doc.msFullscreenElement));
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', checkFullscreen);
+      document.removeEventListener('webkitfullscreenchange', checkFullscreen);
+      document.removeEventListener('mozfullscreenchange', checkFullscreen);
+      document.removeEventListener('MSFullscreenChange', checkFullscreen);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
   // Separate actions by color group
   const orangeActions = actions.filter(a => a.color?.includes('orange'));
   const grayActions = actions.filter(a => a.color?.includes('gray'));
@@ -83,6 +136,13 @@ export function TransactionActions({
     // Rectangular buttons should be taller rectangles
     if (action.square && action.label) {
       const isRectangular = action.rectangular;
+      // Responsive height for rectangular buttons
+      // Normal laptop browser: 102px, Fullscreen (F11): 106px
+      const getRectangularHeight = () => {
+        if (!isRectangular || action.rowSpan) return undefined;
+        return isFullscreen ? '116px' : '102px';
+      };
+      
       return (
         <button
           key={action.id}
@@ -93,7 +153,7 @@ export function TransactionActions({
             borderRadius: 0,
             gridRow: action.rowSpan ? `span ${action.rowSpan}` : undefined,
             height: action.rowSpan ? `calc(2 * var(--row-height, 60px) + var(--gap, 4px))` : undefined,
-            minHeight: action.rowSpan ? undefined : isRectangular ? '106px' : '60px',
+            minHeight: action.rowSpan ? undefined : isRectangular ? getRectangularHeight() : '60px',
             aspectRatio: action.rowSpan ? undefined : isRectangular ? undefined : '1 / 1',
           }}
         >
@@ -137,11 +197,11 @@ export function TransactionActions({
 
   return (
     <div
-      className={`flex gap-1 h-full ${className}`}
+      className={`flex gap-1 h-full w-full md:w-auto ${className}`}
       style={{ backgroundColor: 'var(--color-bg-secondary)' }}
     >
       {/* Main Action Buttons Panel */}
-      <div className="flex-1 flex flex-col p-2 gap-1 overflow-y-auto" style={{ width: '320px', minWidth: '320px' }}>
+      <div className="flex-1 flex flex-col p-2 gap-1 overflow-y-auto min-w-0 md:min-w-[280px] lg:min-w-[320px]">
         {/* Orange/Reddish-Brown Section */}
         {orangeActions.length > 0 && (
           <div 

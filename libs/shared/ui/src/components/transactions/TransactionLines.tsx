@@ -40,14 +40,10 @@ export function TransactionLines({
 
   return (
     <div
-      className={`flex flex-col h-full ${className}`}
+      className={`flex flex-col h-full w-full md:w-auto ${className}`}
       style={{
-        width: 'min(50vw, 550px)',
-        minWidth: '400px',
-        maxWidth: '60vw',
         backgroundColor: 'var(--color-bg-secondary)',
         borderRight: '1px solid var(--color-border-light)',
-        flexShrink: 0,
       }}
     >
       {/* Tabs */}
@@ -57,7 +53,7 @@ export function TransactionLines({
       >
         <button
           onClick={() => onTabChange?.('lines')}
-          className="px-6 py-3 text-sm font-medium transition-all"
+          className="px-4 md:px-6 py-2 md:py-3 text-xs md:text-sm font-medium transition-all"
           style={{
             color: activeTab === 'lines' ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
             backgroundColor: activeTab === 'lines' ? 'var(--color-bg-hover)' : 'transparent',
@@ -67,7 +63,7 @@ export function TransactionLines({
         </button>
         <button
           onClick={() => onTabChange?.('payments')}
-          className="px-6 py-3 text-sm font-medium transition-all"
+          className="px-4 md:px-6 py-2 md:py-3 text-xs md:text-sm font-medium transition-all"
           style={{
             color: activeTab === 'payments' ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
             backgroundColor: activeTab === 'payments' ? 'var(--color-bg-hover)' : 'transparent',
@@ -79,12 +75,12 @@ export function TransactionLines({
 
       {/* Product List */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4 space-y-2">
+        <div className="p-2 md:p-4 space-y-1.5 md:space-y-2">
           {lineItems.map((item) => (
             <div
               key={item.id}
               onClick={() => onItemSelect?.(item.id)}
-              className={`p-4 rounded cursor-pointer hover:opacity-80`}
+              className={`p-2 md:p-4 rounded cursor-pointer hover:opacity-80`}
               style={{
                 backgroundColor:
                   selectedItem === item.id
@@ -97,20 +93,20 @@ export function TransactionLines({
                 border: '1px solid var(--color-border-light)',
               }}
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <Package className="w-5 h-5" />
+              <div className="flex items-center justify-between mb-1 md:mb-2">
+                <div className="flex items-center gap-2 md:gap-3">
+                  <Package className="w-4 md:w-5 h-4 md:h-5" />
                   <div>
-                    <div className="font-medium text-sm">{item.name}</div>
+                    <div className="font-medium text-xs md:text-sm">{item.name}</div>
                     <div
-                      className="text-xs mt-1 opacity-70"
+                      className="text-xs mt-0.5 md:mt-1 opacity-70"
                     >
                       Quantity: {item.quantity}
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-semibold">
+                  <div className="font-semibold text-sm md:text-base">
                     ${item.total.toFixed(2)}
                   </div>
                 </div>
@@ -140,42 +136,42 @@ export function TransactionLines({
 
       {/* Bottom Summary */}
       <div
-        className="p-4 border-t space-y-2"
+        className="p-2 md:p-4 border-t space-y-1 md:space-y-2"
         style={{
           borderColor: 'var(--color-border-light)',
           backgroundColor: 'var(--color-bg-card)',
         }}
       >
         <div
-          className="flex justify-between text-sm"
+          className="flex justify-between text-xs md:text-sm"
           style={{ color: 'var(--color-text-primary)' }}
         >
           <span>Lines</span>
           <span>{lineItems.length}</span>
         </div>
         <div
-          className="flex justify-between text-sm"
+          className="flex justify-between text-xs md:text-sm"
           style={{ color: 'var(--color-text-primary)' }}
         >
           <span>Subtotal</span>
           <span>${subtotal.toFixed(2)}</span>
         </div>
         <div
-          className="flex justify-between text-sm"
+          className="flex justify-between text-xs md:text-sm"
           style={{ color: 'var(--color-text-primary)' }}
         >
           <span>Tax</span>
           <span>${tax.toFixed(2)}</span>
         </div>
         <div
-          className="flex justify-between text-sm"
+          className="flex justify-between text-xs md:text-sm"
           style={{ color: 'var(--color-text-primary)' }}
         >
           <span>Payment</span>
           <span>$0.00</span>
         </div>
         <div
-          className="flex justify-between text-lg font-bold pt-2"
+          className="flex justify-between text-base md:text-lg font-bold pt-1 md:pt-2"
           style={{
             borderTop: '1px solid var(--color-border-light)',
             color: 'var(--color-text-primary)',

@@ -39,7 +39,7 @@ export function Layout({
     };
   }, [sidebarExpanded, isClosing]);
 
-  // Convert vertical scroll to horizontal scroll
+  // Convert vertical scroll to horizontal scroll only when horizontal scrolling is needed
   useEffect(() => {
     const mainElement = mainContentRef.current;
     if (!mainElement) return;
@@ -47,11 +47,18 @@ export function Layout({
     const handleWheel = (e: WheelEvent) => {
       // Check if content can scroll horizontally
       const canScrollHorizontally = mainElement.scrollWidth > mainElement.clientWidth;
+      // Check if content can scroll vertically
+      const canScrollVertically = mainElement.scrollHeight > mainElement.clientHeight;
       
-      if (canScrollHorizontally && e.deltaY !== 0) {
+      // Only convert vertical to horizontal if:
+      // 1. Content can scroll horizontally
+      // 2. Content cannot scroll vertically (to avoid conflicts)
+      // 3. We're scrolling vertically
+      if (canScrollHorizontally && !canScrollVertically && e.deltaY !== 0) {
         e.preventDefault();
         mainElement.scrollLeft += e.deltaY;
       }
+      // Otherwise, allow normal vertical scrolling
     };
 
     mainElement.addEventListener('wheel', handleWheel, { passive: false });
@@ -145,7 +152,7 @@ export function Layout({
         {/* Page Content */}
         <main 
           ref={mainContentRef}
-          className="flex-1 overflow-x-auto overflow-y-hidden horizontal-scroll-container" 
+          className="flex-1 overflow-x-auto overflow-y-auto horizontal-scroll-container" 
           style={{ backgroundColor: 'var(--color-bg-primary)' }}
         >
           <div className="px-4 lg:px-4 py-3 lg:py-3" style={{ color: 'var(--color-text-primary)' }}>{children}</div>
