@@ -15,7 +15,6 @@ export interface ImageSliderProps extends ComponentProps {
   autoPlayInterval?: number;
   showControls?: boolean;
   showIndicators?: boolean;
-  pauseOnHover?: boolean;
   height?: string;
   width?: string;
   onSlideChange?: (index: number) => void;
@@ -26,12 +25,11 @@ export interface ImageSliderProps extends ComponentProps {
  * ImageSlider Component
  * 
  * A professional, responsive image carousel/slider with:
- * - Auto-play functionality
+ * - Auto-play functionality (infinite loop)
  * - Navigation controls (prev/next arrows)
  * - Indicators (dots)
  * - Keyboard navigation
  * - Touch/swipe support
- * - Pause on hover
  * - Smooth transitions
  * - Title and subtitle overlay
  * - Theme-aware styling
@@ -54,7 +52,6 @@ export function ImageSlider({
   autoPlayInterval = 5000,
   showControls = true,
   showIndicators = true,
-  pauseOnHover = true,
   height = '600px',
   width,
   onSlideChange,
@@ -62,34 +59,34 @@ export function ImageSlider({
   className = '',
 }: ImageSliderProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
   const sliderRef = useRef<HTMLDivElement>(null);
 
-  // Auto-play functionality
+  const handleNext = useCallback(() => {
+    if (isTransitioning) return;
+    setIsTransitioning(true);
+    // Infinite loop: wraps to 0 when reaching the end
+    setCurrentIndex((prev) => (prev + 1) % slides.length);
+    setTimeout(() => setIsTransitioning(false), 300);
+  }, [isTransitioning, slides.length]);
+
+  // Auto-play functionality - infinite loop, always running when autoPlay is true
   useEffect(() => {
-    if (!isPlaying || slides.length <= 1) return;
+    if (!autoPlay || slides.length <= 1) return;
 
     const interval = setInterval(() => {
       handleNext();
     }, autoPlayInterval);
 
     return () => clearInterval(interval);
-  }, [isPlaying, currentIndex, slides.length, autoPlayInterval]);
+  }, [autoPlay, slides.length, autoPlayInterval, handleNext]);
 
   // Notify parent of slide change
   useEffect(() => {
     onSlideChange?.(currentIndex);
   }, [currentIndex, onSlideChange]);
-
-  const handleNext = useCallback(() => {
-    if (isTransitioning) return;
-    setIsTransitioning(true);
-    setCurrentIndex((prev) => (prev + 1) % slides.length);
-    setTimeout(() => setIsTransitioning(false), 300);
-  }, [isTransitioning, slides.length]);
 
   const handlePrev = useCallback(() => {
     if (isTransitioning) return;
@@ -110,10 +107,6 @@ export function ImageSlider({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') handlePrev();
       if (e.key === 'ArrowRight') handleNext();
-      if (e.key === ' ') {
-        e.preventDefault();
-        setIsPlaying((prev) => !prev);
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -145,13 +138,7 @@ export function ImageSlider({
     setTouchEnd(0);
   };
 
-  const handleMouseEnter = () => {
-    if (pauseOnHover) setIsPlaying(false);
-  };
-
-  const handleMouseLeave = () => {
-    if (pauseOnHover && autoPlay) setIsPlaying(true);
-  };
+  // Removed pause on hover functionality - slider always plays
 
   const handleSlideClick = () => {
     onSlideClick?.(slides[currentIndex], currentIndex);
@@ -177,8 +164,6 @@ export function ImageSlider({
       ref={sliderRef}
       className={`relative overflow-hidden group ${className}`}
       style={{ height, width: width || '100%', margin: 0, padding: 0, display: 'block', lineHeight: 0 }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -301,35 +286,6 @@ export function ImageSlider({
         </div>
       )}
 
-      {/* Play/Pause Button */}
-      {autoPlay && slides.length > 1 && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsPlaying(!isPlaying);
-          }}
-          className="absolute top-4 right-4 z-30 w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
-          aria-label={isPlaying ? 'Pause slideshow' : 'Play slideshow'}
-        >
-          {isPlaying ? (
-            <svg
-              className="w-4 h-4 md:w-5 md:h-5 text-white"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-            </svg>
-          ) : (
-            <svg
-              className="w-4 h-4 md:w-5 md:h-5 text-white ml-0.5"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </button>
-      )}
     </div>
   );
 }

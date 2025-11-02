@@ -427,7 +427,7 @@ export function Dashboard() {
       icon: <User />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#0d1f35',
+      backgroundColor: 'var(--color-bg-settings-dark)',
       onClick: () => console.log('Profile clicked'),
     },
     {
@@ -436,7 +436,7 @@ export function Dashboard() {
       icon: <Shield />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#1a1a1a',
+      backgroundColor: 'var(--color-bg-settings-medium)',
       onClick: () => console.log('Security clicked'),
     },
     {
@@ -445,7 +445,7 @@ export function Dashboard() {
       icon: <Bell />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#2d2d2d',
+      backgroundColor: 'var(--color-bg-settings-grey)',
       onClick: () => console.log('Notifications clicked'),
     },
     // Row 2: Preferences + Password + Email
@@ -455,7 +455,7 @@ export function Dashboard() {
       icon: <Settings />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#404040',
+      backgroundColor: 'var(--color-bg-settings-light)',
       onClick: () => console.log('Preferences clicked'),
     },
     {
@@ -464,7 +464,7 @@ export function Dashboard() {
       icon: <Key />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#0d1f35',
+      backgroundColor: 'var(--color-bg-settings-dark)',
       onClick: () => console.log('Password clicked'),
     },
     {
@@ -473,7 +473,7 @@ export function Dashboard() {
       icon: <Mail />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#1a1a1a',
+      backgroundColor: 'var(--color-bg-settings-medium)',
       onClick: () => console.log('Email clicked'),
     },
     // Row 3: Device + Language + Billing
@@ -483,7 +483,7 @@ export function Dashboard() {
       icon: <Smartphone />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#2d2d2d',
+      backgroundColor: 'var(--color-bg-settings-grey)',
       onClick: () => console.log('Devices clicked'),
     },
     {
@@ -492,7 +492,7 @@ export function Dashboard() {
       icon: <Globe />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#404040',
+      backgroundColor: 'var(--color-bg-settings-light)',
       onClick: () => console.log('Language clicked'),
     },
     {
@@ -501,7 +501,7 @@ export function Dashboard() {
       icon: <CreditCard />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#0d1f35',
+      backgroundColor: 'var(--color-bg-settings-dark)',
       onClick: () => console.log('Billing clicked'),
     },
     // Row 4: Export Data + Help + Logout
@@ -511,7 +511,7 @@ export function Dashboard() {
       icon: <Download />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#1a1a1a',
+      backgroundColor: 'var(--color-bg-settings-medium)',
       onClick: () => console.log('Export Data clicked'),
     },
     {
@@ -520,7 +520,7 @@ export function Dashboard() {
       icon: <HelpCircle />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#2d2d2d',
+      backgroundColor: 'var(--color-bg-settings-grey)',
       onClick: () => console.log('Help clicked'),
     },
     {
@@ -529,7 +529,7 @@ export function Dashboard() {
       icon: <LogOut />,
       colSpan: 1,
       rowSpan: 1,
-      backgroundColor: '#0d1f35',
+      backgroundColor: 'var(--color-bg-settings-dark)',
       onClick: () => console.log('Logout clicked'),
     },
   ];
@@ -560,7 +560,6 @@ export function Dashboard() {
           autoPlayInterval={5000}
           showControls={true}
           showIndicators={true}
-          pauseOnHover={true}
           height="85vh"
           width="35vw"
           onSlideClick={handleSlideClick}

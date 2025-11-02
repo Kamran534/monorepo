@@ -83,8 +83,8 @@ body {
   font-family: var(--font-family-sans);
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
-  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
-              color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.15s ease-out, 
+              color 0.1s linear;
 }
 
 * {
@@ -92,22 +92,34 @@ body {
 }
 
 /* ========== Theme Transition Animations ========== */
-/* Smooth transitions for all theme-aware elements */
+/* Base transitions for all theme-aware elements */
 *,
 *::before,
 *::after {
   transition-property: background-color, background, border-color, color, fill, stroke, opacity, box-shadow;
-  transition-duration: 0.4s;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 0.15s;
+  transition-timing-function: ease-out;
 }
 
-/* Exclude elements that should not animate during theme change */
+/* Fast text color transitions - priority for text elements (0.08s for instant feel) */
+span, p, div, h1, h2, h3, h4, h5, h6, label, li, td, th, small, strong, em, b, i, code {
+  transition: color 0.08s linear !important;
+}
+
+/* Ensure consistent fast transitions for elements using CSS variable colors */
+[style*="--color-text"],
+[style*="color: var"] {
+  transition: color 0.08s linear !important;
+}
+
+/* Faster transitions for interactive elements */
 button,
 input,
 select,
 textarea,
 a {
-  transition-duration: 0.2s; /* Faster for interactive elements */
+  transition-duration: 0.1s;
+  transition-timing-function: ease-out;
 }
 
 /* Override for animations and transforms - should not be affected by theme transitions */
@@ -185,6 +197,12 @@ a {
   /* Selected/Highlighted */
   --color-bg-selected: #3b82f6; /* Blue for selected items */
   --color-bg-hover: #f3f4f6;
+
+  /* Account Settings Tile Colors */
+  --color-bg-settings-dark: #0d1f35; /* Dark blue (same as nav) */
+  --color-bg-settings-medium: #1a1a1a; /* Dark grey */
+  --color-bg-settings-grey: #2d2d2d; /* Medium grey */
+  --color-bg-settings-light: #404040; /* Light grey */
 
   /* ========== Text Colors ========== */
   --color-text-primary: #333333; /* Dark grey - main text */
@@ -709,6 +727,12 @@ body {
   /* Selected/Highlighted */
   --color-bg-selected: #1e4a7a;
   --color-bg-hover: #1a3a5c;
+
+  /* Account Settings Tile Colors (Darker for dark mode) */
+  --color-bg-settings-dark: #0d1f35; /* Dark blue */
+  --color-bg-settings-medium: #0f1820; /* Darker grey */
+  --color-bg-settings-grey: #1a2530; /* Medium grey */
+  --color-bg-settings-light: #253340; /* Light grey */
   
   /* ========== Text Colors ========== */
   --color-text-primary: #e3f2fd; /* Light blue-white - main text */

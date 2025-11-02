@@ -44,6 +44,7 @@ function AppContent() {
   // Get active item based on current path
   const allItems = [...sidebarItems, ...footerItems];
   const activeItemId = allItems.find(item => item.path === location.pathname)?.id || 'dashboard';
+  const currentPageName = allItems.find(item => item.path === location.pathname)?.label;
 
   // Navigation handler
   const handleNavigation = (item: SidebarItem) => {
@@ -68,6 +69,7 @@ function AppContent() {
       }}
       navbarProps={{
         searchPlaceholder: 'Search',
+        currentPageName: currentPageName,
         onSearch: handleSearch,
         onThemeToggle: toggleTheme,
         isDarkMode: isDark,

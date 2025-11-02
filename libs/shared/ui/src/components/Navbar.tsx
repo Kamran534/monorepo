@@ -11,6 +11,7 @@ export interface NavbarAction {
 
 export interface NavbarProps extends ComponentProps {
   title?: string;
+  currentPageName?: string;
   searchPlaceholder?: string;
   onSearch?: (query: string) => void;
   actions?: NavbarAction[];
@@ -32,6 +33,7 @@ export interface NavbarProps extends ComponentProps {
  */
 export function Navbar({
   searchPlaceholder = 'Search',
+  currentPageName,
   onSearch,
   actions = [],
   userInfo,
@@ -84,6 +86,19 @@ export function Navbar({
                 />
               </svg>
             </button>
+          )}
+        </div>
+
+        {/* Page Name - After toggle button with fixed width */}
+        <div className="flex items-center px-3" style={{ width: '120px', flexShrink: 0 }}>
+          {currentPageName && (
+            <span 
+              className="text-white font-medium text-sm truncate block w-full"
+              style={{ fontSize: '13px' }}
+              title={currentPageName}
+            >
+              {currentPageName}
+            </span>
           )}
         </div>
 
@@ -225,28 +240,52 @@ export function Navbar({
                     }}
                   >
                     <div className="py-1">
-                      <button                   className="w-full px-4 py-2 text-left text-sm transition-colors"
-                  style={{ 
-                    color: 'var(--color-text-primary)',
-                    hover: { backgroundColor: 'var(--color-bg-hover)' }
-                  }}>
-                  Profile
-                </button>
-                <button className="w-full px-4 py-2 text-left text-sm transition-colors"
-                  style={{ 
-                    color: 'var(--color-text-primary)',
-                    hover: { backgroundColor: 'var(--color-bg-hover)' }
-                  }}>
-                  Settings
-                </button>
-                <hr style={{ borderColor: 'var(--color-border-light)' }} />
-                <button className="w-full px-4 py-2 text-left text-sm transition-colors"
-                  style={{ 
-                    color: 'var(--color-error)',
-                    hover: { backgroundColor: 'var(--color-bg-hover)' }
-                  }}>
-                  Sign out
-                </button>
+                      <button
+                        className="w-full px-4 py-2 text-left text-sm transition-colors hover:opacity-90"
+                        style={{ 
+                          color: 'var(--color-text-primary)',
+                          backgroundColor: 'transparent',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'var(--color-bg-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        Profile
+                      </button>
+                      <button
+                        className="w-full px-4 py-2 text-left text-sm transition-colors hover:opacity-90"
+                        style={{ 
+                          color: 'var(--color-text-primary)',
+                          backgroundColor: 'transparent',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'var(--color-bg-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        Settings
+                      </button>
+                      <hr style={{ borderColor: 'var(--color-border-light)' }} />
+                      <button
+                        className="w-full px-4 py-2 text-left text-sm transition-colors hover:opacity-90"
+                        style={{ 
+                          color: 'var(--color-error)',
+                          backgroundColor: 'transparent',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'var(--color-bg-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        Sign out
+                      </button>
                     </div>
                   </div>
                 </>

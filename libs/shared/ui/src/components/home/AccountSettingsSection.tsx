@@ -65,7 +65,7 @@ export function AccountSettingsSection({
               style={{
                 gridColumn: `span ${colSpan}`,
                 gridRow: `span ${rowSpan}`,
-                backgroundColor: tile.backgroundColor || '#0d1f35',
+                backgroundColor: tile.backgroundColor || 'var(--color-bg-settings-dark)',
                 color: 'var(--color-text-light)',
                 borderRadius: 0,
               }}
