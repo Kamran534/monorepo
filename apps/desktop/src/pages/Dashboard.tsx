@@ -1,4 +1,4 @@
-// import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ImageSlider,
   StartSection,
@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 
 export function Dashboard() {
+  const navigate = useNavigate();
   // const [name, setName] = useState('');
   // const [collectedName, setCollectedName] = useState<string | null>(null);
 
@@ -318,7 +319,7 @@ export function Dashboard() {
       colSpan: 2,
       rowSpan: 1,
       backgroundColor: 'var(--color-tile-brown-1)',
-      onClick: () => console.log('Current transaction clicked'),
+      onClick: () => navigate('/transactions'),
     },
     {
       id: 'return-transaction',

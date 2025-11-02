@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ComponentProps } from '../../types.js';
 import { TransactionVerticalNav } from './TransactionVerticalNav.js';
+import { FileText, Tag, Boxes, Zap, Package } from 'lucide-react';
+import type { Product } from '../products/ProductList.js';
 
 export interface ActionButton {
   id: string;
@@ -19,6 +21,8 @@ export interface TransactionActionsProps extends ComponentProps {
   actions: ActionButton[];
   activeSection?: string;
   onSectionClick?: (section: string) => void;
+  products?: Product[];
+  onProductClick?: (product: Product) => void;
 }
 
 /**
@@ -27,11 +31,98 @@ export interface TransactionActionsProps extends ComponentProps {
  * Right panel displaying action buttons grid
  * for the transactions page.
  */
+interface ProductGridCardProps {
+  product: Product;
+  onProductClick?: (product: Product) => void;
+}
+
+function ProductGridCard({ product, onProductClick }: ProductGridCardProps) {
+  const hasImage = !!product.image;
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    if (hasImage && imgRef.current) {
+      if (imgRef.current.complete && imgRef.current.naturalHeight !== 0) {
+        setImageLoaded(true);
+        setImageError(false);
+      } else if (imgRef.current.complete && imgRef.current.naturalHeight === 0) {
+        setImageError(true);
+        setImageLoaded(false);
+      }
+    }
+  }, [hasImage]);
+
+  return (
+    <div
+      onClick={() => onProductClick?.(product)}
+      className="flex flex-col rounded border overflow-hidden cursor-pointer transition-all hover:shadow-md relative"
+      style={{
+        backgroundColor: (!hasImage || imageError || !imageLoaded) ? 'var(--color-bg-card)' : 'transparent',
+        borderColor: 'var(--color-border-light)',
+        maxWidth: '100%',
+        backgroundImage: (hasImage && !imageError && imageLoaded) ? `url(${product.image})` : 'none',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        minHeight: '120px',
+      }}
+    >
+      {/* Dark overlay for better text readability on images */}
+      {(hasImage && !imageError && imageLoaded) && (
+        <div className="absolute inset-0 bg-black/30 z-0" />
+      )}
+
+      {/* Product Image - Hidden, used for loading detection */}
+      {hasImage && (
+        <img
+          ref={imgRef}
+          src={product.image}
+          alt=""
+          loading="lazy"
+          className="absolute opacity-0 pointer-events-none"
+          style={{ width: '1px', height: '1px' }}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => {
+            setImageError(true);
+            setImageLoaded(false);
+          }}
+        />
+      )}
+
+      {/* Placeholder icon when no image */}
+      {(!hasImage || imageError || !imageLoaded) && (
+        <div className="absolute inset-0 flex items-center justify-center z-0">
+          <Package size={20} style={{ color: 'var(--color-text-secondary)', opacity: 0.5 }} />
+        </div>
+      )}
+
+      {/* Product Info */}
+      <div className="p-1.5 flex flex-col gap-0.5 relative z-[1]">
+        <p className="text-[9px] font-medium line-clamp-1" style={{ color: 'var(--color-text-light)' }}>
+          {product.productNumber}
+        </p>
+        <p className="text-[10px] font-semibold line-clamp-2 leading-tight" style={{ color: 'var(--color-text-light)' }}>
+          {product.name}
+        </p>
+        {product.price && (
+          <p className="text-[10px] font-bold" style={{ color: 'var(--color-text-light)' }}>
+            {product.price}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function TransactionActions({
   actions,
   activeSection,
   onSectionClick,
   className = '',
+  products = [],
+  onProductClick,
 }: TransactionActionsProps) {
   // Detect fullscreen mode
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -90,6 +181,35 @@ export function TransactionActions({
   const orangeActions = actions.filter(a => a.color?.includes('orange'));
   const grayActions = actions.filter(a => a.color?.includes('gray'));
   const greenActions = actions.filter(a => a.color?.includes('green'));
+
+  // Empty state component for tabs
+  const renderEmptyState = (icon: React.ReactNode, title: string) => {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 min-h-full">
+        <div 
+          className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+          style={{
+            backgroundColor: 'var(--color-bg-tertiary)',
+            color: 'var(--color-text-secondary)',
+          }}
+        >
+          {icon}
+        </div>
+        <p 
+          className="text-sm font-medium text-center"
+          style={{ color: 'var(--color-text-primary)' }}
+        >
+          {title}
+        </p>
+        <p 
+          className="text-xs mt-1 text-center"
+          style={{ color: 'var(--color-text-secondary)' }}
+        >
+          Not found
+        </p>
+      </div>
+    );
+  };
 
   const renderButton = (action: ActionButton) => {
     const baseClasses = `${action.color || 'bg-orange-600'} px-4 relative transition-all hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50`;
@@ -195,37 +315,73 @@ export function TransactionActions({
     );
   };
 
+  // Render content based on active section
+  const renderTabContent = () => {
+    switch (activeSection) {
+      case 'actions':
+        return (
+          <div className="space-y-1 overflow-hidden">
+            {/* Orange/Reddish-Brown Section */}
+            {orangeActions.length > 0 && (
+              <div 
+                className="grid grid-cols-2 gap-1 overflow-hidden" 
+                style={{ 
+                  gridAutoRows: 'minmax(60px, auto)',
+                  '--row-height': '60px',
+                  '--gap': '4px',
+                } as React.CSSProperties}
+              >
+                {orangeActions.map(renderButton)}
+              </div>
+            )}
+
+            {/* Dark Gray Section */}
+            {grayActions.length > 0 && (
+              <div className="grid grid-cols-2 gap-1 overflow-hidden">
+                {grayActions.map(renderButton)}
+              </div>
+            )}
+          </div>
+        );
+      case 'orders':
+        return renderEmptyState(<FileText className="w-8 h-8" />, 'Orders');
+      case 'discounts':
+        return renderEmptyState(<Tag className="w-8 h-8" />, 'Discounts');
+      case 'products':
+        if (products.length === 0) {
+          return renderEmptyState(<Boxes className="w-8 h-8" />, 'Products');
+        }
+        return (
+          <div className="grid grid-cols-2 gap-1 overflow-hidden">
+            {products.map((product) => (
+              <ProductGridCard
+                key={product.id}
+                product={product}
+                onProductClick={onProductClick}
+              />
+            ))}
+          </div>
+        );
+      default:
+        return renderEmptyState(<Zap className="w-8 h-8" />, 'Not found');
+    }
+  };
+
   return (
     <div
       className={`flex gap-1 h-full w-full md:w-auto ${className}`}
       style={{ backgroundColor: 'var(--color-bg-secondary)' }}
     >
       {/* Main Action Buttons Panel */}
-      <div className="flex-1 flex flex-col p-2 gap-1 overflow-y-auto min-w-0 md:min-w-[280px] lg:min-w-[320px]">
-        {/* Orange/Reddish-Brown Section */}
-        {orangeActions.length > 0 && (
-          <div 
-            className="grid grid-cols-2 gap-1" 
-            style={{ 
-              gridAutoRows: 'minmax(60px, auto)',
-              '--row-height': '60px',
-              '--gap': '4px',
-            } as React.CSSProperties}
-          >
-            {orangeActions.map(renderButton)}
-          </div>
-        )}
+      <div className="flex-1 flex flex-col p-2 overflow-hidden min-w-0 md:min-w-[280px] lg:min-w-[320px]">
+        {/* Tab-specific content */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 mb-1">
+          {renderTabContent()}
+        </div>
 
-        {/* Dark Gray Section */}
-        {grayActions.length > 0 && (
-          <div className="grid grid-cols-2 gap-1">
-            {grayActions.map(renderButton)}
-          </div>
-        )}
-
-        {/* Green Section */}
+        {/* Green Section - Always visible at bottom */}
         {greenActions.length > 0 && (
-          <div className="space-y-1">
+          <div className="flex-shrink-0 overflow-hidden gap-1 flex flex-col pt-2 border-t" style={{ borderColor: 'var(--color-border-light)' }}>
             {/* Small square buttons (icon only) */}
             <div className="grid grid-cols-4 gap-1">
               {greenActions.filter(a => a.square && !a.label).map(renderButton)}

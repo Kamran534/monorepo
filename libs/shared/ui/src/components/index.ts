@@ -18,3 +18,17 @@ export * from './transactions/index.js';
 // Home page components
 export { ImageSlider, StartSection, ProductSection, InventorySection, ShiftDrawerSection, AccountSettingsSection } from './home/index.js';
 export type { ImageSliderProps, SlideItem, StartSectionProps, NavigationTile, ProductSectionProps, ProductCategory, InventorySectionProps, InventoryTile, ShiftDrawerSectionProps, ShiftDrawerTile, AccountSettingsSectionProps, AccountSettingsTile } from './home/index.js';
+
+// Category components
+export * from './category/index.js';
+
+// Product components
+export * from './products/index.js';
+
+// Loading component
+export { Loading } from './Loading.js';
+export type { LoadingProps } from './Loading.js';
+
+// SidePanel component
+export { SidePanel } from './SidePanel.js';
+export type { SidePanelProps } from './SidePanel.js';

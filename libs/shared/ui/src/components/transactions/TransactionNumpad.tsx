@@ -3,6 +3,7 @@ import {
   User,
   Plus,
   RotateCcw,
+  CornerDownLeft,
 } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
 
@@ -220,13 +221,13 @@ export function TransactionNumpad({
           {/* Row 5: Enter button spanning 4 columns */}
           <button
             onClick={() => handleClick('enter')}
-            className="col-span-4 h-12 md:h-16 rounded text-base md:text-lg font-semibold hover:opacity-90 transition-opacity"
+            className="col-span-4 h-12 md:h-16 rounded text-base md:text-lg font-semibold hover:opacity-90 transition-opacity flex items-center justify-center"
             style={{
               backgroundColor: 'var(--color-accent-blue)',
               color: 'var(--color-text-light)',
             }}
           >
-            ←
+            <CornerDownLeft className="w-5 md:w-6 h-5 md:h-6" />
           </button>
         </div>
       </div>

@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   TransactionLines,
   TransactionNumpad,
   TransactionActions,
+  TransactionQuantityPanel,
   type LineItem,
   type ActionButton,
+  type Product,
 } from '@monorepo/shared-ui';
 import {
   Gift,
@@ -20,10 +23,35 @@ import {
 } from 'lucide-react';
 
 export function Transactions() {
-  const [activeTab, setActiveTab] = useState<'lines' | 'payments'>('lines');
+  const navigate = useNavigate();
+  
+  // Load initial state from localStorage
+  const [activeTab, setActiveTabState] = useState<'lines' | 'payments'>(() => {
+    const saved = localStorage.getItem('transactions-activeTab');
+    return (saved === 'lines' || saved === 'payments') ? saved : 'lines';
+  });
+  
   const [selectedItem, setSelectedItem] = useState<string>('3');
   const [numpadValue, setNumpadValue] = useState<string>('');
-  const [activeSection, setActiveSection] = useState<string>('actions');
+  
+  const [activeSection, setActiveSectionState] = useState<string>(() => {
+    const saved = localStorage.getItem('transactions-activeSection');
+    return saved || 'actions';
+  });
+  
+  const [isQuantityPanelOpen, setIsQuantityPanelOpen] = useState(false);
+
+  // Save activeTab to localStorage when it changes
+  const setActiveTab = (tab: 'lines' | 'payments') => {
+    setActiveTabState(tab);
+    localStorage.setItem('transactions-activeTab', tab);
+  };
+
+  // Save activeSection to localStorage when it changes
+  const setActiveSection = (section: string) => {
+    setActiveSectionState(section);
+    localStorage.setItem('transactions-activeSection', section);
+  };
   const [lineItems] = useState<LineItem[]>([
     {
       id: '1',
@@ -47,6 +75,44 @@ export function Transactions() {
       total: 34.99,
     },
   ]);
+
+  // Keyboard shortcut: Ctrl+Shift+P to open quantity panel
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+        e.preventDefault();
+        setIsQuantityPanelOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Get selected item details
+  const selectedItemData = lineItems.find(item => item.id === selectedItem);
+
+  // Products data for Products tab
+  const products = useMemo<Product[]>(() => [
+    { id: '81328', productNumber: '81328', name: 'Brown Leopardprint Sunglasses', price: '$130.00', image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
+    { id: '81300', productNumber: '81300', name: 'Brown Leather Travel Bag', price: '$89.99', rating: 3.8, reviewCount: 195, image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop' },
+    { id: '81302', productNumber: '81302', name: 'Brown Snakeskin Bag', price: '$95.00', rating: 3.8, reviewCount: 192, image: 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400&h=400&fit=crop' },
+    { id: '81333', productNumber: '81333', name: 'Silver Stunner Sunglasses', price: '$42.00', rating: 3.7, reviewCount: 192, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
+    { id: '81327', productNumber: '81327', name: 'Black Wireframe Sunglasses', price: '$120.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
+    { id: '81329', productNumber: '81329', name: 'Black Thick Rimmed Sunglasses', price: '$48.00', rating: 3.8, reviewCount: 193, image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
+    // { id: '81330', productNumber: '81330', name: 'Brown Aviator Sunglasses', price: '$150.00', rating: 3.9, reviewCount: 195, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
+    // { id: '81331', productNumber: '81331', name: 'Pink Thick Rimmed Sunglasses', price: '$52.00', rating: 3.7, reviewCount: 188, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
+    // { id: '81319', productNumber: '81319', name: 'Brown Glove & Scarf Set', price: '$35.99', image: 'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=400&h=400&fit=crop' },
+    // { id: '81323', productNumber: '81323', name: 'Grey Cotton Gloves', price: '$28.50', rating: 3.8, reviewCount: 192, image: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop' },
+    // { id: '81320', productNumber: '81320', name: 'Brown Leather Gloves', price: '$38.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
+    // { id: '81321', productNumber: '81321', name: 'Black Cotton Gloves', price: '$32.00', image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
+  ], []);
+
+  const handleProductClick = (product: Product) => {
+    navigate(`/products/${product.id}`);
+  };
 
   const actionButtons: ActionButton[] = [
     // Orange/Reddish-Brown Section
@@ -223,6 +289,8 @@ export function Transactions() {
             setActiveSection(section);
             console.log('Section:', section);
           }}
+          products={products}
+          onProductClick={handleProductClick}
         />
       </div>
 
@@ -249,6 +317,19 @@ export function Transactions() {
           •••
         </button>
       </div>
+
+      {/* Quantity Panel - Opens with Ctrl+Shift+P */}
+      <TransactionQuantityPanel
+        isOpen={isQuantityPanelOpen}
+        onClose={() => setIsQuantityPanelOpen(false)}
+        itemName={selectedItemData?.name || 'Youth Accessory Combo Set'}
+        unitOfMeasure="Each"
+        initialQuantity={selectedItemData?.quantity.toString() || '1'}
+        onQuantityConfirm={(quantity) => {
+          console.log('Quantity confirmed:', quantity);
+          // Update the selected item's quantity here if needed
+        }}
+      />
     </div>
   );
 }

@@ -43,6 +43,24 @@
   }
 }
 
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutToRight {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @keyframes slideInFromBottom {
   from {
     opacity: 0;
@@ -72,6 +90,18 @@
 
 .animate-slideOutToLeft {
   animation: slideOutToLeft 0.3s ease-in-out forwards;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.animate-slideInFromRight {
+  animation: slideInFromRight 0.3s ease-in-out forwards;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.animate-slideOutToRight {
+  animation: slideOutToRight 0.3s ease-in-out forwards;
   will-change: transform;
   backface-visibility: hidden;
 }
@@ -126,7 +156,9 @@ a {
 .animate-fadeIn,
 .animate-fadeOut,
 .animate-slideInFromLeft,
-.animate-slideOutToLeft {
+.animate-slideOutToLeft,
+.animate-slideInFromRight,
+.animate-slideOutToRight {
   transition: none !important;
 }
 
