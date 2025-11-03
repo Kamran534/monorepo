@@ -21,7 +21,8 @@
     "start:desktop": "nx run desktop:start",
     "dev:desktop": "nx run desktop:dev",
     "build:desktop": "nx run desktop:build",
-    "update-icons": "node scripts/update-icons.js"
+    "update-icons": "node scripts/update-icons.js",
+    "test:db": "npx tsx scripts/test-database.ts"
   },
   "private": true,
   "devDependencies": {

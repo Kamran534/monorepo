@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import path from 'node:path';
+import { createDesktopExecutor, runMigrations } from '@monorepo/db/migrations';
 
 const isDev = process.env.ELECTRON_RENDERER_URL;
 
@@ -11,30 +12,60 @@ let getStmt: Database.Statement | null = null;
 let upsertStmt: Database.Statement | null = null;
 
 /**
+ * Run database migrations
+ * @throws {Error} If migration fails
+ */
+async function runDatabaseMigrations(): Promise<void> {
+  if (!db) {
+    throw new Error('Database not initialized');
+  }
+
+  try {
+    console.log('[Database] Running migrations...');
+    const executor = createDesktopExecutor(db);
+    const result = await runMigrations(executor);
+    console.log(`[Database] Migrations complete. Applied: ${result.applied.length}, Skipped: ${result.skipped.length}`);
+  } catch (error) {
+    console.error('[Database] Migration failed:', error);
+    throw error;
+  }
+}
+
+/**
  * Initialize the SQLite database connection
  * @throws {Error} If database initialization fails
  */
-function initializeDatabase(): void {
+async function initializeDatabase(): Promise<void> {
   try {
     const userData = app.getPath('userData');
     const dbPath = path.join(userData, 'payflow.db');
-    
+
+    console.log(`[Database] Opening database at ${dbPath}`);
+
     // Open database connection
     db = new Database(dbPath);
-    
+
     // Enable WAL mode for better concurrency
     db.pragma('journal_mode = WAL');
-    
-    // Create table if it doesn't exist
+
+    // Enable foreign key constraints
+    db.pragma('foreign_keys = ON');
+
+    console.log(`[Database] Database opened successfully`);
+
+    // Run migrations to set up the POS schema
+    await runDatabaseMigrations();
+
+    // Create legacy kv table if it doesn't exist (for backward compatibility)
     db.prepare('CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value INTEGER)').run();
-    
+
     // Prepare statements for reuse (better performance)
     getStmt = db.prepare('SELECT value FROM kv WHERE key = ?');
     upsertStmt = db.prepare(
       'INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
     );
-    
-    console.log(`[Database] Initialized at ${dbPath}`);
+
+    console.log(`[Database] Initialized successfully at ${dbPath}`);
   } catch (error) {
     console.error('[Database] Initialization failed:', error);
     throw new Error(`Failed to initialize database: ${error instanceof Error ? error.message : String(error)}`);
@@ -238,15 +269,15 @@ async function createWindow() {
 }
 
 // Initialize database and setup IPC handlers once at app startup
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   try {
     // Remove the default menu bar completely
     Menu.setApplicationMenu(null);
-    
-    initializeDatabase();
+
+    await initializeDatabase();
     setupIpcHandlers();
-    createWindow();
-    
+    await createWindow();
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();

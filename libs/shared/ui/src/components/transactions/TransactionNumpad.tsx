@@ -47,7 +47,7 @@ export function TransactionNumpad({
       }}
     >
       {/* Customer Section - Top */}
-      <div className="p-3 md:p-4 pt-4 md:pt-12 pb-3 md:pb-6 flex-shrink-0">
+      <div className="p-3 md:p-4 pt-4 md:pt-20 pb-3 md:pb-6 flex-shrink-0">
         <div className="flex flex-col items-center gap-1.5 md:gap-2">
           {/* User Icon with Plus */}
           <div className="relative">

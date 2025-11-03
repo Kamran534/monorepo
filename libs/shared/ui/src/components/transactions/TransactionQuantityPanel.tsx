@@ -52,18 +52,20 @@ export interface TransactionQuantityPanelProps {
 export function TransactionQuantityPanel({
   isOpen,
   onClose,
-  itemName = 'Youth Accessory Combo Set',
-  unitOfMeasure = 'Each',
+  itemName,
+  unitOfMeasure,
   initialQuantity = '1',
   onQuantityConfirm,
 }: TransactionQuantityPanelProps) {
   const [quantity, setQuantity] = useState(initialQuantity);
+  const [isInitial, setIsInitial] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset quantity and focus input when panel opens
   useEffect(() => {
     if (isOpen) {
       setQuantity(initialQuantity);
+      setIsInitial(true);
       // Focus input after a short delay to ensure panel is fully rendered
       setTimeout(() => {
         inputRef.current?.focus();
@@ -72,11 +74,13 @@ export function TransactionQuantityPanel({
   }, [isOpen, initialQuantity]);
 
   const handleNumberClick = (num: string) => {
-    setQuantity(prev => prev + num);
+    setQuantity(prev => (isInitial ? num : prev + num));
+    if (isInitial) setIsInitial(false);
   };
 
   const handleBackspace = () => {
     setQuantity(prev => prev.slice(0, -1) || '');
+    setIsInitial(false);
   };
 
   const handleEnter = () => {
@@ -122,6 +126,7 @@ export function TransactionQuantityPanel({
     // Only allow numeric input
     const numericValue = value.replace(/[^0-9]/g, '');
     setQuantity(numericValue);
+    setIsInitial(false);
   };
 
   return (
@@ -134,20 +139,23 @@ export function TransactionQuantityPanel({
       <div className="flex flex-col h-full">
         {/* Top Content */}
         <div className="flex-1 overflow-y-auto">
-          {/* Item Display */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Package className="w-4 h-4" style={{ color: 'var(--color-text-secondary)' }} />
-              <div>
-                <h3 className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                  {itemName}
-                </h3>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
-                  Unit of measure: {unitOfMeasure}
-                </p>
+          {itemName && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Package className="w-4 h-4" style={{ color: 'var(--color-text-secondary)' }} />
+                <div>
+                  <h3 className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                    {itemName}
+                  </h3>
+                  {unitOfMeasure && (
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+                      Unit of measure: {unitOfMeasure}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Quantity Input Field and Calculator Pad - Fixed at Bottom */}

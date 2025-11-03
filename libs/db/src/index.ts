@@ -13,6 +13,7 @@ declare global {
 export type DatabaseConnection = {
   connect: () => Promise<void>;
   isConnected: () => boolean;
+  runMigrations: () => Promise<void>;
   getCounter: () => Promise<number>;
   increment: () => Promise<number>;
   decrement: () => Promise<number>;
@@ -62,6 +63,11 @@ export function getDatabase(): DatabaseConnection {
         }
       },
       isConnected: () => true, // IPC connection is always available if window.electron exists
+      runMigrations: async () => {
+        // Migrations are run on the main process during initialization
+        // This is a no-op for the renderer process
+        return Promise.resolve();
+      },
       getCounter: async () => {
         try {
           return await ipc.invoke<number>('db/getCounter');
@@ -109,63 +115,12 @@ export function getDatabase(): DatabaseConnection {
     // Hold DB handle after connect
     let db: { executeSql: (sql: string, params?: unknown[]) => Promise<Array<{ rows: { length: number; item: (index: number) => { value: number } } }>> } | null = null;
     
-    const ensureSchema = async () => {
-      if (!db) {
-        throw new DatabaseError('Database not initialized', 'RN_DB_NOT_INITIALIZED');
-      }
-      
-      try {
-        await db.executeSql('CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value INTEGER)');
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new DatabaseError(
-          `Failed to create schema: ${errorMessage}`,
-          'RN_SCHEMA_ERROR',
-          error instanceof Error ? error : undefined
-        );
-      }
-    };
-    
-    const readCounter = async (): Promise<number> => {
-      if (!db) {
-        throw new DatabaseError('Database not initialized', 'RN_DB_NOT_INITIALIZED');
-      }
-      
-      try {
-        const [res] = await db.executeSql('SELECT value FROM kv WHERE key = ?', ['counter']);
-        if (res.rows.length > 0) {
-          return Number(res.rows.item(0).value);
-        }
-        return 0;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new DatabaseError(
-          `Failed to read counter: ${errorMessage}`,
-          'RN_READ_ERROR',
-          error instanceof Error ? error : undefined
-        );
-      }
-    };
-    
+    // In-memory counter for demo/testing; removed kv table usage
+    let rnCounterValue = 0;
+    const readCounter = async (): Promise<number> => rnCounterValue;
     const writeCounter = async (value: number): Promise<number> => {
-      if (!db) {
-        throw new DatabaseError('Database not initialized', 'RN_DB_NOT_INITIALIZED');
-      }
-      
-      try {
-        await db.executeSql(
-          'INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
-          ['counter', value]
-        );
-        return value;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new DatabaseError(
-          `Failed to write counter: ${errorMessage}`,
-          'RN_WRITE_ERROR',
-          error instanceof Error ? error : undefined
-        );
-      }
+      rnCounterValue = value;
+      return rnCounterValue;
     };
 
     cachedConnection = {
@@ -174,19 +129,18 @@ export function getDatabase(): DatabaseConnection {
           // Dynamic import to avoid bundling for web/desktop
           const SQLiteMod = await import('react-native-sqlite-storage');
           const SQLiteAny = (SQLiteMod as { default?: unknown }).default ?? SQLiteMod;
-          
+
           if (typeof SQLiteAny.enablePromise === 'function') {
             SQLiteAny.enablePromise(true);
           }
-          
+
           // Open or create DB in app sandbox
           db = await SQLiteAny.openDatabase({ name: 'payflow.db', location: 'default' });
-          
+
           if (!db) {
             throw new DatabaseError('Failed to open database', 'RN_OPEN_ERROR');
           }
-          
-          await ensureSchema();
+
           connected = true;
         } catch (error) {
           connected = false;
@@ -202,6 +156,23 @@ export function getDatabase(): DatabaseConnection {
         }
       },
       isConnected: () => connected && db !== null,
+      runMigrations: async () => {
+        if (!db) {
+          throw new DatabaseError('Database not initialized', 'RN_DB_NOT_INITIALIZED');
+        }
+        try {
+          const { createMobileExecutor, runMigrations } = await import('./migrations');
+          const executor = createMobileExecutor(db);
+          await runMigrations(executor);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          throw new DatabaseError(
+            `Failed to run migrations: ${errorMessage}`,
+            'RN_MIGRATION_ERROR',
+            error instanceof Error ? error : undefined
+          );
+        }
+      },
       getCounter: async () => {
         if (!connected) {
           throw new DatabaseError('Database not connected', 'RN_NOT_CONNECTED');
@@ -228,7 +199,17 @@ export function getDatabase(): DatabaseConnection {
 
   // Web driver using sql.js (SQLite compiled to WebAssembly)
   let connected = false;
-  let db: { prepare: (sql: string) => unknown; run: (sql: string, params?: unknown[]) => void; export: () => Uint8Array } | null = null; // sql.js Database instance
+  let db: {
+    run: (sql: string, params?: unknown[]) => void;
+    exec: (sql: string) => { columns: string[]; values: unknown[][] }[];
+    prepare: (sql: string) => {
+      bind: (params: unknown[]) => void;
+      step: () => boolean;
+      getAsObject: () => Record<string, unknown>;
+      free: () => void;
+    };
+    export: () => Uint8Array;
+  } | null = null; // sql.js Database instance
   const DB_NAME = 'payflow.db';
   const INDEXEDDB_STORE = 'sqlite-dbs';
 
@@ -314,56 +295,9 @@ export function getDatabase(): DatabaseConnection {
     }
   };
 
-  /**
-   * Execute a SQL query and return results
-   */
-  const executeSQL = (sql: string, params: unknown[] = []): Record<string, unknown>[] => {
-    if (!db) {
-      throw new DatabaseError('Database not initialized', 'WEB_DB_NOT_INITIALIZED');
-    }
-    
-    try {
-      const stmt = db.prepare(sql) as { bind: (params: unknown[]) => void; step: () => boolean; getAsObject: () => Record<string, unknown>; free: () => void };
-      if (params.length > 0) {
-        stmt.bind(params);
-      }
-      
-      const results: Record<string, unknown>[] = [];
-      while (stmt.step()) {
-        results.push(stmt.getAsObject());
-      }
-      stmt.free();
-      
-      return results;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new DatabaseError(
-        `SQL execution failed: ${errorMessage}`,
-        'WEB_SQL_EXEC_ERROR',
-        error instanceof Error ? error : undefined
-      );
-    }
-  };
+  // executeSQL helper removed as unused
 
-  /**
-   * Execute a SQL statement without returning results
-   */
-  const runSQL = (sql: string, params: unknown[] = []): void => {
-    if (!db) {
-      throw new DatabaseError('Database not initialized', 'WEB_DB_NOT_INITIALIZED');
-    }
-    
-    try {
-      db.run(sql, params);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new DatabaseError(
-        `SQL execution failed: ${errorMessage}`,
-        'WEB_SQL_RUN_ERROR',
-        error instanceof Error ? error : undefined
-      );
-    }
-  };
+  // runSQL helper removed as unused
 
   /**
    * Persist database changes to IndexedDB
@@ -404,10 +338,7 @@ export function getDatabase(): DatabaseConnection {
         } else {
           // Create new database
           db = new SQL.Database();
-          
-          // Create schema
-          runSQL('CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value INTEGER)');
-          
+
           // Save initial database
           await persistDatabase();
         }
@@ -428,15 +359,37 @@ export function getDatabase(): DatabaseConnection {
     },
     
     isConnected: () => connected && db !== null,
-    
+
+    runMigrations: async () => {
+      if (!db) {
+        throw new DatabaseError('Database not initialized', 'WEB_DB_NOT_INITIALIZED');
+      }
+      try {
+        const { createWebExecutor, runMigrations } = await import('./migrations');
+        const executor = createWebExecutor(db);
+        await runMigrations(executor);
+        await persistDatabase();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new DatabaseError(
+          `Failed to run migrations: ${errorMessage}`,
+          'WEB_MIGRATION_ERROR',
+          error instanceof Error ? error : undefined
+        );
+      }
+    },
+
+    // In-memory counter for demo/testing; removed kv table usage
     getCounter: async () => {
       if (!connected) {
         throw new DatabaseError('Database not connected', 'WEB_NOT_CONNECTED');
       }
-      
+
       try {
-        const results = executeSQL('SELECT value FROM kv WHERE key = ?', ['counter']);
-        return results.length > 0 ? Number(results[0].value) : 0;
+        if (!('webCounterValue' in (cachedConnection as unknown as Record<string, unknown>))) {
+          (cachedConnection as unknown as Record<string, unknown>).webCounterValue = 0;
+        }
+        return Number((cachedConnection as unknown as Record<string, unknown>).webCounterValue);
       } catch (error) {
         if (error instanceof DatabaseError) throw error;
         throw new DatabaseError(
@@ -458,12 +411,7 @@ export function getDatabase(): DatabaseConnection {
         }
         const current = await cachedConnection.getCounter();
         const next = current + 1;
-        
-        runSQL(
-          'INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
-          ['counter', next]
-        );
-        
+        (cachedConnection as unknown as Record<string, unknown>).webCounterValue = next;
         await persistDatabase();
         return next;
       } catch (error) {
@@ -487,12 +435,7 @@ export function getDatabase(): DatabaseConnection {
         }
         const current = await cachedConnection.getCounter();
         const next = current - 1;
-        
-        runSQL(
-          'INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
-          ['counter', next]
-        );
-        
+        (cachedConnection as unknown as Record<string, unknown>).webCounterValue = next;
         await persistDatabase();
         return next;
       } catch (error) {

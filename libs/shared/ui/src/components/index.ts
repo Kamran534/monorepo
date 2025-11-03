@@ -12,6 +12,10 @@ export type { NavbarProps, NavbarAction } from './Navbar.js';
 export { Layout } from './Layout.js';
 export type { LayoutProps } from './Layout.js';
 
+// Receipt / Invoice
+export { Invoice } from './receipt/Invoice.js';
+export type { InvoiceProps, InvoiceLineItem, InvoiceBrand, InvoiceCustomer } from './receipt/Invoice.js';
+
 // Transaction components
 export * from './transactions/index.js';
 

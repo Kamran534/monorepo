@@ -74,8 +74,25 @@ export function TransactionLines({
       </div>
 
       {/* Product List */}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        className="overflow-y-auto"
+        style={{
+          maxHeight: 'calc(100vh - 1200px)',
+          minHeight: '400px'
+        }}
+      >
         <div className="p-2 md:p-4 space-y-1.5 md:space-y-2">
+          {lineItems.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 pt-24">
+              <Package className="w-8 h-8" style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
+              <p className="mt-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                No products in the transaction
+              </p>
+              <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                Add items from products or scan a barcode
+              </p>
+            </div>
+          )}
           {lineItems.map((item) => (
             <div
               key={item.id}
@@ -114,34 +131,39 @@ export function TransactionLines({
             </div>
           ))}
 
-          {/* Add Customer Button */}
-          <div className="pt-5 pb-4">
-            <button
-              onClick={onAddCustomer}
-              className="w-full py-3 rounded border-2 border-dashed hover:opacity-70"
-              style={{
-                borderColor: 'var(--color-border-medium)',
-                color: 'var(--color-text-secondary)',
-                backgroundColor: 'transparent',
-              }}
-            >
-              <div className="flex flex-col items-center gap-2">
-                <Plus className="w-5 h-5" />
-                <span className="text-sm">Add customer to transaction</span>
-              </div>
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* Bottom Summary */}
+      {/* Bottom Footer: Add Customer + Summary (not fixed) */}
       <div
-        className="p-2 md:p-4 border-t space-y-1 md:space-y-2"
+        className="p-2 md:p-4 space-y-2 md:space-y-3"
         style={{
           borderColor: 'var(--color-border-light)',
           backgroundColor: 'var(--color-bg-card)',
         }}
       >
+        {/* Add Customer Button (fixed above billing) */}
+        <div style={{
+            borderBottom: '1px solid var(--color-border-light)',
+            color: 'var(--color-text-primary)',
+            paddingBottom: '10px',
+          }}> 
+          <button
+            onClick={onAddCustomer}
+            className="w-full py-3 rounded border-2 border-dashed hover:opacity-70"
+            style={{
+              borderColor: 'var(--color-border-medium)',
+              color: 'var(--color-text-secondary)',
+              backgroundColor: 'transparent',
+            }}
+          >
+            <div className="flex flex-col items-center gap-2">
+              <Plus className="w-5 h-5" />
+              <span className="text-sm">Add customer to transaction</span>
+            </div>
+          </button>
+        </div>
+
         <div
           className="flex justify-between text-xs md:text-sm"
           style={{ color: 'var(--color-text-primary)' }}

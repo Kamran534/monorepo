@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Package } from 'lucide-react';
+import { Package, ShoppingCart, Eye } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
 import { ViewMode } from './ProductActionButtons.js';
 
@@ -19,6 +19,7 @@ export interface ProductListProps extends ComponentProps {
   onProductClick?: (product: Product) => void;
   hideDetails?: boolean;
   viewMode?: ViewMode;
+  onAddProduct?: (product: Product) => void;
 }
 
 interface ProductGridCardProps {
@@ -27,9 +28,10 @@ interface ProductGridCardProps {
   hideDetails: boolean;
   onProductClick?: (product: Product) => void;
   formatRating: (rating?: number, reviewCount?: number) => string;
+  onAddProduct?: (product: Product) => void;
 }
 
-function ProductGridCard({ product, isSelected, hideDetails, onProductClick, formatRating }: ProductGridCardProps) {
+function ProductGridCard({ product, isSelected, hideDetails, onProductClick, formatRating, onAddProduct }: ProductGridCardProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -52,10 +54,9 @@ function ProductGridCard({ product, isSelected, hideDetails, onProductClick, for
   }, [hasImage]);
   
   return (
-    <button
-      onClick={() => onProductClick?.(product)}
+    <div
       className={`
-        relative
+        relative group
         flex flex-col
         p-4
         rounded
@@ -64,9 +65,6 @@ function ProductGridCard({ product, isSelected, hideDetails, onProductClick, for
         hover:opacity-90
         hover:scale-[1.02]
         active:scale-[0.98]
-        focus:outline-none
-        focus:ring-2
-        focus:ring-offset-2
         min-h-[180px]
         overflow-hidden
       `}
@@ -133,7 +131,7 @@ function ProductGridCard({ product, isSelected, hideDetails, onProductClick, for
       
       {/* Dark overlay for better text readability on images */}
       {showImage && (
-        <div className="absolute inset-0 bg-black/40 z-0" />
+        <div className="absolute inset-0 bg-black/40 z-0 transition-opacity" />
       )}
       
       {/* Top Section - Product Number and Name */}
@@ -169,7 +167,38 @@ function ProductGridCard({ product, isSelected, hideDetails, onProductClick, for
           )}
         </div>
       </div>
-    </button>
+
+      {/* Hover Actions Overlay */}
+      <div
+        className="absolute inset-0 z-[6] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.45), rgba(0,0,0,0.45))',
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onAddProduct?.(product); }}
+            className="w-10 h-10 rounded-full flex items-center justify-center hover:opacity-90"
+            style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'var(--color-text-light)', border: '1px solid rgba(255,255,255,0.25)' }}
+            title="Add to cart"
+            aria-label="Add to cart"
+          >
+            <ShoppingCart className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onProductClick?.(product); }}
+            className="w-10 h-10 rounded-full flex items-center justify-center hover:opacity-90"
+            style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'var(--color-text-light)', border: '1px solid rgba(255,255,255,0.25)' }}
+            title="View details"
+            aria-label="View details"
+          >
+            <Eye className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -196,6 +225,7 @@ export function ProductList({
   hideDetails = false,
   viewMode = 'list',
   className = '',
+  onAddProduct,
 }: ProductListProps) {
   const formatRating = (rating?: number, reviewCount?: number) => {
     if (rating === undefined) return '';
@@ -222,6 +252,7 @@ export function ProductList({
                 hideDetails={hideDetails}
                 onProductClick={onProductClick}
                 formatRating={formatRating}
+                onAddProduct={onAddProduct}
               />
             ))}
           </div>

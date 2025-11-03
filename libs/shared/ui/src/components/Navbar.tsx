@@ -24,6 +24,7 @@ export interface NavbarProps extends ComponentProps {
   showMenuButton?: boolean;
   onThemeToggle?: () => void;
   isDarkMode?: boolean;
+  onSignOut?: () => void;
 }
 
 /**
@@ -42,6 +43,7 @@ export function Navbar({
   onThemeToggle,
   isDarkMode = false,
   className = '',
+  onSignOut,
 }: Omit<NavbarProps, 'title'>) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -233,7 +235,7 @@ export function Navbar({
                   />
                   {/* Menu */}
                   <div
-                    className="absolute right-0 mt-2 w-48 rounded-lg shadow-lg z-50"
+                    className="absolute right-0 mt-2 w-48 rounded-md shadow-lg z-50"
                     style={{
                       backgroundColor: 'var(--color-bg-card)',
                       border: '1px solid var(--color-border-light)',
@@ -282,6 +284,10 @@ export function Navbar({
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          onSignOut?.();
                         }}
                       >
                         Sign out

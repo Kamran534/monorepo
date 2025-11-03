@@ -5,9 +5,11 @@ import {
   TransactionNumpad,
   TransactionActions,
   TransactionQuantityPanel,
-  type LineItem,
+  Invoice,
   type ActionButton,
   type Product,
+  useCart,
+  useToast,
 } from '@monorepo/shared-ui';
 import {
   Gift,
@@ -20,6 +22,8 @@ import {
   Heart,
   CreditCard,
   Banknote,
+  Ruler,
+  Trash2,
 } from 'lucide-react';
 
 export function Transactions() {
@@ -52,29 +56,9 @@ export function Transactions() {
     setActiveSectionState(section);
     localStorage.setItem('transactions-activeSection', section);
   };
-  const [lineItems] = useState<LineItem[]>([
-    {
-      id: '1',
-      name: 'Youth Accessory Combo Set',
-      quantity: 1,
-      price: 69.99,
-      total: 69.99,
-    },
-    {
-      id: '2',
-      name: 'Adult Helmet Accessory Combo Set',
-      quantity: 2,
-      price: 79.98,
-      total: 79.98,
-    },
-    {
-      id: '3',
-      name: 'Signature Mountain Bike Tire',
-      quantity: 1,
-      price: 34.99,
-      total: 34.99,
-    },
-  ]);
+  const { items: lineItems, setItemQuantity, removeItem } = useCart();
+  const { show } = useToast();
+  const [showInvoice, setShowInvoice] = useState(false);
 
   // Keyboard shortcut: Ctrl+Shift+P to open quantity panel
   useEffect(() => {
@@ -102,8 +86,8 @@ export function Transactions() {
     { id: '81333', productNumber: '81333', name: 'Silver Stunner Sunglasses', price: '$42.00', rating: 3.7, reviewCount: 192, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
     { id: '81327', productNumber: '81327', name: 'Black Wireframe Sunglasses', price: '$120.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
     { id: '81329', productNumber: '81329', name: 'Black Thick Rimmed Sunglasses', price: '$48.00', rating: 3.8, reviewCount: 193, image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
-    // { id: '81330', productNumber: '81330', name: 'Brown Aviator Sunglasses', price: '$150.00', rating: 3.9, reviewCount: 195, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
-    // { id: '81331', productNumber: '81331', name: 'Pink Thick Rimmed Sunglasses', price: '$52.00', rating: 3.7, reviewCount: 188, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
+    { id: '81330', productNumber: '81330', name: 'Brown Aviator Sunglasses', price: '$150.00', rating: 3.9, reviewCount: 195, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
+    { id: '81331', productNumber: '81331', name: 'Pink Thick Rimmed Sunglasses', price: '$52.00', rating: 3.7, reviewCount: 188, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
     // { id: '81319', productNumber: '81319', name: 'Brown Glove & Scarf Set', price: '$35.99', image: 'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=400&h=400&fit=crop' },
     // { id: '81323', productNumber: '81323', name: 'Grey Cotton Gloves', price: '$28.50', rating: 3.8, reviewCount: 192, image: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop' },
     // { id: '81320', productNumber: '81320', name: 'Brown Leather Gloves', price: '$38.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
@@ -120,7 +104,7 @@ export function Transactions() {
       id: 'set-quantity',
       label: 'Set quantity',
       color: 'bg-orange-600',
-      onClick: () => console.log('Set quantity'),
+      onClick: () => setIsQuantityPanelOpen(true),
     },
     {
       id: 'return-product',
@@ -139,16 +123,19 @@ export function Transactions() {
       onClick: () => console.log('Return product'),
     },
     {
-      id: 'change-unit',
-      label: 'Change unit of measure',
+      id: 'change-unit-split',
+      label: '',
       color: 'bg-orange-600',
-      onClick: () => console.log('Change unit'),
+      split: {
+        left: { icon: <Trash2 className="w-5 h-5" />, onClick: () => { if (!selectedItem) { show('Select a line first', 'error'); return; } removeItem(selectedItem); show('Item removed', 'success'); } },
+        right: { icon: <Ruler className="w-5 h-5" />, onClick: () => console.log('Change unit') },
+      },
     },
     {
       id: 'line-comment',
       label: 'Line comment',
       color: 'bg-orange-600',
-      onClick: () => console.log('Line comment'),
+      onClick: () => setShowInvoice(true),
     },
     {
       id: 'inventory-lookup',
@@ -322,14 +309,48 @@ export function Transactions() {
       <TransactionQuantityPanel
         isOpen={isQuantityPanelOpen}
         onClose={() => setIsQuantityPanelOpen(false)}
-        itemName={selectedItemData?.name || 'Youth Accessory Combo Set'}
-        unitOfMeasure="Each"
+        itemName={selectedItemData?.name}
+        unitOfMeasure={selectedItemData ? 'Each' : undefined}
         initialQuantity={selectedItemData?.quantity.toString() || '1'}
         onQuantityConfirm={(quantity) => {
-          console.log('Quantity confirmed:', quantity);
-          // Update the selected item's quantity here if needed
+          const q = Math.max(0, parseInt(quantity, 10) || 0);
+          if (selectedItem) {
+            if (q === 0) {
+              removeItem(selectedItem);
+            } else {
+              setItemQuantity(selectedItem, q);
+            }
+          }
         }}
       />
+
+      {/* Test Invoice Modal */}
+      {showInvoice && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setShowInvoice(false)}
+        >
+          <div
+            className="bg-[var(--color-bg-primary)] p-3 rounded-none max-h-[90vh] overflow-auto border"
+            style={{ borderColor: 'var(--color-border-light)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Invoice
+              brand={{ storeName: 'PayFlow' }}
+              invoiceNo="TEST-0001"
+              date={new Date().toLocaleString()}
+              cashier="Tester"
+              items={lineItems.map(li => ({ id: li.id, name: li.name, quantity: li.quantity, unitPrice: li.price }))}
+              subTotal={lineItems.reduce((s, li) => s + li.price * li.quantity, 0)}
+              tax={0}
+              discount={0}
+              grandTotal={lineItems.reduce((s, li) => s + li.price * li.quantity, 0)}
+              paymentMethod="Cash"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

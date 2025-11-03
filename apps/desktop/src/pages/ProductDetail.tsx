@@ -8,10 +8,12 @@ import {
   RelatedProducts,
   Product,
 } from '@monorepo/shared-ui';
+import { useCart } from '@monorepo/shared-ui';
 
 export function ProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
+  const { addItem } = useCart();
 
   // TODO: Fetch product details from API based on productId
   // Sample product data - replace with API call
@@ -94,7 +96,11 @@ export function ProductDetail() {
                 price={product.price || ''}
                 currentQuantity={0}
                 unit="Each"
-                onAddItem={() => console.log('Add item clicked')}
+                onAddItem={() => {
+                  const numericPrice = parseFloat((product.price || '0').replace(/[^0-9.]/g, '')) || 0;
+                  addItem({ name: product.name, price: numericPrice, quantity: 1 });
+                  navigate('/transactions');
+                }}
                 onOtherStoresInventory={() => console.log('Other stores inventory clicked')}
               />
             </div>

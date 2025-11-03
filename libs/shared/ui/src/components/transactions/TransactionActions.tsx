@@ -15,6 +15,10 @@ export interface ActionButton {
   square?: boolean;
   rowSpan?: number;
   rectangular?: boolean;
+  split?: {
+    left: { icon: React.ReactNode; onClick?: () => void };
+    right: { icon: React.ReactNode; onClick?: () => void };
+  };
 }
 
 export interface TransactionActionsProps extends ComponentProps {
@@ -59,6 +63,7 @@ function ProductGridCard({ product, onProductClick }: ProductGridCardProps) {
       onClick={() => onProductClick?.(product)}
       className="flex flex-col rounded border overflow-hidden cursor-pointer transition-all hover:shadow-md relative"
       style={{
+        width: '149px',
         backgroundColor: (!hasImage || imageError || !imageLoaded) ? 'var(--color-bg-card)' : 'transparent',
         borderColor: 'var(--color-border-light)',
         maxWidth: '100%',
@@ -69,6 +74,7 @@ function ProductGridCard({ product, onProductClick }: ProductGridCardProps) {
         minHeight: '120px',
       }}
     >
+      
       {/* Dark overlay for better text readability on images */}
       {(hasImage && !imageError && imageLoaded) && (
         <div className="absolute inset-0 bg-black/30 z-0" />
@@ -185,7 +191,7 @@ export function TransactionActions({
   // Empty state component for tabs
   const renderEmptyState = (icon: React.ReactNode, title: string) => {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 min-h-full">
+      <div className="flex flex-col items-center justify-center p-8 h-full">
         <div 
           className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
           style={{
@@ -213,6 +219,37 @@ export function TransactionActions({
 
   const renderButton = (action: ActionButton) => {
     const baseClasses = `${action.color || 'bg-orange-600'} px-4 relative transition-all hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50`;
+
+    // Split button (two compact squares within one grid cell)
+    if (action.split) {
+      const color = action.color || 'bg-orange-600';
+      return (
+        <div
+          key={action.id}
+          className="grid grid-cols-2 gap-1 h-full"
+          style={{ height: 'var(--row-height, 60px)' }}
+        >
+          <button
+            onClick={action.split.left.onClick}
+            className={`${color} w-full h-full flex items-center justify-center hover:opacity-90`}
+            style={{ color: 'var(--color-text-light)', borderRadius: 0 }}
+            aria-label="left-action"
+            title="left-action"
+          >
+            {action.split.left.icon}
+          </button>
+          <button
+            onClick={action.split.right.onClick}
+            className={`${color} w-full h-full flex items-center justify-center hover:opacity-90`}
+            style={{ color: 'var(--color-text-light)', borderRadius: 0 }}
+            aria-label="right-action"
+            title="right-action"
+          >
+            {action.split.right.icon}
+          </button>
+        </div>
+      );
+    }
     
     // Green square buttons (icon only, with circular background)
     if (action.square && !action.label) {
@@ -375,7 +412,7 @@ export function TransactionActions({
       {/* Main Action Buttons Panel */}
       <div className="flex-1 flex flex-col p-2 overflow-hidden min-w-0 md:min-w-[280px] lg:min-w-[320px]">
         {/* Tab-specific content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 mb-1">
+        <div className="overflow-y-auto overflow-x-hidden min-h-0 mb-2">
           {renderTabContent()}
         </div>
 

@@ -61,6 +61,12 @@
   }
 }
 
+/* Toast progress animation: shrink from full width to zero */
+@keyframes toastProgress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
 @keyframes slideInFromBottom {
   from {
     opacity: 0;
@@ -115,6 +121,30 @@ body {
   color: var(--color-text-primary);
   transition: background-color 0.15s ease-out, 
               color 0.1s linear;
+}
+
+/* ========== Scrollbar Theming (Light/Dark via CSS variables) ========== */
+/* WebKit (Chrome, Edge, Safari) */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-medium);
+  border-radius: 8px;
+  border: 2px solid var(--color-bg-secondary);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-border-dark);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-medium) var(--color-bg-secondary);
 }
 
 * {

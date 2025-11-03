@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useCart, useToast } from '@monorepo/shared-ui';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ProductList,
@@ -12,9 +13,12 @@ import {
   PriceFilter,
 } from '@monorepo/shared-ui';
 
-const VIEW_MODE_STORAGE_KEY = 'productViewMode';
+const VIEW_MODE_STORAGE_KEY = 'category.viewMode';
+const ACTION_STATE_STORAGE_KEY = 'category.actionState';
 
 export function CategoryDetail() {
+  const { addItem } = useCart();
+  const { show } = useToast();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { categoryName } = useParams<{ categoryName: string }>();
   const navigate = useNavigate();
@@ -30,11 +34,47 @@ export function CategoryDetail() {
   useEffect(() => {
     localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
   }, [viewMode]);
-  const [sortField, setSortField] = useState<SortField>('none');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [hideDetails, setHideDetails] = useState(false);
-  const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
-  const [priceFilter, setPriceFilter] = useState<PriceFilter>('all');
+  const [sortField, setSortField] = useState<SortField>(() => {
+    const saved = sessionStorage.getItem(ACTION_STATE_STORAGE_KEY);
+    if (saved) {
+      try { return (JSON.parse(saved).sortField as SortField) ?? 'none'; } catch { /* noop */ }
+    }
+    return 'none';
+  });
+  const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
+    const saved = sessionStorage.getItem(ACTION_STATE_STORAGE_KEY);
+    if (saved) {
+      try { return (JSON.parse(saved).sortDirection as SortDirection) ?? 'asc'; } catch { /* noop */ }
+    }
+    return 'asc';
+  });
+  const [hideDetails, setHideDetails] = useState<boolean>(() => {
+    const saved = sessionStorage.getItem(ACTION_STATE_STORAGE_KEY);
+    if (saved) {
+      try { return Boolean(JSON.parse(saved).hideDetails); } catch { /* noop */ }
+    }
+    return false;
+  });
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>(() => {
+    const saved = sessionStorage.getItem(ACTION_STATE_STORAGE_KEY);
+    if (saved) {
+      try { return (JSON.parse(saved).ratingFilter as RatingFilter) ?? 'all'; } catch { /* noop */ }
+    }
+    return 'all';
+  });
+  const [priceFilter, setPriceFilter] = useState<PriceFilter>(() => {
+    const saved = sessionStorage.getItem(ACTION_STATE_STORAGE_KEY);
+    if (saved) {
+      try { return (JSON.parse(saved).priceFilter as PriceFilter) ?? 'all'; } catch { /* noop */ }
+    }
+    return 'all';
+  });
+
+  // Persist action state when any part changes
+  useEffect(() => {
+    const payload = { sortField, sortDirection, hideDetails, ratingFilter, priceFilter };
+    sessionStorage.setItem(ACTION_STATE_STORAGE_KEY, JSON.stringify(payload));
+  }, [sortField, sortDirection, hideDetails, ratingFilter, priceFilter]);
 
   // TODO: Fetch products for this category from API
   // Sample product data matching the image
@@ -194,6 +234,11 @@ export function CategoryDetail() {
           onProductClick={handleProductClick}
           hideDetails={hideDetails}
           viewMode={viewMode}
+          onAddProduct={(product) => {
+            const numericPrice = parseFloat((product.price || '0').replace(/[^0-9.]/g, '')) || 0;
+            addItem({ name: product.name, price: numericPrice, quantity: 1 });
+            show('Added to cart', 'success');
+          }}
           className="h-full"
         />
       </div>

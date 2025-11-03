@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BrowserRouter, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, SidebarItem, useTheme } from '@monorepo/shared-ui';
+import { BrowserRouter, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { Layout, SidebarItem, useTheme, AuthProvider, useAuth, CartProvider, ToastProvider } from '@monorepo/shared-ui';
 import { 
   Home, 
   Package, 
@@ -12,6 +12,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { AppRoutes } from './routes';
+import { Login } from '../pages/Login';
 
 // Logo component
 const StoreLogo = () => <Store className="w-full h-full" />;
@@ -19,6 +20,7 @@ const StoreLogo = () => <Store className="w-full h-full" />;
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isReady, isAuthenticated, logout } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   // Navigation stack to track path history
   const navigationStackRef = useRef<string[]>([]);
@@ -163,6 +165,23 @@ function AppContent() {
     // TODO: Implement search functionality
   };
 
+  // Wait for auth to initialize to avoid login flicker
+  if (!isReady) {
+    return null;
+  }
+  // Auth gate
+  if (!isAuthenticated && location.pathname !== '/login') {
+    return <Navigate to="/login" replace />;
+  }
+  if (isAuthenticated && location.pathname === '/login') {
+    return <Navigate to="/" replace />;
+  }
+
+  // Render Login page outside the Layout to cover the entire screen
+  if (location.pathname === '/login') {
+    return <Login />;
+  }
+
   return (
     <Layout
       sidebarProps={{
@@ -182,6 +201,10 @@ function AppContent() {
         onSearch: handleSearch,
         onThemeToggle: toggleTheme,
         isDarkMode: isDark,
+        onSignOut: () => {
+          logout();
+          navigate('/login');
+        },
         actions: [
           {
             id: 'globe',
@@ -204,7 +227,13 @@ function AppContent() {
 export function App() {
   return (
     <BrowserRouter>
-      <AppContent />
+      <AuthProvider>
+        <CartProvider>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </CartProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

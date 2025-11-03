@@ -38,6 +38,9 @@
       ],
       "@monorepo/db": [
         "libs/db/src/index.ts"
+      ],
+      "@monorepo/db/migrations": [
+        "libs/db/src/migrations/index.ts"
       ]
     }
   },

@@ -648,21 +648,26 @@ function DbStatus() {
         setIsLoading(true);
         setError(null);
         await db.connect();
-        
+
         if (!isMounted) return;
-        
+
+        // Run database migrations to set up POS schema
+        console.log('[DbStatus] Running database migrations...');
+        await db.runMigrations();
+        console.log('[DbStatus] Migrations complete');
+
         const counter = await db.getCounter();
         setConnected(true);
         setCount(counter);
       } catch (err) {
         if (!isMounted) return;
-        
-        const errorMessage = err instanceof DatabaseError 
-          ? err.message 
-          : err instanceof Error 
-          ? err.message 
+
+        const errorMessage = err instanceof DatabaseError
+          ? err.message
+          : err instanceof Error
+          ? err.message
           : 'Failed to connect to database';
-        
+
         setError(errorMessage);
         setConnected(false);
         console.error('[DbStatus] Connection error:', err);

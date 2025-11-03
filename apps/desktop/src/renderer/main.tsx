@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { HashRouter, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, SidebarItem, useTheme } from '@monorepo/shared-ui';
+import { HashRouter, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { Layout, SidebarItem, useTheme, AuthProvider, useAuth, CartProvider, ToastProvider } from '@monorepo/shared-ui';
 import { 
   Home, 
   Package, 
@@ -13,6 +13,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { AppRoutes } from './routes.js';
+import { Login } from '../pages/Login.js';
 
 // Import styles
 import '@monorepo/shared-ui/styles/globals.css';
@@ -26,6 +27,7 @@ function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toggleTheme, isDark } = useTheme();
+  const { isReady, isAuthenticated, logout } = useAuth();
   // Navigation stack to track path history
   const navigationStackRef = useRef<string[]>([]);
   const isNavigatingBackRef = useRef<boolean>(false);
@@ -169,6 +171,23 @@ function AppContent() {
     // TODO: Implement search functionality
   };
 
+  // Wait for auth to initialize to avoid login flicker
+  if (!isReady) {
+    return null;
+  }
+  // Auth gate
+  if (!isAuthenticated && location.pathname !== '/login') {
+    return <Navigate to="/login" replace />;
+  }
+  if (isAuthenticated && location.pathname === '/login') {
+    return <Navigate to="/" replace />;
+  }
+
+  // Render Login page outside the Layout to cover the entire screen
+  if (location.pathname === '/login') {
+    return <Login />;
+  }
+
   return (
     <Layout
       sidebarProps={{
@@ -188,6 +207,10 @@ function AppContent() {
         onSearch: handleSearch,
         onThemeToggle: toggleTheme,
         isDarkMode: isDark,
+        onSignOut: () => {
+          logout();
+          navigate('/login');
+        },
         actions: [
           {
             id: 'globe',
@@ -210,7 +233,13 @@ function AppContent() {
 function App() {
   return (
     <HashRouter>
-      <AppContent />
+      <AuthProvider>
+        <CartProvider>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </CartProvider>
+      </AuthProvider>
     </HashRouter>
   );
 }

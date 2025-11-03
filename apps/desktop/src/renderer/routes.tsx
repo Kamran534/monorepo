@@ -5,6 +5,7 @@ import { Category } from '../pages/Category.js';
 import { CategoryDetail } from '../pages/CategoryDetail.js';
 import { ProductDetail } from '../pages/ProductDetail.js';
 import { Transactions } from '../pages/Transactions.js';
+import { Login } from '../pages/Login.js';
 
 /**
  * Application Routes
@@ -19,6 +20,7 @@ export function AppRoutes() {
       <Route path="/category" element={<Category />} />
       <Route path="/category/:categoryName" element={<CategoryDetail />} />
       <Route path="/transactions" element={<Transactions />} />
+      <Route path="/login" element={<Login />} />
       <Route path="/customers" element={null} />
       <Route path="/settings" element={null} />
       <Route path="/help" element={null} />
