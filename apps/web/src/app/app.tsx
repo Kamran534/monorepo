@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BrowserRouter, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Layout, SidebarItem, useTheme, AuthProvider, useAuth, CartProvider, ToastProvider } from '@monorepo/shared-ui';
+import { Layout, SidebarItem, useTheme, AuthProvider, useAuth, CartProvider, ToastProvider, SplashScreen, useCart } from '@monorepo/shared-ui';
 import { 
   Home, 
   Package, 
@@ -22,6 +22,14 @@ function AppContent() {
   const location = useLocation();
   const { isReady, isAuthenticated, logout } = useAuth();
   const { toggleTheme, isDark } = useTheme();
+  // Show splash only once per app load
+  const [showSplash, setShowSplash] = useState(() => {
+    try {
+      return !sessionStorage.getItem('ui.splashShown');
+    } catch {
+      return true;
+    }
+  });
   // Navigation stack to track path history
   const navigationStackRef = useRef<string[]>([]);
   const isNavigatingBackRef = useRef<boolean>(false);
@@ -29,8 +37,9 @@ function AppContent() {
   const categoryNameRef = useRef<string | null>(null);
   const productIdRef = useRef<string | null>(null);
   const [showBackButton, setShowBackButton] = useState(false);
-  // TODO: Replace with actual cart state management
-  const [cartItemCount] = useState<number>(3); // Sample value - replace with actual cart count
+  // Transaction line count for badges
+  const { items } = useCart();
+  const lineCount = items.length;
 
   // Track navigation using stack
   useEffect(() => {
@@ -90,6 +99,17 @@ function AppContent() {
     }
   }, [location.pathname]);
 
+  // Handle splash timing and persist flag for this session
+  useEffect(() => {
+    if (showSplash) {
+      const t = setTimeout(() => {
+        try { sessionStorage.setItem('ui.splashShown', '1'); } catch { void 0; }
+        setShowSplash(false);
+      }, 2500);
+      return () => clearTimeout(t);
+    }
+  }, [showSplash]);
+
   const handleBackClick = () => {
     const stack = navigationStackRef.current;
     
@@ -113,7 +133,7 @@ function AppContent() {
   const sidebarItems: SidebarItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <Home className="w-full h-full" />, path: '/' },
     { id: 'category', label: 'Category', icon: <Package className="w-full h-full" />, path: '/category' },
-    { id: 'transactions', label: 'Transactions', icon: <Receipt className="w-full h-full" />, path: '/transactions', badge: 12 },
+    { id: 'transactions', label: 'Transactions', icon: <Receipt className="w-full h-full" />, path: '/transactions', badge: lineCount > 0 ? lineCount : undefined },
     { id: 'customers', label: 'Customers', icon: <Users className="w-full h-full" />, path: '/customers' },
   ];
 
@@ -165,7 +185,11 @@ function AppContent() {
     // TODO: Implement search functionality
   };
 
-  // Wait for auth to initialize to avoid login flicker
+  // Show splash first time only, independent of auth readiness
+  if (showSplash) {
+    return <SplashScreen appName="PayFlow POS" logo={<Store className="w-24 h-24" style={{ color: 'var(--color-primary-500)' }} />} />;
+  }
+  // Wait for auth to initialize to avoid login flicker (no splash here)
   if (!isReady) {
     return null;
   }
@@ -193,7 +217,7 @@ function AppContent() {
         appName: 'PayFlow POS',
         showBackButton: showBackButton,
         onBackClick: handleBackClick,
-        cartItemCount: cartItemCount,
+        cartItemCount: lineCount,
       }}
       navbarProps={{
         searchPlaceholder: 'Search',

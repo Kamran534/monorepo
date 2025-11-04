@@ -35,7 +35,7 @@ export function Transactions() {
     return (saved === 'lines' || saved === 'payments') ? saved : 'lines';
   });
   
-  const [selectedItem, setSelectedItem] = useState<string>('3');
+  const [selectedItem, setSelectedItem] = useState<string>('');
   const [numpadValue, setNumpadValue] = useState<string>('');
   
   const [activeSection, setActiveSectionState] = useState<string>(() => {
@@ -56,7 +56,7 @@ export function Transactions() {
     setActiveSectionState(section);
     localStorage.setItem('transactions-activeSection', section);
   };
-  const { items: lineItems, setItemQuantity, removeItem } = useCart();
+  const { items: lineItems, setItemQuantity, removeItem, addItem } = useCart();
   const { show } = useToast();
   const [showInvoice, setShowInvoice] = useState(false);
 
@@ -88,14 +88,19 @@ export function Transactions() {
     { id: '81329', productNumber: '81329', name: 'Black Thick Rimmed Sunglasses', price: '$48.00', rating: 3.8, reviewCount: 193, image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
     { id: '81330', productNumber: '81330', name: 'Brown Aviator Sunglasses', price: '$150.00', rating: 3.9, reviewCount: 195, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
     { id: '81331', productNumber: '81331', name: 'Pink Thick Rimmed Sunglasses', price: '$52.00', rating: 3.7, reviewCount: 188, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
-    // { id: '81319', productNumber: '81319', name: 'Brown Glove & Scarf Set', price: '$35.99', image: 'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=400&h=400&fit=crop' },
-    // { id: '81323', productNumber: '81323', name: 'Grey Cotton Gloves', price: '$28.50', rating: 3.8, reviewCount: 192, image: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop' },
-    // { id: '81320', productNumber: '81320', name: 'Brown Leather Gloves', price: '$38.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
-    // { id: '81321', productNumber: '81321', name: 'Black Cotton Gloves', price: '$32.00', image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
+    { id: '81319', productNumber: '81319', name: 'Brown Glove & Scarf Set', price: '$35.99', image: 'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=400&h=400&fit=crop' },
+    { id: '81323', productNumber: '81323', name: 'Grey Cotton Gloves', price: '$28.50', rating: 3.8, reviewCount: 192, image: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop' },
+    { id: '81320', productNumber: '81320', name: 'Brown Leather Gloves', price: '$38.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
+    { id: '81321', productNumber: '81321', name: 'Black Cotton Gloves', price: '$32.00', image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
   ], []);
 
   const handleProductClick = (product: Product) => {
     navigate(`/products/${product.id}`);
+  };
+  const handleAddProduct = (product: Product) => {
+    const price = product.price ? Number(product.price.replace(/[^0-9.]/g, '')) : 0;
+    addItem({ name: product.name, price, quantity: 1 });
+    setActiveTab('lines');
   };
 
   const actionButtons: ActionButton[] = [
@@ -127,7 +132,15 @@ export function Transactions() {
       label: '',
       color: 'bg-orange-600',
       split: {
-        left: { icon: <Trash2 className="w-5 h-5" />, onClick: () => { if (!selectedItem) { show('Select a line first', 'error'); return; } removeItem(selectedItem); show('Item removed', 'success'); } },
+        left: {
+          icon: <Trash2 className="w-5 h-5" />,
+          onClick: () => {
+            if (!selectedItem) { show('Select a line first', 'error'); return; }
+            removeItem(selectedItem);
+            show('Item removed', 'success');
+            setSelectedItem('');
+          },
+        },
         right: { icon: <Ruler className="w-5 h-5" />, onClick: () => console.log('Change unit') },
       },
     },
@@ -243,12 +256,12 @@ export function Transactions() {
       className="w-full flex flex-col md:flex-row"
       style={{ 
         backgroundColor: 'var(--color-bg-primary)',
-        minHeight: 'calc(100vh - 80px)',
+        height: 'calc(100vh - var(--navbar-height, 80px))',
       }}
     >
       {/* Mobile/Tablet: Show sections in tabs or stacked */}
       <div className="flex-1 flex flex-col md:flex-row">
-        <div className="w-full md:flex-1 md:max-w-[500px] lg:max-w-[600px] h-1/2 md:h-full">
+        <div className="w-full md:flex-1 md:max-w-[500px] lg:max-w-[600px] h-1/2 md:h-full min-h-0">
           <TransactionLines
             lineItems={lineItems}
             selectedItem={selectedItem}
@@ -259,7 +272,7 @@ export function Transactions() {
           />
         </div>
 
-        <div className="w-full md:w-auto md:flex-shrink-0 h-1/2 md:h-full">
+        <div className="w-full md:w-auto md:flex-shrink-0 h-1/2 md:h-full min-h-0">
           <TransactionNumpad
             value={numpadValue}
             onValueChange={setNumpadValue}
@@ -278,6 +291,7 @@ export function Transactions() {
           }}
           products={products}
           onProductClick={handleProductClick}
+          onAddProduct={handleAddProduct}
         />
       </div>
 

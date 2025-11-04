@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ComponentProps } from '../../types.js';
 import { TransactionVerticalNav } from './TransactionVerticalNav.js';
-import { FileText, Tag, Boxes, Zap, Package } from 'lucide-react';
+import { FileText, Tag, Boxes, Zap, Package, ShoppingCart, Eye } from 'lucide-react';
 import type { Product } from '../products/ProductList.js';
 
 export interface ActionButton {
@@ -10,14 +10,15 @@ export interface ActionButton {
   label: string;
   color?: string;
   onClick?: () => void;
+  disabled?: boolean;
   tall?: boolean;
   fullWidth?: boolean;
   square?: boolean;
   rowSpan?: number;
   rectangular?: boolean;
   split?: {
-    left: { icon: React.ReactNode; onClick?: () => void };
-    right: { icon: React.ReactNode; onClick?: () => void };
+    left: { icon: React.ReactNode; onClick?: () => void; disabled?: boolean };
+    right: { icon: React.ReactNode; onClick?: () => void; disabled?: boolean };
   };
 }
 
@@ -27,6 +28,7 @@ export interface TransactionActionsProps extends ComponentProps {
   onSectionClick?: (section: string) => void;
   products?: Product[];
   onProductClick?: (product: Product) => void;
+  onAddProduct?: (product: Product) => void;
 }
 
 /**
@@ -38,9 +40,10 @@ export interface TransactionActionsProps extends ComponentProps {
 interface ProductGridCardProps {
   product: Product;
   onProductClick?: (product: Product) => void;
+  onAddProduct?: (product: Product) => void;
 }
 
-function ProductGridCard({ product, onProductClick }: ProductGridCardProps) {
+function ProductGridCard({ product, onProductClick, onAddProduct }: ProductGridCardProps) {
   const hasImage = !!product.image;
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -118,6 +121,36 @@ function ProductGridCard({ product, onProductClick }: ProductGridCardProps) {
           </p>
         )}
       </div>
+
+      {/* Hover Actions Overlay */}
+      <div
+        className="absolute inset-0 z-[2] flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+        style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.45), rgba(0,0,0,0.45))' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onAddProduct?.(product)}
+            className="w-8 h-8 rounded-full flex items-center justify-center hover:opacity-90"
+            style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'var(--color-text-light)', border: '1px solid rgba(255,255,255,0.25)' }}
+            title="Add to cart"
+            aria-label="Add to cart"
+          >
+            <ShoppingCart className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onProductClick?.(product)}
+            className="w-8 h-8 rounded-full flex items-center justify-center hover:opacity-90"
+            style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'var(--color-text-light)', border: '1px solid rgba(255,255,255,0.25)' }}
+            title="View details"
+            aria-label="View details"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -129,6 +162,7 @@ export function TransactionActions({
   className = '',
   products = [],
   onProductClick,
+  onAddProduct,
 }: TransactionActionsProps) {
   // Detect fullscreen mode
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -223,6 +257,9 @@ export function TransactionActions({
     // Split button (two compact squares within one grid cell)
     if (action.split) {
       const color = action.color || 'bg-orange-600';
+      const split = action.split; // action.split is defined in this block
+      const leftDisabled = !!split.left.disabled;
+      const rightDisabled = !!split.right.disabled;
       return (
         <div
           key={action.id}
@@ -230,22 +267,30 @@ export function TransactionActions({
           style={{ height: 'var(--row-height, 60px)' }}
         >
           <button
-            onClick={action.split.left.onClick}
-            className={`${color} w-full h-full flex items-center justify-center hover:opacity-90`}
+            onClick={() => {
+              if (leftDisabled) return;
+              split.left.onClick?.();
+            }}
+            className={`${color} w-full h-full flex items-center justify-center hover:opacity-90 ${leftDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             style={{ color: 'var(--color-text-light)', borderRadius: 0 }}
             aria-label="left-action"
             title="left-action"
+            aria-disabled={leftDisabled}
           >
-            {action.split.left.icon}
+            {split.left.icon}
           </button>
           <button
-            onClick={action.split.right.onClick}
-            className={`${color} w-full h-full flex items-center justify-center hover:opacity-90`}
+            onClick={() => {
+              if (rightDisabled) return;
+              split.right.onClick?.();
+            }}
+            className={`${color} w-full h-full flex items-center justify-center hover:opacity-90 ${rightDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             style={{ color: 'var(--color-text-light)', borderRadius: 0 }}
             aria-label="right-action"
             title="right-action"
+            aria-disabled={rightDisabled}
           >
-            {action.split.right.icon}
+            {split.right.icon}
           </button>
         </div>
       );
@@ -256,7 +301,10 @@ export function TransactionActions({
       return (
         <button
           key={action.id}
-          onClick={action.onClick}
+          onClick={() => {
+            if (isDisabled) return;
+            action.onClick?.();
+          }}
           className={`${baseClasses} aspect-square p-3`}
           style={{ 
             color: 'var(--color-text-light)',
@@ -273,15 +321,20 @@ export function TransactionActions({
     }
     
     if (action.fullWidth) {
+      const isDisabled = !!action.disabled;
       return (
         <button
           key={action.id}
-          onClick={action.onClick}
-          className={`${baseClasses} col-span-2 py-4 flex flex-row items-center gap-2`}
+          onClick={() => {
+            if (isDisabled) return;
+            action.onClick?.();
+          }}
+          className={`${baseClasses} col-span-2 py-4 flex flex-row items-center gap-2 ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
           style={{ 
             color: 'var(--color-text-light)',
             borderRadius: 0,
           }}
+          aria-disabled={isDisabled}
         >
           {action.icon}
           <span className="text-sm font-medium">{action.label}</span>
@@ -300,11 +353,12 @@ export function TransactionActions({
         return isFullscreen ? '116px' : '102px';
       };
       
+      const isDisabled = !!action.disabled;
       return (
         <button
           key={action.id}
           onClick={action.onClick}
-          className={`${baseClasses} p-3 relative`}
+          className={`${baseClasses} p-3 relative ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
           style={{ 
             color: 'var(--color-text-light)',
             borderRadius: 0,
@@ -313,6 +367,7 @@ export function TransactionActions({
             minHeight: action.rowSpan ? undefined : isRectangular ? getRectangularHeight() : '60px',
             aspectRatio: action.rowSpan ? undefined : isRectangular ? undefined : '1 / 1',
           }}
+          aria-disabled={isDisabled}
         >
           {/* Icon centered */}
           {action.icon && (
@@ -328,15 +383,20 @@ export function TransactionActions({
       );
     }
 
+    const isDisabled = !!action.disabled;
     return (
       <button
         key={action.id}
-        onClick={action.onClick}
-        className={`${baseClasses} ${action.tall ? 'py-6' : 'py-3'} relative`}
+        onClick={() => {
+          if (isDisabled) return;
+          action.onClick?.();
+        }}
+        className={`${baseClasses} ${action.tall ? 'py-6' : 'py-3'} relative ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         style={{ 
           color: 'var(--color-text-light)',
           borderRadius: 0,
         }}
+        aria-disabled={isDisabled}
       >
         {/* Icon centered */}
         {action.icon && (
@@ -389,15 +449,16 @@ export function TransactionActions({
           return renderEmptyState(<Boxes className="w-8 h-8" />, 'Products');
         }
         return (
-          <div className="grid grid-cols-2 gap-1 overflow-hidden">
-            {products.map((product) => (
-              <ProductGridCard
-                key={product.id}
-                product={product}
-                onProductClick={onProductClick}
-              />
-            ))}
-          </div>
+        <div className="grid grid-cols-2 gap-1 overflow-hidden">
+          {products.map((product) => (
+            <ProductGridCard
+              key={product.id}
+              product={product}
+              onProductClick={onProductClick}
+              onAddProduct={onAddProduct}
+            />
+          ))}
+        </div>
         );
       default:
         return renderEmptyState(<Zap className="w-8 h-8" />, 'Not found');

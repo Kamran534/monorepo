@@ -40,7 +40,7 @@ export function TransactionLines({
 
   return (
     <div
-      className={`flex flex-col h-full w-full md:w-auto ${className}`}
+      className={`flex flex-col h-full w-full md:w-auto min-h-0 ${className}`}
       style={{
         backgroundColor: 'var(--color-bg-secondary)',
         borderRight: '1px solid var(--color-border-light)',
@@ -75,15 +75,11 @@ export function TransactionLines({
 
       {/* Product List */}
       <div
-        className="overflow-y-auto"
-        style={{
-          maxHeight: 'calc(100vh - 1200px)',
-          minHeight: '400px'
-        }}
+        className="overflow-y-auto min-h-0 flex-1"
       >
         <div className="p-2 md:p-4 space-y-1.5 md:space-y-2">
           {lineItems.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-10 pt-24">
+            <div className="flex flex-col items-center justify-center py-18 pt-24">
               <Package className="w-8 h-8" style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
               <p className="mt-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
                 No products in the transaction

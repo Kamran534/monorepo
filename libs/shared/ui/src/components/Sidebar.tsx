@@ -171,34 +171,36 @@ export function Sidebar({
         <ul className="space-y-2">
           {items.map((item) => renderItem(item))}
           
-          {/* Cart Item Count Label - After navigation links */}
-          <li>
-            <div 
-              className={`w-full flex items-center py-2 transition-all duration-200 relative ${
-                isExpanded ? 'px-4 gap-3' : 'justify-center'
-              }`}
-              style={{
-                backgroundColor: 'var(--color-bg-hover)',
-              }}
-            >
-              {isExpanded ? (
-                <span 
-                  className="text-sm font-bold"
-                  style={{ color: 'var(--color-primary-500)' }}
-                >
-                  Lines {cartItemCount}
-                </span>
-              ) : (
-                <span 
-                  className="text-sm font-bold"
-                  style={{ color: 'var(--color-primary-500)' }}
-                  title={`Lines ${cartItemCount}`}
-                >
-                  {cartItemCount}
-                </span>
-              )}
-            </div>
-          </li>
+          {/* Cart Item Count Label - After navigation links (hide when 0) */}
+          {cartItemCount > 0 && (
+            <li>
+              <div 
+                className={`w-full flex items-center py-2 transition-all duration-200 relative ${
+                  isExpanded ? 'px-4 gap-3' : 'justify-center'
+                }`}
+                style={{
+                  backgroundColor: 'var(--color-bg-hover)',
+                }}
+              >
+                {isExpanded ? (
+                  <span 
+                    className="text-sm font-bold"
+                    style={{ color: 'var(--color-primary-500)' }}
+                  >
+                    Lines {cartItemCount}
+                  </span>
+                ) : (
+                  <span 
+                    className="text-sm font-bold"
+                    style={{ color: 'var(--color-primary-500)' }}
+                    title={`Lines ${cartItemCount}`}
+                  >
+                    {cartItemCount}
+                  </span>
+                )}
+              </div>
+            </li>
+          )}
         </ul>
       </nav>
 

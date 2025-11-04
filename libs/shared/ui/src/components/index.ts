@@ -33,6 +33,10 @@ export * from './products/index.js';
 export { Loading } from './Loading.js';
 export type { LoadingProps } from './Loading.js';
 
+// SplashScreen component
+export { SplashScreen } from './SplashScreen.js';
+export type { SplashScreenProps } from './SplashScreen.js';
+
 // SidePanel component
 export { SidePanel } from './SidePanel.js';
 export type { SidePanelProps } from './SidePanel.js';
