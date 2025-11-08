@@ -39,7 +39,15 @@ export {
   WebIndexedDbClient,
   MobileSqliteClient,
   createLocalDbClient,
+  type IndexedDBSchema,
 } from './lib/local-db-client';
+
+// IndexedDB Schema
+export {
+  CPOS_INDEXEDDB_SCHEMA,
+  CPOS_DB_VERSION,
+  CPOS_DB_NAME,
+} from './lib/indexeddb-schema';
 
 // Remote API Client
 export {

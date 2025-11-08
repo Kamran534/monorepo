@@ -7,6 +7,12 @@ import '@monorepo/shared-ui/styles/components.css';
 
 import App from './app/app';
 import { registerSW } from 'virtual:pwa-register';
+import { dataAccessService } from './services/data-access.service';
+
+// Initialize data access service
+dataAccessService.initialize().catch((error) => {
+  console.error('[App] Failed to initialize data access service:', error);
+});
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement

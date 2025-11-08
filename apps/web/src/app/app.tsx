@@ -1,18 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BrowserRouter, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Layout, SidebarItem, useTheme, AuthProvider, useAuth, CartProvider, ToastProvider, SplashScreen, useCart } from '@monorepo/shared-ui';
-import { 
-  Home, 
-  Package, 
-  Receipt, 
-  Users, 
-  Settings, 
+import {
+  Home,
+  Package,
+  Receipt,
+  Users,
+  Settings,
   Store,
-  Globe,
   HelpCircle
 } from 'lucide-react';
 import { AppRoutes } from './routes';
 import { Login } from '../pages/Login';
+import { ConnectionStatus } from '../components/ConnectionStatus';
 
 // Logo component
 const StoreLogo = () => <Store className="w-full h-full" />;
@@ -231,10 +231,9 @@ function AppContent() {
         },
         actions: [
           {
-            id: 'globe',
-            icon: <Globe className="w-full h-full" />,
-            label: 'Language',
-            onClick: () => console.log('Language clicked'),
+            id: 'connection',
+            component: <ConnectionStatus />,
+            label: 'Connection Status',
           },
         ],
         userInfo: {

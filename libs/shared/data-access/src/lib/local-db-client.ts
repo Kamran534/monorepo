@@ -169,43 +169,408 @@ export class DesktopSqliteClient implements LocalDbClient {
 }
 
 /**
- * Web IndexedDB Client (TODO)
+ * Web IndexedDB Client
  *
- * TODO: Implement for web platform using IndexedDB
- * This should provide similar interface for browser-based applications
+ * Implements local database access for web platform using IndexedDB
+ * Note: IndexedDB is NoSQL, so this provides a simplified SQL-like wrapper
  */
 export class WebIndexedDbClient implements LocalDbClient {
+  private db: IDBDatabase | null = null;
+  private dbName: string;
+  private dbVersion: number;
+  private isInitialized: boolean = false;
+  private schema: IndexedDBSchema | null = null;
+
+  constructor(dbName: string = 'cpos', dbVersion: number = 1, schema?: IndexedDBSchema) {
+    this.dbName = dbName;
+    this.dbVersion = dbVersion;
+    this.schema = schema || null;
+  }
+
+  /**
+   * Check if IndexedDB is available in browser
+   */
   async isAvailable(): Promise<boolean> {
-    // TODO: Check if IndexedDB is available in browser
-    console.warn('[WebIndexedDbClient] Not implemented yet');
-    return false;
+    try {
+      return typeof indexedDB !== 'undefined';
+    } catch (error) {
+      console.error('[WebIndexedDbClient] Not available:', error);
+      return false;
+    }
   }
 
+  /**
+   * Initialize the IndexedDB connection
+   */
   async initialize(): Promise<void> {
-    // TODO: Initialize IndexedDB connection
-    throw new Error('WebIndexedDbClient not implemented yet');
+    if (this.isInitialized) {
+      console.warn('[WebIndexedDbClient] Already initialized');
+      return;
+    }
+
+    if (!await this.isAvailable()) {
+      throw new Error('IndexedDB is not available in this browser');
+    }
+
+    try {
+      this.db = await this.openDatabase();
+      this.isInitialized = true;
+      console.log(`[WebIndexedDbClient] Initialized database: ${this.dbName} v${this.dbVersion}`);
+    } catch (error) {
+      console.error('[WebIndexedDbClient] Initialization failed:', error);
+      throw error;
+    }
   }
 
+  /**
+   * Open the IndexedDB database
+   */
+  private openDatabase(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, this.dbVersion);
+
+      request.onerror = () => {
+        reject(new Error(`Failed to open database: ${request.error?.message}`));
+      };
+
+      request.onsuccess = () => {
+        resolve(request.result);
+      };
+
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        console.log('[WebIndexedDbClient] Upgrading database schema...');
+
+        // Create object stores based on schema
+        if (this.schema) {
+          this.createObjectStores(db, this.schema);
+        }
+      };
+    });
+  }
+
+  /**
+   * Create object stores from schema
+   */
+  private createObjectStores(db: IDBDatabase, schema: IndexedDBSchema): void {
+    for (const [storeName, storeConfig] of Object.entries(schema.stores)) {
+      // Skip if store already exists
+      if (db.objectStoreNames.contains(storeName)) {
+        continue;
+      }
+
+      const objectStore = db.createObjectStore(storeName, {
+        keyPath: storeConfig.keyPath,
+        autoIncrement: storeConfig.autoIncrement || false,
+      });
+
+      // Create indexes
+      if (storeConfig.indexes) {
+        for (const [indexName, indexConfig] of Object.entries(storeConfig.indexes)) {
+          objectStore.createIndex(indexName, indexConfig.keyPath, {
+            unique: indexConfig.unique || false,
+            multiEntry: indexConfig.multiEntry || false,
+          });
+        }
+      }
+
+      console.log(`[WebIndexedDbClient] Created object store: ${storeName}`);
+    }
+  }
+
+  /**
+   * Query data from a store
+   * Accepts SQL-like strings: "SELECT * FROM storeName" or "SELECT * FROM storeName WHERE key = ?"
+   * Or simple store name: "storeName"
+   */
   async query<T>(sql: string, params?: unknown[]): Promise<T[]> {
-    // TODO: Implement IndexedDB query
-    // Note: IndexedDB doesn't use SQL, so we'll need to translate
-    throw new Error('WebIndexedDbClient not implemented yet');
+    this.ensureInitialized();
+
+    // Parse SQL to extract store name
+    // Simple parsing: "SELECT * FROM storeName" or just "storeName"
+    let storeName: string;
+    let queryFilter: any = undefined;
+
+    if (sql.trim().toUpperCase().startsWith('SELECT')) {
+      // Parse SQL-like query
+      const match = sql.match(/FROM\s+(\w+)/i);
+      if (match) {
+        storeName = match[1];
+      } else {
+        throw new Error(`Invalid SQL query: ${sql}`);
+      }
+    } else {
+      // Assume it's just a store name
+      storeName = sql.trim();
+    }
+
+    // If params provided, use first param as filter value
+    if (params && params.length > 0) {
+      queryFilter = params[0];
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(storeName, 'readonly');
+      const store = transaction.objectStore(storeName);
+      const results: T[] = [];
+
+      let request: IDBRequest;
+
+      if (queryFilter && typeof queryFilter === 'object' && !('lower' in queryFilter)) {
+        // Query by index - simple object match
+        // Get the first key from the query object
+        const [key, value] = Object.entries(queryFilter)[0];
+
+        // Try to use index if available
+        try {
+          const index = store.index(key);
+          request = index.getAll(value as IDBValidKey);
+        } catch {
+          // Index not found, fall back to full scan
+          request = store.getAll();
+        }
+      } else {
+        // Get all or by key range
+        request = store.getAll(queryFilter);
+      }
+
+      request.onsuccess = () => {
+        let data = request.result as T[];
+
+        // If we did a full scan with query filter, filter results
+        if (queryFilter && typeof queryFilter === 'object' && !('lower' in queryFilter)) {
+          data = data.filter(item => {
+            for (const [key, value] of Object.entries(queryFilter)) {
+              if ((item as any)[key] !== value) {
+                return false;
+              }
+            }
+            return true;
+          });
+        }
+
+        resolve(data);
+      };
+
+      request.onerror = () => {
+        reject(new Error(`Query failed: ${request.error?.message}`));
+      };
+    });
   }
 
+  /**
+   * Execute an operation (insert, update, delete)
+   * Accepts SQL-like strings:
+   * - "INSERT INTO storeName VALUES (?)" - params[0] should be the data object
+   * - "UPDATE storeName SET ... WHERE id = ?" - params[0] should be the data object
+   * - "DELETE FROM storeName WHERE id = ?" - params[0] should be the key
+   * Or simple format: "storeName:operation" where operation is 'add', 'put', or 'delete'
+   */
   async execute(sql: string, params?: unknown[]): Promise<void> {
-    // TODO: Implement IndexedDB execute
-    throw new Error('WebIndexedDbClient not implemented yet');
+    this.ensureInitialized();
+
+    let storeName: string;
+    let operation: 'add' | 'put' | 'delete';
+    let data: any;
+
+    // Check if it's a simple format: "storeName:operation"
+    if (sql.includes(':')) {
+      const [name, op] = sql.split(':');
+      storeName = name.trim();
+      operation = op.trim() as 'add' | 'put' | 'delete';
+      data = params && params.length > 0 ? params[0] : undefined;
+    } else if (sql.trim().toUpperCase().startsWith('INSERT')) {
+      // Parse INSERT statement
+      const match = sql.match(/INSERT\s+INTO\s+(\w+)/i);
+      if (match) {
+        storeName = match[1];
+        operation = 'add';
+        data = params && params.length > 0 ? params[0] : undefined;
+      } else {
+        throw new Error(`Invalid INSERT statement: ${sql}`);
+      }
+    } else if (sql.trim().toUpperCase().startsWith('UPDATE')) {
+      // Parse UPDATE statement
+      const match = sql.match(/UPDATE\s+(\w+)/i);
+      if (match) {
+        storeName = match[1];
+        operation = 'put';
+        data = params && params.length > 0 ? params[0] : undefined;
+      } else {
+        throw new Error(`Invalid UPDATE statement: ${sql}`);
+      }
+    } else if (sql.trim().toUpperCase().startsWith('DELETE')) {
+      // Parse DELETE statement
+      const match = sql.match(/DELETE\s+FROM\s+(\w+)/i);
+      if (match) {
+        storeName = match[1];
+        operation = 'delete';
+        data = params && params.length > 0 ? params[0] : undefined;
+      } else {
+        throw new Error(`Invalid DELETE statement: ${sql}`);
+      }
+    } else {
+      // Assume it's just a store name, default to 'put' operation
+      storeName = sql.trim();
+      operation = 'put';
+      data = params && params.length > 0 ? params[0] : undefined;
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(storeName, 'readwrite');
+      const store = transaction.objectStore(storeName);
+
+      let request: IDBRequest;
+      switch (operation) {
+        case 'add':
+          request = store.add(data);
+          break;
+        case 'put':
+          request = store.put(data);
+          break;
+        case 'delete':
+          request = store.delete(data);
+          break;
+        default:
+          reject(new Error(`Unknown operation: ${operation}`));
+          return;
+      }
+
+      request.onsuccess = () => {
+        resolve();
+      };
+
+      request.onerror = () => {
+        reject(new Error(`Execute failed: ${request.error?.message}`));
+      };
+    });
   }
 
+  /**
+   * Execute multiple operations in a transaction
+   */
   async transaction<T>(callback: () => Promise<T>): Promise<T> {
-    // TODO: Implement IndexedDB transaction
-    throw new Error('WebIndexedDbClient not implemented yet');
+    this.ensureInitialized();
+
+    try {
+      // IndexedDB handles transactions automatically
+      // Just execute the callback
+      return await callback();
+    } catch (error) {
+      console.error('[WebIndexedDbClient] Transaction failed:', error);
+      throw error;
+    }
   }
 
+  /**
+   * Close the database connection
+   */
   async close(): Promise<void> {
-    // TODO: Close IndexedDB connection
-    console.warn('[WebIndexedDbClient] Not implemented yet');
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+      this.isInitialized = false;
+      console.log('[WebIndexedDbClient] Database closed');
+    }
   }
+
+  /**
+   * Get a single record by key
+   */
+  async getByKey<T>(storeName: string, key: any): Promise<T | undefined> {
+    this.ensureInitialized();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(storeName, 'readonly');
+      const store = transaction.objectStore(storeName);
+      const request = store.get(key);
+
+      request.onsuccess = () => {
+        resolve(request.result);
+      };
+
+      request.onerror = () => {
+        reject(new Error(`Get by key failed: ${request.error?.message}`));
+      };
+    });
+  }
+
+  /**
+   * Count records in a store
+   */
+  async count(storeName: string, query?: IDBKeyRange): Promise<number> {
+    this.ensureInitialized();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(storeName, 'readonly');
+      const store = transaction.objectStore(storeName);
+      const request = store.count(query);
+
+      request.onsuccess = () => {
+        resolve(request.result);
+      };
+
+      request.onerror = () => {
+        reject(new Error(`Count failed: ${request.error?.message}`));
+      };
+    });
+  }
+
+  /**
+   * Clear all data from a store
+   */
+  async clear(storeName: string): Promise<void> {
+    this.ensureInitialized();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(storeName, 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.clear();
+
+      request.onsuccess = () => {
+        resolve();
+      };
+
+      request.onerror = () => {
+        reject(new Error(`Clear failed: ${request.error?.message}`));
+      };
+    });
+  }
+
+  /**
+   * Get the raw IndexedDB instance
+   */
+  getRawDb(): IDBDatabase | null {
+    return this.db;
+  }
+
+  /**
+   * Ensure the database is initialized
+   */
+  private ensureInitialized(): void {
+    if (!this.isInitialized || !this.db) {
+      throw new Error('Database not initialized. Call initialize() first.');
+    }
+  }
+}
+
+/**
+ * IndexedDB Schema Types
+ */
+export interface IndexedDBSchema {
+  stores: {
+    [storeName: string]: {
+      keyPath: string;
+      autoIncrement?: boolean;
+      indexes?: {
+        [indexName: string]: {
+          keyPath: string | string[];
+          unique?: boolean;
+          multiEntry?: boolean;
+        };
+      };
+    };
+  };
 }
 
 /**
@@ -256,9 +621,7 @@ export function createLocalDbClient(platform: 'desktop' | 'web' | 'mobile', conf
     case 'desktop':
       return new DesktopSqliteClient(config.dbPath);
     case 'web':
-      // TODO: Return WebIndexedDbClient when implemented
-      console.warn('[createLocalDbClient] Web platform not fully implemented');
-      return new WebIndexedDbClient();
+      return new WebIndexedDbClient(config.dbName, config.dbVersion, config.schema);
     case 'mobile':
       // TODO: Return MobileSqliteClient when implemented
       console.warn('[createLocalDbClient] Mobile platform not fully implemented');
