@@ -9,11 +9,11 @@ import {
   Users, 
   Settings, 
   Store,
-  Globe,
   HelpCircle
 } from 'lucide-react';
 import { AppRoutes } from './routes.js';
 import { Login } from '../pages/Login.js';
+import { ConnectionStatus } from './components/ConnectionStatus.js';
 
 // Import styles
 import '@monorepo/shared-ui/styles/globals.css';
@@ -237,10 +237,9 @@ function AppContent() {
         },
         actions: [
           {
-            id: 'globe',
-            icon: <Globe className="w-full h-full" />,
-            label: 'Language',
-            onClick: () => console.log('Language clicked'),
+            id: 'connection',
+            component: <ConnectionStatus />,
+            label: 'Connection Status',
           },
         ],
         userInfo: {

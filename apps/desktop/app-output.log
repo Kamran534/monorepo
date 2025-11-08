@@ -1,0 +1,80 @@
+
+> desktop@0.0.1 dev
+> electron-vite dev
+
+[36mvite v5.4.21 [32mbuilding SSR bundle for development...[36m[39m
+transforming...
+[32m✓[39m 8 modules transformed.
+rendering chunks...
+[2mdist/main/[22m[36mchunks/index-D8A1UjHf.js  [39m[1m[2m 0.42 kB[22m[1m[22m
+[2mdist/main/[22m[36mmain.js                   [39m[1m[2m38.68 kB[22m[1m[22m
+[32m✓ built in 2.55s[39m
+[32m
+build the electron main process successfully[39m
+[90m
+-----
+[39m
+[36mvite v5.4.21 [32mbuilding SSR bundle for development...[36m[39m
+transforming...
+[32m✓[39m 1 modules transformed.
+rendering chunks...
+[2mdist/preload/[22m[36mpreload.mjs  [39m[1m[2m2.02 kB[22m[1m[22m
+[32m✓ built in 62ms[39m
+[32m
+build the electron preload files successfully[39m
+[90m
+-----
+[39m
+[32mdev server running for the electron renderer process at:
+[39m
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[32m
+start electron app...
+[39m
+
+[DataAccessService] Initializing...
+[DataAccessService] Server URL: http://localhost:4000
+[DataAccessService] Database Path: C:\Users\kamra\Desktop\monorepo\monorepo\apps\desktop\libsdb\cpos.db
+[DesktopSqliteClient] Initialized database at: C:\Users\kamra\Desktop\monorepo\monorepo\apps\desktop\libsdb\cpos.db
+[DataAccessService] Local database initialized
+[HttpApiClient] Initialized with base URL: http://localhost:4000
+[DataAccessService] API client initialized
+[DataSourceManager] Initializing...
+[DataSourceManager] Server URL: http://localhost:4000
+[DataSourceManager] Auto-switched to server (online)
+[DataSourceManager] 🟢 Connection: checking → online | 🌐 Data Source: local → server
+[DataSourceManager] Server latency: 24ms
+[DataSourceManager] Initialized - 🟢 Status: online, 🌐 Using: server
+[DataAccessService] Data source manager initialized
+[DataSourceManager] Auto-switch enabled
+[DataSourceManager] 🟢 Connection: checking → online | 🌐 Data Source: server → server
+[DataSourceManager] Server latency: 18ms
+
+============================================================
+🟢 [CONNECTION STATUS] 🟢
+   Status: online
+   Data Source: 🌐 SERVER
+   Server URL: http://localhost:4000
+   Last Checked: 11/8/2025, 9:39:53 PM
+============================================================
+
+
+============================================================
+🟢 [CONNECTION STATUS] 🟢
+   Status: online
+   Data Source: 🌐 SERVER
+   Server URL: http://localhost:4000
+   Last Checked: 11/8/2025, 9:39:53 PM
+============================================================
+
+[DataAccessService] Initialization complete
+[22200:1108/214010.789:ERROR:CONSOLE(1)] "Request Autofill.enable failed. {"code":-32601,"message":"'Autofill.enable' wasn't found"}", source: devtools://devtools/bundled/core/protocol_client/protocol_client.js (1)
+[22200:1108/214010.789:ERROR:CONSOLE(1)] "Request Autofill.setAddresses failed. {"code":-32601,"message":"'Autofill.setAddresses' wasn't found"}", source: devtools://devtools/bundled/core/protocol_client/protocol_client.js (1)
+[2m9:45:16 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mC:/Users/kamra/Desktop/monorepo/monorepo/apps/desktop/src/main/main.ts[22m
+[2m9:45:31 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mC:/Users/kamra/Desktop/monorepo/monorepo/apps/desktop/src/main/main.ts[22m
+[DataAccessService] Destroying...
+[DesktopSqliteClient] Database closed
+[HttpApiClient] Closed
+[DataSourceManager] Destroying...
+[DataAccessService] Destroyed

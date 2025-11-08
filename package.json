@@ -21,8 +21,7 @@
     "start:desktop": "nx run desktop:start",
     "dev:desktop": "nx run desktop:dev",
     "build:desktop": "nx run desktop:build",
-    "update-icons": "node scripts/update-icons.js",
-    "test:db": "npx tsx scripts/test-database.ts"
+    "update-icons": "node scripts/update-icons.js"
   },
   "private": true,
   "devDependencies": {
@@ -92,13 +91,10 @@
     "@react-native-community/cli": "18.0.0",
     "@react-native-community/cli-platform-android": "18.0.0",
     "@react-native-community/cli-platform-ios": "18.0.0",
-    "better-sqlite3": "^11.7.0",
     "lucide-react": "^0.552.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.7",
-    "react-native-sqlite-storage": "^6.0.1",
-    "react-router-dom": "^7.9.5",
-    "sql.js": "^1.13.0"
+    "react-router-dom": "^7.9.5"
   }
 }

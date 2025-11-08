@@ -4,6 +4,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PayFlow - Smart POS Solutions</title>
+    <!-- Verify electronAPI is available before React loads -->
+    <script>
+      console.log('[HTML] Document loaded, checking for electronAPI...');
+      console.log('[HTML] window.electronAPI:', window.electronAPI);
+      console.log('[HTML] window.electron:', window.electron);
+
+      if (window.electronAPI) {
+        console.log('[HTML] ✅ electronAPI is available');
+        console.log('[HTML] electronAPI.connection:', window.electronAPI.connection);
+        if (window.electronAPI.connection) {
+          console.log('[HTML] ✅ electronAPI.connection is available');
+          console.log('[HTML] Connection methods:', Object.keys(window.electronAPI.connection));
+        } else {
+          console.error('[HTML] ❌ electronAPI.connection is NOT available!');
+        }
+      } else {
+        console.error('[HTML] ❌ electronAPI is NOT available! Preload script may have failed.');
+      }
+
+      // Make sure APIs are available globally for debugging
+      window.__electronAPICheck = {
+        hasElectronAPI: !!window.electronAPI,
+        hasConnection: !!window.electronAPI?.connection,
+        connectionMethods: window.electronAPI?.connection ? Object.keys(window.electronAPI.connection) : [],
+        timestamp: new Date().toISOString()
+      };
+      console.log('[HTML] API Check:', window.__electronAPICheck);
+    </script>
   </head>
   <body>
     <div id="root"></div>

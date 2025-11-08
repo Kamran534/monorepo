@@ -3,9 +3,10 @@ import { ComponentProps } from '../types.js';
 
 export interface NavbarAction {
   id: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
+  component?: React.ReactNode;
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
   badge?: string | number;
 }
 
@@ -167,29 +168,35 @@ export function Navbar({
 
           {/* Action Buttons */}
           {actions.map((action) => (
-            <button
-              key={action.id}
-              onClick={action.onClick}
-              className="relative p-1 hover:bg-white/10 rounded transition-colors"
-              aria-label={action.label}
-              title={action.label}
-            >
-              <div className="w-4 h-4 text-white opacity-80 hover:opacity-100">
-                {action.icon}
+            action.component ? (
+              <div key={action.id} className="relative">
+                {action.component}
               </div>
-              {action.badge && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 text-xs font-bold rounded-full flex items-center justify-center"
-                  style={{
-                    backgroundColor: 'var(--color-error)',
-                    color: 'white',
-                    fontSize: '9px',
-                  }}
-                >
-                  {action.badge}
-                </span>
-              )}
-            </button>
+            ) : (
+              <button
+                key={action.id}
+                onClick={action.onClick}
+                className="relative p-1 hover:bg-white/10 rounded transition-colors"
+                aria-label={action.label}
+                title={action.label}
+              >
+                <div className="w-4 h-4 text-white opacity-80 hover:opacity-100">
+                  {action.icon}
+                </div>
+                {action.badge && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 text-xs font-bold rounded-full flex items-center justify-center"
+                    style={{
+                      backgroundColor: 'var(--color-error)',
+                      color: 'white',
+                      fontSize: '9px',
+                    }}
+                  >
+                    {action.badge}
+                  </span>
+                )}
+              </button>
+            )
           ))}
 
           {/* User Info */}
