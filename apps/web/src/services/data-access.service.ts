@@ -14,7 +14,9 @@ import {
   type ConnectionState,
   type LocalDbClient,
   type HttpApiClient,
+  SyncService,
 } from '@monorepo/shared-data-access';
+import { cposSchema } from '../config/indexeddb-schema';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
 
@@ -37,6 +39,7 @@ class WebDataAccessService {
   private dataSourceManager: ReturnType<typeof getDataSourceManager>;
   private localDb: LocalDbClient | null = null;
   private apiClient: HttpApiClient | null = null;
+  private syncService: SyncService | null = null;
   private isInitialized = false;
   private manualOverride = false;
   private preferredDataSource: DataSource | null = null;
@@ -105,15 +108,14 @@ class WebDataAccessService {
     console.log('[WebDataAccessService] Database: cpos_web_db');
 
     try {
-      // Initialize local database (IndexedDB)
-      // For now, we'll use a simple schema - can be extended later with full schema from schema.sql
+      // Initialize local database (IndexedDB) with full schema
       this.localDb = createLocalDbClient('web', {
         dbName: 'cpos_web_db',
         dbVersion: 1,
-        schema: undefined, // Will use default schema for now
+        schema: cposSchema,
       });
       await this.localDb.initialize();
-      console.log('[WebDataAccessService] Local database initialized');
+      console.log('[WebDataAccessService] Local database initialized with schema');
 
       // Initialize API client
       this.apiClient = getApiClient({
@@ -150,6 +152,46 @@ class WebDataAccessService {
       console.error('[WebDataAccessService] Initialization failed:', error);
       throw error;
     }
+  }
+
+  /**
+   * Initialize sync service after user login
+   * This should be called after successful online login
+   */
+  async initializeSyncService(userId: string): Promise<void> {
+    if (!this.localDb || !this.apiClient) {
+      console.warn('[WebDataAccessService] Cannot initialize sync: DB or API not ready');
+      return;
+    }
+
+    try {
+      this.syncService = new SyncService(this.localDb, this.apiClient, {
+        syncInterval: 3600000, // 1 hour
+        batchSize: 100,
+        retryAttempts: 3,
+        retryDelay: 1000,
+      });
+
+      await this.syncService.initialize();
+      console.log('[WebDataAccessService] Sync service initialized');
+
+      // Sync User table immediately for offline login
+      await this.syncService.syncTable('User', 'download');
+      console.log('[WebDataAccessService] User table synced');
+
+      // Start periodic sync
+      this.syncService.startPeriodicSync();
+      console.log('[WebDataAccessService] Periodic sync started');
+    } catch (error) {
+      console.error('[WebDataAccessService] Sync service initialization failed:', error);
+    }
+  }
+
+  /**
+   * Get sync service instance
+   */
+  getSyncService(): SyncService | null {
+    return this.syncService;
   }
 
   getConnectionState(): ConnectionState {
@@ -275,6 +317,11 @@ class WebDataAccessService {
 
   async destroy(): Promise<void> {
     console.log('[WebDataAccessService] Destroying...');
+
+    if (this.syncService) {
+      this.syncService.stopPeriodicSync();
+      this.syncService = null;
+    }
 
     if (this.localDb) {
       await this.localDb.close();

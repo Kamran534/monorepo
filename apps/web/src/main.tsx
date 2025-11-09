@@ -27,9 +27,9 @@ root.render(
 // Register service worker for PWA
 const updateSW = registerSW({
   onNeedRefresh() {
-    if (confirm('New content available. Reload?')) {
-      updateSW(true);
-    }
+    // Auto-reload when new content is available
+    // This is a common pattern for PWA updates to ensure users have the latest version
+    updateSW(true);
   },
   onOfflineReady() {
     console.log('App ready to work offline');

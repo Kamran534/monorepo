@@ -240,10 +240,31 @@ export class HttpApiClient implements RemoteApiClient {
       try {
         const response = await this.fetchWithTimeout(method, url, data);
 
+        // Clone response for error parsing (response body can only be read once)
+        const responseClone = response.clone();
+
         if (!response.ok) {
-          throw new Error(
-            `HTTP ${response.status}: ${response.statusText}`
-          );
+          // Try to parse error response body for more details
+          let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          try {
+            const contentType = responseClone.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const errorBody = await responseClone.json();
+              if (errorBody.error) {
+                errorMessage = errorBody.error;
+              } else if (errorBody.message) {
+                errorMessage = errorBody.message;
+              }
+            }
+          } catch (parseError) {
+            // If parsing fails, use the default error message
+            console.warn('[HttpApiClient] Failed to parse error response:', parseError);
+          }
+          
+          const error = new Error(errorMessage);
+          (error as any).status = response.status;
+          (error as any).statusText = response.statusText;
+          throw error;
         }
 
         const contentType = response.headers.get('content-type');

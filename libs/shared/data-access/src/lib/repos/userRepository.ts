@@ -18,9 +18,8 @@ async function loadBcrypt(): Promise<any> {
   }
 
   try {
-    // Use dynamic import (works in ES modules and Node.js)
-    // bcryptjs is externalized in Vite config, so it will be loaded from node_modules at runtime
-    // @ts-ignore - bcryptjs is installed in the desktop app, not in this shared library
+    // Try to load bcryptjs - it works in both Node.js and browsers (pure JS implementation)
+    // @ts-ignore - bcryptjs might not be installed in all environments
     const bcryptModule = await import('bcryptjs');
     bcrypt = bcryptModule.default || bcryptModule;
     bcryptLoaded = true;
@@ -28,7 +27,8 @@ async function loadBcrypt(): Promise<any> {
     return bcrypt;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('[UserRepository] ✗ Failed to load bcryptjs:', errorMsg);
+    console.warn('[UserRepository] ⚠️ bcryptjs not available:', errorMsg);
+    bcryptLoaded = true; // Mark as loaded to prevent retry
     return null;
   }
 }
@@ -126,13 +126,14 @@ export class UserRepository {
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
             const errorStack = error instanceof Error ? error.stack : undefined;
-            console.error('[UserRepository] ❌❌❌ User data fetch/save FAILED:', {
+            console.error('[UserRepository] ⚠️⚠️⚠️ User data fetch/save FAILED (non-fatal):', {
               error: errorMsg,
               stack: errorStack,
               userId: result.user.id,
             });
-            // Re-throw so we can see the error - this is critical for offline login
-            throw new Error(`Failed to save user to local DB: ${errorMsg}`);
+            // Don't re-throw - login succeeded, user can still use the app online
+            // Offline login won't work until user data is synced, but online login is fine
+            console.warn('[UserRepository] Login succeeded but user data not saved to local DB. Offline login may not work.');
           }
           
           return result;
@@ -239,16 +240,33 @@ export class UserRepository {
    */
   async loginOffline(usernameOrEmail: string, password: string): Promise<LoginResult> {
     try {
+      console.log('[UserRepository] ========== OFFLINE LOGIN ATTEMPT ==========');
+      console.log('[UserRepository] Searching for user:', usernameOrEmail);
+      console.log('[UserRepository] Database type:', this.localDb.constructor.name);
+      
       // Query user from local database (supports both username and email)
       const users = await this.localDb.query<User & { passwordHash: string }>(
         `SELECT * FROM User WHERE username = ? OR email = ? LIMIT 1`,
         [usernameOrEmail, usernameOrEmail]
       );
 
+      console.log('[UserRepository] Query result:', {
+        userCount: users.length,
+        foundUser: users.length > 0 ? {
+          id: users[0].id,
+          username: users[0].username,
+          email: users[0].email,
+          hasPasswordHash: !!users[0].passwordHash,
+          passwordHashLength: users[0].passwordHash?.length || 0,
+          isActive: users[0].isActive,
+        } : null,
+      });
+
       if (users.length === 0) {
+        console.log('[UserRepository] ✗ User not found in local database');
         return {
           success: false,
-          error: 'User not found',
+          error: 'User not found in local database. Please login online first to sync your credentials.',
           isOffline: true,
         };
       }
@@ -278,19 +296,26 @@ export class UserRepository {
       if (!bcryptModule) {
         return {
           success: false,
-          error: 'Password verification not available (bcryptjs not installed)',
+          error: 'Password verification not available (bcryptjs not installed). Please install bcryptjs for offline login support.',
           isOffline: true,
         };
       }
 
+      // Verify password using bcryptjs (works in both Node.js and browsers)
+      console.log('[UserRepository] Verifying password with bcryptjs...');
       const isValidPassword = await bcryptModule.compare(password, user.passwordHash);
+      console.log('[UserRepository] Password verification result:', isValidPassword);
+      
       if (!isValidPassword) {
+        console.log('[UserRepository] ✗ Password verification failed');
         return {
           success: false,
           error: 'Invalid password',
           isOffline: true,
         };
       }
+      
+      console.log('[UserRepository] ✓ Password verified successfully');
 
       // Get role name if available
       let roleName: string | undefined;
@@ -543,8 +568,67 @@ export class UserRepository {
         username: userRecord.username,
         hasPasswordHash: !!userRecord.passwordHash,
         passwordHashLength: userRecord.passwordHash?.length || 0,
+        dbType: this.localDb.constructor.name,
       });
+      
+      // Check if we're using IndexedDB (web app)
+      const isIndexedDB = this.localDb.constructor.name === 'WebIndexedDbClient';
+      
+      if (isIndexedDB) {
+        // For IndexedDB, we need to pass data as an object, not parameterized SQL
+        // Check if user exists to preserve createdAt
+        const existing = await this.localDb.query<{ id: string; createdAt?: string }>(
+          `SELECT id, createdAt FROM User WHERE id = ? LIMIT 1`,
+          [userRecord.id]
+        );
+        
+        const userObject = {
+          id: userRecord.id,
+          username: userRecord.username,
+          email: userRecord.email,
+          firstName: userRecord.firstName,
+          lastName: userRecord.lastName,
+          passwordHash: userRecord.passwordHash, // CRITICAL: Must have passwordHash for offline login
+          roleId: userRecord.roleId,
+          employeeCode: userRecord.employeeCode || null,
+          phone: userRecord.phone || null,
+          pin: userRecord.pin || null,
+          isActive: userRecord.isActive ? 1 : 0,
+          hireDate: hireDate,
+          terminationDate: terminationDate,
+          createdAt: existing.length > 0 && existing[0].createdAt ? existing[0].createdAt : createdAt,
+          updatedAt: updatedAt,
+        };
+        
+        console.log('[UserRepository] Using IndexedDB format, saving user object:', {
+          id: userObject.id,
+          username: userObject.username,
+          hasPasswordHash: !!userObject.passwordHash,
+          isUpdate: existing.length > 0,
+        });
+        
+        // Use upsert (put) for IndexedDB - it will insert or update
+        await this.localDb.execute('User:put', [userObject]);
+        console.log('[UserRepository] ✓ User saved to IndexedDB successfully');
+        
+        // Verify
+        const verify = await this.localDb.query<{ id: string; username: string; passwordHash: string }>(
+          `SELECT id, username, passwordHash FROM User WHERE id = ? LIMIT 1`,
+          [userRecord.id]
+        );
+        if (verify.length > 0) {
+          console.log('[UserRepository] ✓ User verified in IndexedDB:', {
+            id: verify[0].id,
+            username: verify[0].username,
+            hasPasswordHash: !!verify[0].passwordHash,
+          });
+        } else {
+          console.error('[UserRepository] ✗ User NOT found after save operation!');
+        }
+        return;
+      }
 
+      // SQLite path
       // Check if user already exists
       const existing = await this.localDb.query<{ id: string }>(
         `SELECT id FROM User WHERE id = ? LIMIT 1`,
@@ -554,6 +638,7 @@ export class UserRepository {
       if (existing.length > 0) {
         // Update existing user
         console.log('[UserRepository] Updating existing user in local DB');
+        // SQLite update
         await this.localDb.execute(
           `UPDATE User SET 
             username = ?, 
@@ -670,6 +755,9 @@ export class UserRepository {
    */
   private async ensureRoleExists(roleId: string, roleName?: string): Promise<void> {
     try {
+      // Check if we're using IndexedDB (web app)
+      const isIndexedDB = this.localDb.constructor.name === 'WebIndexedDbClient';
+      
       // Check if role already exists
       const existing = await this.localDb.query<{ id: string }>(
         `SELECT id FROM Role WHERE id = ? LIMIT 1`,
@@ -720,23 +808,86 @@ export class UserRepository {
               ? role.updatedAt.toISOString() 
               : role.updatedAt;
 
-            await this.localDb.execute(
-              `INSERT INTO Role (id, name, permissions, description, isActive, createdAt, updatedAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              [
-                role.id,
-                role.name,
-                permissions,
-                role.description || null,
-                role.isActive ? 1 : 0,
-                createdAt,
-                updatedAt,
-              ]
-            );
-            console.log('[UserRepository] ✓ Role saved to local DB:', role.id, role.name);
+            if (isIndexedDB) {
+              // For IndexedDB, use object format
+              const roleObject = {
+                id: role.id,
+                name: role.name,
+                permissions: permissions,
+                description: role.description || null,
+                isActive: role.isActive ? 1 : 0,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              };
+              await this.localDb.execute('Role:put', [roleObject]);
+              console.log('[UserRepository] ✓ Role saved to IndexedDB:', role.id, role.name);
+            } else {
+              // SQLite format
+              await this.localDb.execute(
+                `INSERT INTO Role (id, name, permissions, description, isActive, createdAt, updatedAt)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  role.id,
+                  role.name,
+                  permissions,
+                  role.description || null,
+                  role.isActive ? 1 : 0,
+                  createdAt,
+                  updatedAt,
+                ]
+              );
+              console.log('[UserRepository] ✓ Role saved to local DB:', role.id, role.name);
+            }
           } else {
             // Role not found in server response - create a minimal role
             console.warn('[UserRepository] ⚠️ Role not found in server response, creating minimal role');
+            const now = new Date().toISOString();
+            if (isIndexedDB) {
+              const roleObject = {
+                id: roleId,
+                name: roleName || 'Unknown Role',
+                permissions: JSON.stringify([]),
+                description: 'Auto-created for user',
+                isActive: 1,
+                createdAt: now,
+                updatedAt: now,
+              };
+              await this.localDb.execute('Role:put', [roleObject]);
+              console.log('[UserRepository] ✓ Minimal role created in IndexedDB');
+            } else {
+              await this.localDb.execute(
+                `INSERT INTO Role (id, name, permissions, description, isActive, createdAt, updatedAt)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  roleId,
+                  roleName || 'Unknown Role',
+                  JSON.stringify([]),
+                  'Auto-created for user',
+                  1,
+                  now,
+                  now,
+                ]
+              );
+              console.log('[UserRepository] ✓ Minimal role created in local DB');
+            }
+          }
+        } else {
+          // If download fails, create a minimal role
+          console.warn('[UserRepository] ⚠️ Failed to fetch role from server, creating minimal role');
+          const now = new Date().toISOString();
+          if (isIndexedDB) {
+            const roleObject = {
+              id: roleId,
+              name: roleName || 'Unknown Role',
+              permissions: JSON.stringify([]),
+              description: 'Auto-created for user',
+              isActive: 1,
+              createdAt: now,
+              updatedAt: now,
+            };
+            await this.localDb.execute('Role:put', [roleObject]);
+            console.log('[UserRepository] ✓ Minimal role created in IndexedDB (fallback)');
+          } else {
             await this.localDb.execute(
               `INSERT INTO Role (id, name, permissions, description, isActive, createdAt, updatedAt)
                VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -746,15 +897,30 @@ export class UserRepository {
                 JSON.stringify([]),
                 'Auto-created for user',
                 1,
-                new Date().toISOString(),
-                new Date().toISOString(),
+                now,
+                now,
               ]
             );
-            console.log('[UserRepository] ✓ Minimal role created in local DB');
+            console.log('[UserRepository] ✓ Minimal role created in local DB (fallback)');
           }
+        }
+      } catch (fetchError) {
+        // If fetch fails, create a minimal role to satisfy foreign key
+        console.warn('[UserRepository] ⚠️ Error fetching role from server, creating minimal role:', fetchError);
+        const now = new Date().toISOString();
+        if (isIndexedDB) {
+          const roleObject = {
+            id: roleId,
+            name: roleName || 'Unknown Role',
+            permissions: JSON.stringify([]),
+            description: 'Auto-created for user',
+            isActive: 1,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await this.localDb.execute('Role:put', [roleObject]);
+          console.log('[UserRepository] ✓ Minimal role created in IndexedDB (error fallback)');
         } else {
-          // If download fails, create a minimal role
-          console.warn('[UserRepository] ⚠️ Failed to fetch role from server, creating minimal role');
           await this.localDb.execute(
             `INSERT INTO Role (id, name, permissions, description, isActive, createdAt, updatedAt)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -764,49 +930,48 @@ export class UserRepository {
               JSON.stringify([]),
               'Auto-created for user',
               1,
-              new Date().toISOString(),
-              new Date().toISOString(),
+              now,
+              now,
             ]
           );
-          console.log('[UserRepository] ✓ Minimal role created in local DB (fallback)');
+          console.log('[UserRepository] ✓ Minimal role created in local DB (error fallback)');
         }
-      } catch (fetchError) {
-        // If fetch fails, create a minimal role to satisfy foreign key
-        console.warn('[UserRepository] ⚠️ Error fetching role from server, creating minimal role:', fetchError);
-        await this.localDb.execute(
-          `INSERT INTO Role (id, name, permissions, description, isActive, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            roleId,
-            roleName || 'Unknown Role',
-            JSON.stringify([]),
-            'Auto-created for user',
-            1,
-            new Date().toISOString(),
-            new Date().toISOString(),
-          ]
-        );
-        console.log('[UserRepository] ✓ Minimal role created in local DB (error fallback)');
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error('[UserRepository] ✗ Failed to ensure role exists:', errorMsg);
       // Don't throw - we'll try to create a minimal role as last resort
       try {
-        await this.localDb.execute(
-          `INSERT OR IGNORE INTO Role (id, name, permissions, description, isActive, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            roleId,
-            roleName || 'Unknown Role',
-            JSON.stringify([]),
-            'Auto-created for user',
-            1,
-            new Date().toISOString(),
-            new Date().toISOString(),
-          ]
-        );
-        console.log('[UserRepository] ✓ Minimal role created (final fallback)');
+        const isIndexedDB = this.localDb.constructor.name === 'WebIndexedDbClient';
+        const now = new Date().toISOString();
+        if (isIndexedDB) {
+          const roleObject = {
+            id: roleId,
+            name: roleName || 'Unknown Role',
+            permissions: JSON.stringify([]),
+            description: 'Auto-created for user',
+            isActive: 1,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await this.localDb.execute('Role:put', [roleObject]);
+          console.log('[UserRepository] ✓ Minimal role created in IndexedDB (final fallback)');
+        } else {
+          await this.localDb.execute(
+            `INSERT OR IGNORE INTO Role (id, name, permissions, description, isActive, createdAt, updatedAt)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+              roleId,
+              roleName || 'Unknown Role',
+              JSON.stringify([]),
+              'Auto-created for user',
+              1,
+              now,
+              now,
+            ]
+          );
+          console.log('[UserRepository] ✓ Minimal role created (final fallback)');
+        }
       } catch (finalError) {
         console.error('[UserRepository] ✗✗✗ Failed to create minimal role:', finalError);
         throw new Error(`Failed to ensure role exists: ${errorMsg}`);
@@ -828,13 +993,32 @@ export class UserRepository {
     try {
       console.log('[UserRepository] Saving', userLocations.length, 'user locations to local DB');
       
-      // Convert Date objects to ISO strings for SQLite
+      // Check if we're using IndexedDB (web app)
+      const isIndexedDB = this.localDb.constructor.name === 'WebIndexedDbClient';
+      
+      // Convert Date objects to ISO strings
       const formatDate = (date: string | Date): string => {
         if (date instanceof Date) {
           return date.toISOString();
         }
         return date;
       };
+      
+      if (isIndexedDB) {
+        // For IndexedDB, save each location as an object
+        for (const location of userLocations) {
+          const locationObject = {
+            id: location.id,
+            userId: location.userId,
+            locationId: location.locationId,
+            createdAt: formatDate(location.createdAt),
+          };
+          // Use put (upsert) for IndexedDB
+          await this.localDb.execute('UserLocation:put', [locationObject]);
+        }
+        console.log('[UserRepository] ✓ Saved', userLocations.length, 'user locations to IndexedDB');
+        return;
+      }
 
       for (const location of userLocations) {
         const createdAt = formatDate(location.createdAt);

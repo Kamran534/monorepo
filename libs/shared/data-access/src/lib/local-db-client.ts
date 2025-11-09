@@ -9,8 +9,6 @@
  */
 
 import { LocalDbClient } from './types';
-import { existsSync, readFileSync } from 'fs';
-import { join, dirname } from 'path';
 
 /**
  * Desktop SQLite Client
@@ -55,7 +53,17 @@ export class DesktopSqliteClient implements LocalDbClient {
         throw new Error('better-sqlite3 module not found');
       }
 
-      const dbExists = existsSync(this.dbPath);
+      // Dynamically import Node.js fs module (only available in Electron/Node.js)
+      let dbExists = false;
+      try {
+        // @ts-ignore - fs is a Node.js module, not available in browser
+        const fs = await import('fs');
+        dbExists = fs.existsSync(this.dbPath);
+      } catch (error) {
+        // fs module not available (browser environment) - assume new database
+        console.warn('[DesktopSqliteClient] fs module not available, assuming new database');
+        dbExists = false;
+      }
       this.db = new Database(this.dbPath, {
         // verbose: console.log, // Uncomment for debugging
       });
@@ -81,17 +89,32 @@ export class DesktopSqliteClient implements LocalDbClient {
    */
   private async initializeSchema(): Promise<void> {
     try {
+      // Dynamically import Node.js modules (only available in Electron/Node.js)
+      let fs: any;
+      let path: any;
+      
+      try {
+        // @ts-ignore - fs and path are Node.js modules, not available in browser
+        fs = await import('fs');
+        // @ts-ignore - path is a Node.js module, not available in browser
+        path = await import('path');
+      } catch (error) {
+        // Node.js modules not available (browser environment)
+        console.warn('[DesktopSqliteClient] Node.js modules (fs/path) not available, skipping schema initialization');
+        return;
+      }
+      
       // Look for schema.sql in the same directory as the database
-      const dbDir = dirname(this.dbPath);
-      const schemaPath = join(dbDir, 'schema.sql');
+      const dbDir = path.dirname(this.dbPath);
+      const schemaPath = path.join(dbDir, 'schema.sql');
 
-      if (!existsSync(schemaPath)) {
+      if (!fs.existsSync(schemaPath)) {
         console.warn(`[DesktopSqliteClient] Schema file not found at ${schemaPath}, skipping schema initialization`);
         return;
       }
 
       console.log(`[DesktopSqliteClient] Initializing schema from ${schemaPath}`);
-      const schemaSql = readFileSync(schemaPath, 'utf-8');
+      const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
 
       // Split by semicolons and execute each statement
       // Remove comments and empty statements
@@ -341,33 +364,47 @@ export class WebIndexedDbClient implements LocalDbClient {
 
   /**
    * Query data from a store
-   * Accepts SQL-like strings: "SELECT * FROM storeName" or "SELECT * FROM storeName WHERE key = ?"
+   * Accepts SQL-like strings: "SELECT * FROM storeName" or "SELECT * FROM storeName WHERE key = ? OR key2 = ?"
    * Or simple store name: "storeName"
    */
   async query<T>(sql: string, params?: unknown[]): Promise<T[]> {
     this.ensureInitialized();
 
-    // Parse SQL to extract store name
-    // Simple parsing: "SELECT * FROM storeName" or just "storeName"
+    // Parse SQL to extract store name and WHERE conditions
     let storeName: string;
-    let queryFilter: any = undefined;
+    let whereConditions: Array<{ field: string; value: any; operator?: string }> = [];
 
     if (sql.trim().toUpperCase().startsWith('SELECT')) {
       // Parse SQL-like query
-      const match = sql.match(/FROM\s+(\w+)/i);
-      if (match) {
-        storeName = match[1];
+      const fromMatch = sql.match(/FROM\s+(\w+)/i);
+      if (fromMatch) {
+        storeName = fromMatch[1];
       } else {
         throw new Error(`Invalid SQL query: ${sql}`);
+      }
+
+      // Parse WHERE clause
+      const whereMatch = sql.match(/WHERE\s+(.+?)(?:\s+LIMIT|$)/i);
+      if (whereMatch) {
+        const whereClause = whereMatch[1].trim();
+        // Handle OR conditions: "username = ? OR email = ?"
+        const orParts = whereClause.split(/\s+OR\s+/i);
+        
+        for (const part of orParts) {
+          // Match "field = ?" or "field = value"
+          const fieldMatch = part.match(/(\w+)\s*=\s*\?/i);
+          if (fieldMatch) {
+            whereConditions.push({
+              field: fieldMatch[1],
+              value: null, // Will be filled from params
+              operator: '=',
+            });
+          }
+        }
       }
     } else {
       // Assume it's just a store name
       storeName = sql.trim();
-    }
-
-    // If params provided, use first param as filter value
-    if (params && params.length > 0) {
-      queryFilter = params[0];
     }
 
     return new Promise((resolve, reject) => {
@@ -375,31 +412,48 @@ export class WebIndexedDbClient implements LocalDbClient {
       const store = transaction.objectStore(storeName);
       const results: T[] = [];
 
-      let request: IDBRequest;
-
-      if (queryFilter && typeof queryFilter === 'object' && !('lower' in queryFilter)) {
-        // Query by index - simple object match
-        // Get the first key from the query object
-        const [key, value] = Object.entries(queryFilter)[0];
-
-        // Try to use index if available
-        try {
-          const index = store.index(key);
-          request = index.getAll(value as IDBValidKey);
-        } catch {
-          // Index not found, fall back to full scan
-          request = store.getAll();
-        }
-      } else {
-        // Get all or by key range
-        request = store.getAll(queryFilter);
-      }
+      // Get all records first (IndexedDB doesn't support complex WHERE clauses natively)
+      const request = store.getAll();
 
       request.onsuccess = () => {
         let data = request.result as T[];
 
-        // If we did a full scan with query filter, filter results
-        if (queryFilter && typeof queryFilter === 'object' && !('lower' in queryFilter)) {
+        // Apply WHERE conditions if present
+        if (whereConditions.length > 0 && params && params.length > 0) {
+          // Map params to conditions
+          // For OR conditions with same value (e.g., username = ? OR email = ? with same param), use first param value
+          const paramValue = params[0]; // Use first param value for OR conditions
+          const conditionsWithValues = whereConditions.map((cond) => ({
+            ...cond,
+            value: paramValue, // Use same value for all OR conditions
+          }));
+
+          console.log('[WebIndexedDbClient] Filtering with conditions:', {
+            conditionCount: conditionsWithValues.length,
+            paramValue: paramValue,
+            fields: conditionsWithValues.map(c => c.field),
+          });
+
+          // Filter results based on WHERE conditions (supporting OR logic)
+          data = data.filter(item => {
+            // For OR conditions, item matches if ANY condition is true
+            const matches = conditionsWithValues.some(cond => {
+              const itemValue = (item as any)[cond.field];
+              if (cond.operator === '=') {
+                return itemValue === cond.value;
+              }
+              return false;
+            });
+            return matches;
+          });
+          
+          console.log('[WebIndexedDbClient] Filtered results:', {
+            beforeFilter: request.result?.length || 0,
+            afterFilter: data.length,
+          });
+        } else if (params && params.length > 0 && typeof params[0] === 'object') {
+          // Legacy support: object-based filtering
+          const queryFilter = params[0] as Record<string, any>;
           data = data.filter(item => {
             for (const [key, value] of Object.entries(queryFilter)) {
               if ((item as any)[key] !== value) {
@@ -408,6 +462,13 @@ export class WebIndexedDbClient implements LocalDbClient {
             }
             return true;
           });
+        }
+
+        // Apply LIMIT if present
+        const limitMatch = sql.match(/LIMIT\s+(\d+)/i);
+        if (limitMatch) {
+          const limit = parseInt(limitMatch[1], 10);
+          data = data.slice(0, limit);
         }
 
         resolve(data);

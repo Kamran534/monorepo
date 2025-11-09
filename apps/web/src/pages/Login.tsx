@@ -1,24 +1,35 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
-import { useAuth } from '@monorepo/shared-ui';
+import { Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
+import { useWebAuth } from '../providers/WebAuthProvider';
 
 export function Login() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [bgFailed, setBgFailed] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
-  const { login } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const { login } = useWebAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = await login(email, password, remember);
-    if (ok) {
-      navigate('/');
-    } else {
-      alert('Invalid credentials');
+    setIsLoading(true);
+    setErrorMessage('');
+
+    try {
+      const ok = await login(username, password, remember);
+      if (ok) {
+        navigate('/');
+      } else {
+        setErrorMessage('Invalid credentials. Please try again.');
+      }
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Login failed. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -57,15 +68,22 @@ export function Login() {
           </div>
 
           <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+            {errorMessage && (
+              <div className="p-2 rounded-md text-xs" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'rgb(239, 68, 68)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                {errorMessage}
+              </div>
+            )}
+
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full px-2.5 py-2 rounded-md border focus:outline-none focus:ring-2 text-sm"
               style={{ backgroundColor: 'var(--color-bg-primary)', color: 'var(--color-text-primary)', borderColor: 'color-mix(in oklab, var(--color-border) 80%, transparent)' }}
-              placeholder="Email"
+              placeholder="Username or Email"
               autoComplete="username"
               required
+              disabled={isLoading}
             />
 
             <div className="relative">
@@ -78,6 +96,7 @@ export function Login() {
                 placeholder="Password"
                 autoComplete="current-password"
                 required
+                disabled={isLoading}
               />
               <button
                 type="button"
@@ -106,11 +125,19 @@ export function Login() {
 
             <button
               type="submit"
-              className="w-full px-3.5 py-2 rounded-md font-medium transition-colors text-sm"
+              disabled={isLoading}
+              className="w-full px-3.5 py-2 rounded-md font-medium transition-colors text-sm disabled:opacity-50"
               style={{ backgroundColor: 'var(--color-primary-500)', color: 'var(--color-text-light)' }}
             >
-              Sign In
+              {isLoading ? 'Signing in...' : 'Sign In'}
             </button>
+
+            <div className="text-center text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+              <p className="flex items-center justify-center gap-1.5">
+                <Wifi className="w-3.5 h-3.5" />
+                Online/offline login supported
+              </p>
+            </div>
           </form>
           <div className="mt-3 text-center">
             <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>

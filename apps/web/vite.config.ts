@@ -117,10 +117,11 @@ export default defineConfig(() => ({
       transformMixedEsModules: true,
     },
     rollupOptions: {
-      external: ['react-native', 'react-native-sqlite-storage'],
+      external: ['react-native', 'react-native-sqlite-storage', 'fs', 'path'],
     },
   },
   optimizeDeps: {
     exclude: ['react-native', 'react-native-sqlite-storage'],
+    include: ['bcryptjs'], // Include bcryptjs for optimization (it's a pure JS library that works in browsers)
   },
 }));
