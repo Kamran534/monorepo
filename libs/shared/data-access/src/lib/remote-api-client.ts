@@ -74,20 +74,39 @@ export class HttpApiClient implements RemoteApiClient {
    */
   async isAvailable(): Promise<boolean> {
     try {
+      console.log(`[HttpApiClient] Checking server availability at: ${this.config.baseUrl}/api/health`);
       const controller = new AbortController();
       const timeoutId = setTimeout(
         () => controller.abort(),
         this.config.timeout
       );
 
-      const response = await fetch(`${this.config.baseUrl}/api/health`, {
+      // Get fetch function (with fallback for Electron)
+      let fetchFn: typeof fetch;
+      if (typeof fetch === 'undefined') {
+        try {
+          const nodeFetch = await import('node-fetch');
+          fetchFn = (nodeFetch as any).default || nodeFetch;
+        } catch {
+          console.warn('[HttpApiClient] fetch not available and node-fetch not found');
+          return false;
+        }
+      } else {
+        fetchFn = fetch;
+      }
+
+      const response = await fetchFn(`${this.config.baseUrl}/api/health`, {
         method: 'GET',
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
-      return response.ok;
+      const isAvailable = response.ok;
+      console.log(`[HttpApiClient] Server availability check: ${isAvailable ? 'AVAILABLE' : 'NOT AVAILABLE'} (status: ${response.status})`);
+      return isAvailable;
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn(`[HttpApiClient] Server availability check failed:`, errorMsg);
       return false;
     }
   }
@@ -130,6 +149,7 @@ export class HttpApiClient implements RemoteApiClient {
    */
   async post<T>(endpoint: string, data?: unknown): Promise<T> {
     const url = this.buildUrl(endpoint);
+    console.log(`[HttpApiClient] POST request to: ${url}`, data ? { dataKeys: Object.keys(data as any) } : 'no data');
     return this.request<T>('POST', url, data);
   }
 
@@ -270,6 +290,22 @@ export class HttpApiClient implements RemoteApiClient {
     );
 
     try {
+      // Check if fetch is available (might not be in Electron main process)
+      let fetchFn: typeof fetch;
+      
+      if (typeof fetch === 'undefined') {
+        // Try to use node-fetch as fallback
+        console.warn('[HttpApiClient] fetch is not available, attempting to use node-fetch...');
+        try {
+          const nodeFetch = await import('node-fetch');
+          fetchFn = (nodeFetch as any).default || nodeFetch;
+        } catch (importError) {
+          throw new Error(`fetch not available and node-fetch import failed: ${importError instanceof Error ? importError.message : String(importError)}`);
+        }
+      } else {
+        fetchFn = fetch;
+      }
+
       const options: RequestInit = {
         method,
         headers: this.config.headers,
@@ -280,8 +316,14 @@ export class HttpApiClient implements RemoteApiClient {
         options.body = JSON.stringify(data);
       }
 
-      const response = await fetch(url, options);
+      console.log(`[HttpApiClient] Making ${method} request to: ${url}`);
+      const response = await fetchFn(url, options);
+      console.log(`[HttpApiClient] Response status: ${response.status} ${response.statusText}`);
       return response;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[HttpApiClient] Fetch error for ${method} ${url}:`, errorMsg);
+      throw error;
     } finally {
       clearTimeout(timeoutId);
     }

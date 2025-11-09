@@ -19,19 +19,22 @@ export {
   type DataSourceManager as IDataSourceManager,
 } from './lib/types';
 
-// Connectivity Checker
+// Connection & Switching Integration
+// Located in: lib/integration/
+// Provides: ConnectivityChecker, DataSourceManager
+// Handles: Server connectivity checking and automatic switching between server/local
+export * from './lib/integration';
 export {
   ConnectivityChecker,
   getConnectivityChecker,
   resetConnectivityChecker,
-} from './lib/connectivity-checker';
+} from './lib/integration/connectivity-checker';
 
-// Data Source Manager
 export {
   DataSourceManager,
   getDataSourceManager,
   resetDataSourceManager,
-} from './lib/data-source-manager';
+} from './lib/integration/data-source-manager';
 
 // Local Database Clients
 export {
@@ -56,3 +59,9 @@ export {
   resetApiClient,
   type ApiClientConfig,
 } from './lib/remote-api-client';
+
+// Sync Module
+export * from './lib/sync';
+
+// Repositories
+export * from './lib/repos';

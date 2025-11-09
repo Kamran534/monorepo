@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HashRouter, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Layout, SidebarItem, useTheme, AuthProvider, useAuth, CartProvider, ToastProvider, SplashScreen, useCart } from '@monorepo/shared-ui';
+import { Layout, SidebarItem, useTheme, CartProvider, ToastProvider, SplashScreen, useCart } from '@monorepo/shared-ui';
+import { DesktopAuthProvider, useDesktopAuth } from '@monorepo/shared-ui';
 import { 
   Home, 
   Package, 
@@ -27,7 +28,7 @@ function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toggleTheme, isDark } = useTheme();
-  const { isReady, isAuthenticated, logout } = useAuth();
+  const { isReady, isAuthenticated, logout, user } = useDesktopAuth();
   // Show splash only once per app load
   const [showSplash, setShowSplash] = useState(() => {
     try {
@@ -242,10 +243,10 @@ function AppContent() {
             label: 'Connection Status',
           },
         ],
-        userInfo: {
-          name: 'Alexander Eggerer',
-          role: '4 - HOUSTON_39',
-        },
+        userInfo: user ? {
+          name: `${user.firstName} ${user.lastName}`.trim() || user.username,
+          role: user.roleName || user.roleId || 'User',
+        } : undefined,
       }}
     >
       <AppRoutes />
@@ -256,13 +257,13 @@ function AppContent() {
 function App() {
   return (
     <HashRouter>
-      <AuthProvider>
+      <DesktopAuthProvider>
         <CartProvider>
           <ToastProvider>
             <AppContent />
           </ToastProvider>
         </CartProvider>
-      </AuthProvider>
+      </DesktopAuthProvider>
     </HashRouter>
   );
 }

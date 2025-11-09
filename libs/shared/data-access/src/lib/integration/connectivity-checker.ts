@@ -9,7 +9,7 @@ import {
   ConnectivityConfig,
   ConnectivityCheckResult,
   ConnectionStatus,
-} from './types';
+} from '../types';
 
 /**
  * Get server URL from environment variable
@@ -50,7 +50,10 @@ export class ConnectivityChecker {
   private lastCheckResult: ConnectivityCheckResult | null = null;
 
   constructor(config?: Partial<ConnectivityConfig>) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config,
+    };
   }
 
   /**
@@ -120,7 +123,7 @@ export class ConnectivityChecker {
 
       lastError = result.error;
 
-      // Don't wait after the last attempt
+      // Don't retry on last attempt
       if (attempt < this.config.retryAttempts) {
         await this.delay(this.config.retryDelay);
       }
@@ -128,7 +131,7 @@ export class ConnectivityChecker {
 
     return {
       isOnline: false,
-      error: lastError || 'Failed after retries',
+      error: lastError || 'Connection failed after retries',
       timestamp: new Date(),
     };
   }
@@ -139,17 +142,23 @@ export class ConnectivityChecker {
   startPeriodicCheck(
     callback: (result: ConnectivityCheckResult) => void
   ): void {
-    // Clear any existing interval
-    this.stopPeriodicCheck();
+    if (this.checkIntervalId) {
+      console.warn('[ConnectivityChecker] Periodic check already started');
+      return;
+    }
 
-    // Perform immediate check
+    // Perform initial check
     this.checkConnectivity().then(callback);
 
-    // Set up periodic checks
+    // Start periodic checks
     this.checkIntervalId = setInterval(async () => {
       const result = await this.checkConnectivity();
       callback(result);
     }, this.config.checkInterval);
+
+    console.log(
+      `[ConnectivityChecker] Started periodic checks (interval: ${this.config.checkInterval}ms)`
+    );
   }
 
   /**
@@ -159,11 +168,12 @@ export class ConnectivityChecker {
     if (this.checkIntervalId) {
       clearInterval(this.checkIntervalId);
       this.checkIntervalId = null;
+      console.log('[ConnectivityChecker] Stopped periodic checks');
     }
   }
 
   /**
-   * Get the last check result
+   * Get last check result
    */
   getLastCheckResult(): ConnectivityCheckResult | null {
     return this.lastCheckResult;
@@ -173,21 +183,10 @@ export class ConnectivityChecker {
    * Update configuration
    */
   updateConfig(config: Partial<ConnectivityConfig>): void {
-    this.config = { ...this.config, ...config };
-  }
-
-  /**
-   * Get current configuration
-   */
-  getConfig(): Required<ConnectivityConfig> {
-    return { ...this.config };
-  }
-
-  /**
-   * Utility method to delay execution
-   */
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    this.config = {
+      ...this.config,
+      ...config,
+    };
   }
 
   /**
@@ -196,28 +195,37 @@ export class ConnectivityChecker {
   destroy(): void {
     this.stopPeriodicCheck();
     this.lastCheckResult = null;
+    console.log('[ConnectivityChecker] Destroyed');
+  }
+
+  /**
+   * Delay utility
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
 /**
- * Create a singleton instance
+ * Singleton instance
  */
-let defaultInstance: ConnectivityChecker | null = null;
+let defaultCheckerInstance: ConnectivityChecker | null = null;
 
 export function getConnectivityChecker(
   config?: Partial<ConnectivityConfig>
 ): ConnectivityChecker {
-  if (!defaultInstance) {
-    defaultInstance = new ConnectivityChecker(config);
+  if (!defaultCheckerInstance) {
+    defaultCheckerInstance = new ConnectivityChecker(config);
   } else if (config) {
-    defaultInstance.updateConfig(config);
+    defaultCheckerInstance.updateConfig(config);
   }
-  return defaultInstance;
+  return defaultCheckerInstance;
 }
 
 export function resetConnectivityChecker(): void {
-  if (defaultInstance) {
-    defaultInstance.destroy();
-    defaultInstance = null;
+  if (defaultCheckerInstance) {
+    defaultCheckerInstance.destroy();
+    defaultCheckerInstance = null;
   }
 }
+

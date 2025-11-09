@@ -9,6 +9,8 @@
  */
 
 import { LocalDbClient } from './types';
+import { existsSync, readFileSync } from 'fs';
+import { join, dirname } from 'path';
 
 /**
  * Desktop SQLite Client
@@ -53,6 +55,7 @@ export class DesktopSqliteClient implements LocalDbClient {
         throw new Error('better-sqlite3 module not found');
       }
 
+      const dbExists = existsSync(this.dbPath);
       this.db = new Database(this.dbPath, {
         // verbose: console.log, // Uncomment for debugging
       });
@@ -60,11 +63,69 @@ export class DesktopSqliteClient implements LocalDbClient {
       // Enable foreign keys
       this.db.pragma('foreign_keys = ON');
 
+      // Initialize schema if database is new
+      if (!dbExists) {
+        await this.initializeSchema();
+      }
+
       this.isInitialized = true;
       console.log(`[DesktopSqliteClient] Initialized database at: ${this.dbPath}`);
     } catch (error) {
       console.error('[DesktopSqliteClient] Initialization failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Initialize database schema from schema.sql file
+   */
+  private async initializeSchema(): Promise<void> {
+    try {
+      // Look for schema.sql in the same directory as the database
+      const dbDir = dirname(this.dbPath);
+      const schemaPath = join(dbDir, 'schema.sql');
+
+      if (!existsSync(schemaPath)) {
+        console.warn(`[DesktopSqliteClient] Schema file not found at ${schemaPath}, skipping schema initialization`);
+        return;
+      }
+
+      console.log(`[DesktopSqliteClient] Initializing schema from ${schemaPath}`);
+      const schemaSql = readFileSync(schemaPath, 'utf-8');
+
+      // Split by semicolons and execute each statement
+      // Remove comments and empty statements
+      const statements = schemaSql
+        .split(';')
+        .map(stmt => stmt.trim())
+        .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
+
+      // Execute all statements in a transaction for better performance
+      this.db.transaction(() => {
+        for (const statement of statements) {
+          if (statement.trim()) {
+            try {
+              this.db.exec(statement);
+            } catch (error: any) {
+              // Some statements might fail if they're part of a multi-statement block
+              // Try executing as a prepared statement instead
+              try {
+                this.db.prepare(statement).run();
+              } catch (err: any) {
+                // Skip trigger creation errors if tables don't exist yet (order dependency)
+                if (!err.message.includes('no such table') && !err.message.includes('already exists')) {
+                  console.warn(`[DesktopSqliteClient] Schema statement warning: ${err.message}`);
+                }
+              }
+            }
+          }
+        }
+      })();
+
+      console.log('[DesktopSqliteClient] Schema initialized successfully');
+    } catch (error) {
+      console.error('[DesktopSqliteClient] Failed to initialize schema:', error);
+      // Don't throw - allow database to continue without schema if file is missing
     }
   }
 

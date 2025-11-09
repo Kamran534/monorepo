@@ -15,7 +15,7 @@ import {
   ConnectivityCheckResult,
   ConnectionChangeCallback,
   DataSourceManager as IDataSourceManager,
-} from './types';
+} from '../types';
 import { ConnectivityChecker } from './connectivity-checker';
 
 export class DataSourceManager implements IDataSourceManager {
@@ -270,3 +270,4 @@ export function resetDataSourceManager(): void {
     defaultManagerInstance = null;
   }
 }
+

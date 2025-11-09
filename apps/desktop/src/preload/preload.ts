@@ -50,9 +50,21 @@ try {
         };
       },
     },
+    // Auth API
+    auth: {
+      login: (username: string, password: string) => {
+        console.log('[Preload] auth.login called');
+        return ipcRenderer.invoke('auth:login', username, password);
+      },
+      logout: () => {
+        console.log('[Preload] auth.logout called');
+        return ipcRenderer.invoke('auth:logout');
+      },
+    },
   });
-  console.log('[Preload] Exposed electronAPI with connection API');
+  console.log('[Preload] Exposed electronAPI with connection and auth API');
   console.log('[Preload] Connection methods exposed: getState, setManual, getManualOverride, check, onStateChange');
+  console.log('[Preload] Auth methods exposed: login, logout');
 } catch (error) {
   console.error('[Preload] Failed to expose APIs:', error);
 }

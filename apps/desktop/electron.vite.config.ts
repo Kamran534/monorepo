@@ -8,7 +8,7 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: resolve(__dirname, 'src/main/main.ts'),
-        external: ['better-sqlite3']
+        external: ['better-sqlite3', 'bcryptjs']
       },
       outDir: 'dist/main'
     },

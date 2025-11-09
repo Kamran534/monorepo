@@ -20,7 +20,7 @@ const StoreLogo = () => <Store className="w-full h-full" />;
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isReady, isAuthenticated, logout } = useAuth();
+  const { isReady, isAuthenticated, logout, userEmail } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   // Show splash only once per app load
   const [showSplash, setShowSplash] = useState(() => {
@@ -236,10 +236,10 @@ function AppContent() {
             label: 'Connection Status',
           },
         ],
-        userInfo: {
-          name: 'Alexander Eggerer',
-          role: '4 - HOUSTON_39',
-        },
+        userInfo: userEmail ? {
+          name: userEmail.split('@')[0] || userEmail,
+          role: 'User',
+        } : undefined,
       }}
     >
       <AppRoutes />

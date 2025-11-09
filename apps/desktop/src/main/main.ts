@@ -134,6 +134,113 @@ function setupIpcHandlers(): void {
     }
   });
 
+  // Auth handlers
+  ipcMain.handle('auth:login', async (event, username: string, password: string) => {
+    console.log('[IPC] ========== AUTH:LOGIN CALLED ==========');
+    console.log('[IPC] Username:', username);
+    console.log('[IPC] DataAccessService exists:', !!dataAccessService);
+    
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const { UserRepository, DataSource, ConnectionStatus } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+      
+      console.log('[IPC] LocalDb exists:', !!localDb);
+      console.log('[IPC] ApiClient exists:', !!apiClient);
+      console.log('[IPC] ApiClient baseUrl:', (apiClient as any).config?.baseUrl || 'unknown');
+      
+      // For login, ALWAYS try server first, regardless of manual override
+      // Manual override only affects data operations, not authentication
+      // This ensures users can always log in when server is available
+      const manualOverride = dataAccessService.getManualOverride();
+      
+      console.log('[IPC] Login - Server preference:', {
+        manualOverride: manualOverride.enabled ? manualOverride.dataSource : 'auto',
+        note: 'Login always tries server first (manual override only affects data operations)',
+        willTryServer: true,
+      });
+      
+      const userRepo = new UserRepository(localDb, apiClient);
+      console.log('[IPC] UserRepository created, calling login...');
+      
+      // Always pass undefined to let UserRepository try server first
+      // This ensures login works even if user has set manual override to local
+      const result = await userRepo.login(
+        { username, password },
+        { useServer: undefined } // Always try server first for login
+      );
+      
+      console.log('[IPC] Login result:', {
+        success: result.success,
+        hasUser: !!result.user,
+        hasToken: !!result.token,
+        isOffline: result.isOffline,
+        error: result.error,
+      });
+
+      if (result.success && result.user) {
+        // Set auth token if available (online login)
+        if (result.token) {
+          dataAccessService.setAuthToken(result.token);
+        }
+        
+        // Trigger sync only if online login (has token)
+        if (!result.isOffline && result.token) {
+          try {
+            const { SyncService } = await import('@monorepo/shared-data-access');
+            const syncService = new SyncService(localDb, apiClient, {
+              syncInterval: 3600000,
+              batchSize: 100,
+            });
+            await syncService.initialize();
+            
+            // Sync User table immediately to get passwordHash for offline login
+            console.log('[IPC] Syncing User table immediately after login...');
+            await syncService.syncUserTable().catch((error) => {
+              console.error('[IPC] User table sync failed:', error);
+            });
+            
+            // Perform full sync in background
+            syncService.syncAll().catch((error) => {
+              console.error('[IPC] Full sync after login failed:', error);
+            });
+            
+            // Start periodic sync
+            syncService.startPeriodicSync();
+          } catch (error) {
+            console.warn('[IPC] Failed to start sync after login:', error);
+          }
+        } else if (result.isOffline) {
+          console.log('[IPC] Offline login successful - user can work offline');
+        }
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[IPC] auth:login error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Login failed',
+      };
+    }
+  });
+
+  ipcMain.handle('auth:logout', async () => {
+    try {
+      if (dataAccessService) {
+        dataAccessService.clearAuthToken();
+      }
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] auth:logout error:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Logout failed' };
+    }
+  });
+
   // Print handler for silent printing
   ipcMain.handle('print-content', async (event, options) => {
     try {
