@@ -56,15 +56,16 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
 
           // Restore token if available
           if (session.token) {
-            dataAccessService.setAuthToken(session.token);
-
-            // If we were online, try to initialize sync
+            // If we were online, try to initialize sync with token
             if (!session.isOffline) {
               try {
-                await dataAccessService.initializeSyncService(session.user.id);
+                await dataAccessService.initializeSyncService(session.token);
               } catch (error) {
                 console.warn('[WebAuthProvider] Failed to initialize sync on restore:', error);
               }
+            } else {
+              // Just set the token for offline mode
+              dataAccessService.setAuthToken(session.token);
             }
           }
 
@@ -112,7 +113,7 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
         // Initialize sync if online
         if (!result.isOffline && result.token) {
           try {
-            await dataAccessService.initializeSyncService(result.user.id);
+            await dataAccessService.initializeSyncService(result.token);
           } catch (error) {
             console.warn('[WebAuthProvider] Failed to initialize sync after login:', error);
           }
@@ -137,14 +138,23 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
     setIsOffline(false);
 
     try {
+      // Stop sync service
+      await dataAccessService.stopSyncService();
+
+      // Clear auth token
+      dataAccessService.clearAuthToken();
+
+      // Logout from repository
       await userRepository.logout();
+
+      // Clear session storage
       sessionStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(STORAGE_KEY);
+
+      console.log('[WebAuthProvider] Logged out - sync stopped and token cleared');
     } catch (error) {
       console.warn('[WebAuthProvider] Logout cleanup error:', error);
     }
-
-    console.log('[WebAuthProvider] Logged out');
   }, []);
 
   const value = useMemo<WebAuthContextValue>(

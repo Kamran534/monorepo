@@ -61,10 +61,22 @@ try {
         return ipcRenderer.invoke('auth:logout');
       },
     },
+    // Sync API
+    sync: {
+      triggerManual: () => {
+        console.log('[Preload] sync.triggerManual called');
+        return ipcRenderer.invoke('sync:trigger-manual');
+      },
+      getStatus: () => {
+        console.log('[Preload] sync.getStatus called');
+        return ipcRenderer.invoke('sync:get-status');
+      },
+    },
   });
-  console.log('[Preload] Exposed electronAPI with connection and auth API');
+  console.log('[Preload] Exposed electronAPI with connection, auth, and sync API');
   console.log('[Preload] Connection methods exposed: getState, setManual, getManualOverride, check, onStateChange');
   console.log('[Preload] Auth methods exposed: login, logout');
+  console.log('[Preload] Sync methods exposed: triggerManual, getStatus');
 } catch (error) {
   console.error('[Preload] Failed to expose APIs:', error);
 }

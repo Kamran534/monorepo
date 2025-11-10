@@ -370,6 +370,11 @@ export class WebIndexedDbClient implements LocalDbClient {
   async query<T>(sql: string, params?: unknown[]): Promise<T[]> {
     this.ensureInitialized();
 
+    console.log('[WebIndexedDbClient] query() called with:', {
+      sql: sql.substring(0, 150) + (sql.length > 150 ? '...' : ''),
+      paramsCount: params?.length || 0,
+    });
+
     // Parse SQL to extract store name and WHERE conditions
     let storeName: string;
     let whereConditions: Array<{ field: string; value: any; operator?: string }> = [];
@@ -471,6 +476,12 @@ export class WebIndexedDbClient implements LocalDbClient {
           data = data.slice(0, limit);
         }
 
+        console.log('[WebIndexedDbClient] Query success:', {
+          storeName,
+          resultCount: data.length,
+          firstId: data[0]?.id,
+        });
+
         resolve(data);
       };
 
@@ -483,13 +494,26 @@ export class WebIndexedDbClient implements LocalDbClient {
   /**
    * Execute an operation (insert, update, delete)
    * Accepts SQL-like strings:
-   * - "INSERT INTO storeName VALUES (?)" - params[0] should be the data object
-   * - "UPDATE storeName SET ... WHERE id = ?" - params[0] should be the data object
+   * - "INSERT INTO storeName (col1, col2) VALUES (?, ?)" - params array of values
+   * - "UPDATE storeName SET col1 = ?, col2 = ? WHERE id = ?" - params array of values
    * - "DELETE FROM storeName WHERE id = ?" - params[0] should be the key
+   * - "PRAGMA foreign_keys = OFF" - Silently ignored (IndexedDB doesn't have FK constraints)
    * Or simple format: "storeName:operation" where operation is 'add', 'put', or 'delete'
    */
   async execute(sql: string, params?: unknown[]): Promise<void> {
     this.ensureInitialized();
+
+    // Handle PRAGMA statements (SQLite-specific, ignore for IndexedDB)
+    if (sql.trim().toUpperCase().startsWith('PRAGMA')) {
+      // Silently ignore PRAGMA statements (e.g., "PRAGMA foreign_keys = OFF")
+      console.log('[WebIndexedDbClient] Ignoring PRAGMA statement');
+      return Promise.resolve();
+    }
+
+    console.log('[WebIndexedDbClient] execute() called with:', {
+      sql: sql.substring(0, 150) + (sql.length > 150 ? '...' : ''),
+      paramsCount: params?.length || 0,
+    });
 
     let storeName: string;
     let operation: 'add' | 'put' | 'delete';
@@ -502,22 +526,60 @@ export class WebIndexedDbClient implements LocalDbClient {
       operation = op.trim() as 'add' | 'put' | 'delete';
       data = params && params.length > 0 ? params[0] : undefined;
     } else if (sql.trim().toUpperCase().startsWith('INSERT')) {
-      // Parse INSERT statement
-      const match = sql.match(/INSERT\s+INTO\s+(\w+)/i);
+      // Parse INSERT statement: "INSERT INTO storeName (col1, col2, col3) VALUES (?, ?, ?)"
+      const match = sql.match(/INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)/i);
       if (match) {
         storeName = match[1];
         operation = 'add';
-        data = params && params.length > 0 ? params[0] : undefined;
+
+        // Extract column names
+        const columns = match[2].split(',').map(c => c.trim());
+
+        // Map params array to object using column names
+        if (params && params.length === columns.length) {
+          data = {};
+          columns.forEach((col, index) => {
+            data[col] = params[index];
+          });
+        } else {
+          throw new Error(`INSERT param count (${params?.length}) doesn't match column count (${columns.length})`);
+        }
       } else {
         throw new Error(`Invalid INSERT statement: ${sql}`);
       }
     } else if (sql.trim().toUpperCase().startsWith('UPDATE')) {
-      // Parse UPDATE statement
-      const match = sql.match(/UPDATE\s+(\w+)/i);
+      // Parse UPDATE statement: "UPDATE storeName SET col1 = ?, col2 = ? WHERE id = ?"
+      const match = sql.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)/i);
       if (match) {
         storeName = match[1];
         operation = 'put';
-        data = params && params.length > 0 ? params[0] : undefined;
+
+        // Extract SET clause column names
+        const setClause = match[2];
+        const whereClause = match[3];
+
+        // Parse SET columns: "col1 = ?, col2 = ?, col3 = ?"
+        const setMatches = setClause.match(/(\w+)\s*=\s*\?/g);
+        if (setMatches && params) {
+          data = {};
+          setMatches.forEach((setMatch, index) => {
+            const colMatch = setMatch.match(/(\w+)/);
+            if (colMatch) {
+              data[colMatch[1]] = params[index];
+            }
+          });
+
+          // Parse WHERE clause to get the id field and value
+          const whereMatch = whereClause.match(/(\w+)\s*=\s*\?/);
+          if (whereMatch && params.length > setMatches.length) {
+            // Add the WHERE field (usually 'id')
+            const idField = whereMatch[1];
+            const idValue = params[params.length - 1];
+            data[idField] = idValue;
+          }
+        } else {
+          throw new Error(`Invalid UPDATE statement format: ${sql}`);
+        }
       } else {
         throw new Error(`Invalid UPDATE statement: ${sql}`);
       }
@@ -537,6 +599,13 @@ export class WebIndexedDbClient implements LocalDbClient {
       operation = 'put';
       data = params && params.length > 0 ? params[0] : undefined;
     }
+
+    console.log('[WebIndexedDbClient] Parsed operation:', {
+      storeName,
+      operation,
+      dataKeys: data ? Object.keys(data) : [],
+      dataId: data?.id,
+    });
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(storeName, 'readwrite');
@@ -559,10 +628,21 @@ export class WebIndexedDbClient implements LocalDbClient {
       }
 
       request.onsuccess = () => {
+        console.log('[WebIndexedDbClient] Execute success:', {
+          storeName,
+          operation,
+          dataId: data?.id,
+        });
         resolve();
       };
 
       request.onerror = () => {
+        console.error('[WebIndexedDbClient] Execute error:', {
+          storeName,
+          operation,
+          error: request.error?.message,
+          dataId: data?.id,
+        });
         reject(new Error(`Execute failed: ${request.error?.message}`));
       };
     });

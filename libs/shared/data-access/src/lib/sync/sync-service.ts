@@ -105,6 +105,18 @@ export class SyncService {
   }
 
   /**
+   * Safely check if value is a Buffer (works in both Node.js and browser)
+   */
+  private isBuffer(value: any): boolean {
+    // Buffer only exists in Node.js environments (desktop app)
+    // In browsers (web app), this will safely return false
+    if (typeof Buffer !== 'undefined' && Buffer.isBuffer) {
+      return Buffer.isBuffer(value);
+    }
+    return false;
+  }
+
+  /**
    * Initialize sync service
    */
   async initialize(): Promise<void> {
@@ -202,21 +214,31 @@ export class SyncService {
         throw new Error('Server is offline. Cannot sync.');
       }
 
-      // Sync each table
-      for (const table of SYNC_TABLES) {
-        try {
-          // Upload local changes first
-          const uploadResult = await this.syncTable(table, SyncDirection.UPLOAD);
-          results.push(uploadResult);
+      // Disable foreign key constraints during sync to allow bulk inserts
+      console.log('[SyncService] Disabling foreign key constraints for sync...');
+      await this.localDb.execute('PRAGMA foreign_keys = OFF');
 
-          // Then download server changes
-          const downloadResult = await this.syncTable(table, SyncDirection.DOWNLOAD);
-          results.push(downloadResult);
-        } catch (error) {
-          const errorMsg = `Error syncing table ${table}: ${error instanceof Error ? error.message : String(error)}`;
-          errors.push(errorMsg);
-          console.error(`[SyncService] ${errorMsg}`);
+      try {
+        // Sync each table
+        for (const table of SYNC_TABLES) {
+          try {
+            // Upload local changes first
+            const uploadResult = await this.syncTable(table, SyncDirection.UPLOAD);
+            results.push(uploadResult);
+
+            // Then download server changes
+            const downloadResult = await this.syncTable(table, SyncDirection.DOWNLOAD);
+            results.push(downloadResult);
+          } catch (error) {
+            const errorMsg = `Error syncing table ${table}: ${error instanceof Error ? error.message : String(error)}`;
+            errors.push(errorMsg);
+            console.error(`[SyncService] ${errorMsg}`);
+          }
         }
+      } finally {
+        // Always re-enable foreign key constraints
+        console.log('[SyncService] Re-enabling foreign key constraints...');
+        await this.localDb.execute('PRAGMA foreign_keys = ON');
       }
 
       const endTime = new Date();
@@ -232,6 +254,41 @@ export class SyncService {
         results,
         errors,
       };
+
+      // Log comprehensive summary
+      console.log('\n' + '='.repeat(60));
+      console.log('📊 SYNC SUMMARY');
+      console.log('='.repeat(60));
+      console.log(`Status: ${summary.success ? '✓ SUCCESS' : '✗ FAILED'}`);
+      console.log(`Duration: ${summary.duration}ms`);
+      console.log(`Tables Synced: ${summary.tablesSynced}`);
+      console.log(`Total Records: ${summary.totalRecordsProcessed}`);
+
+      // Group results by table (upload + download)
+      const tableResults = new Map<string, { upload: SyncResult; download: SyncResult }>();
+      for (const r of results) {
+        if (!tableResults.has(r.table)) {
+          tableResults.set(r.table, { upload: {} as SyncResult, download: {} as SyncResult });
+        }
+        const entry = tableResults.get(r.table)!;
+        if (r.direction === SyncDirection.UPLOAD) {
+          entry.upload = r;
+        } else {
+          entry.download = r;
+        }
+      }
+
+      console.log('\nTable Details:');
+      for (const [table, { download }] of tableResults) {
+        const status = download.errors?.length > 0 ? '✗' : '✓';
+        console.log(`  ${status} ${table}: ${download.recordsCreated} created, ${download.recordsUpdated} updated${download.errors?.length > 0 ? ` (${download.errors.length} errors)` : ''}`);
+      }
+
+      if (errors.length > 0) {
+        console.log('\n❌ Errors:');
+        errors.forEach(err => console.log(`  - ${err}`));
+      }
+      console.log('='.repeat(60) + '\n');
 
       this.lastSyncTime = endTime;
       return summary;
@@ -259,6 +316,8 @@ export class SyncService {
       errors: [],
       duration: 0,
     };
+
+    console.log(`[SyncService] → Starting ${direction} for ${tableName}...`);
 
     try {
       if (direction === SyncDirection.UPLOAD) {
@@ -334,78 +393,226 @@ export class SyncService {
 
   /**
    * Download server changes to local
+   * Forces full download (ignores lastSyncedAt) - same approach as User table
+   * Handles pagination to download all records
    */
   private async downloadTable(
     tableName: string,
     result: SyncResult
   ): Promise<void> {
     try {
-      // Get last sync time for this table
-      const metadata = await this.getTableMetadata(tableName);
-      const lastSyncedAt = metadata.lastSyncedAt
-        ? metadata.lastSyncedAt.toISOString()
-        : null;
+      // Force full download by not using lastSyncedAt (same as User table logic)
+      // This ensures we get all records on initial sync
+      console.log(`[SyncService] Downloading all ${tableName} records from server (forced full download)...`);
 
-      // Download from server
-      const response = await this.apiClient.get<{
-        success: boolean;
-        data: {
-          records: SyncRecord[];
-          hasMore: boolean;
-          totalCount: number;
-        };
-      }>(`/api/sync/${tableName}/download`, {
-        lastSyncedAt,
-        limit: this.config.batchSize,
-      });
+      let offset = 0;
+      let hasMore = true;
+      const allRecords: SyncRecord[] = [];
 
-      if (response.success && response.data) {
-        const records = response.data.records || [];
-        result.recordsProcessed = records.length;
+      // Step 1: Download ALL records first (with pagination)
+      while (hasMore) {
+        // Download from server (don't pass lastSyncedAt to get all records)
+        const response = await this.apiClient.get<{
+          success: boolean;
+          data: {
+            records: SyncRecord[];
+            hasMore: boolean;
+            totalCount: number;
+          };
+        }>(`/api/sync/${tableName}/download`, {
+          limit: this.config.batchSize,
+          offset,
+          // Explicitly don't pass lastSyncedAt to force full download
+        });
 
-        // Upsert records in local DB
-        for (const record of records) {
+        console.log(`[SyncService] API response for ${tableName} (offset ${offset}):`, {
+          success: response.success,
+          recordCount: response.data?.records?.length || 0,
+          hasMore: response.data?.hasMore,
+          totalCount: response.data?.totalCount,
+        });
+
+        if (response.success && response.data) {
+          const records = response.data.records || [];
+          hasMore = response.data.hasMore || false;
+          allRecords.push(...records);
+
+          // Update offset for next batch
+          offset += records.length;
+
+          // If no more records, break
+          if (records.length === 0 || !hasMore) {
+            break;
+          }
+        } else {
+          throw new Error('Download failed: Invalid response');
+        }
+      }
+
+      // Step 2: Sort all records to handle foreign key dependencies
+      let sortedRecords = [...allRecords];
+      if (tableName === 'Category') {
+        // Topological sort for categories: parents first, then children
+        sortedRecords = this.sortCategoriesByHierarchy(allRecords);
+      }
+
+      // Step 3: Insert/update all records in sorted order
+      const now = new Date().toISOString();
+      const failedRecords: SyncRecord[] = [];
+      
+      for (const record of sortedRecords) {
+        try {
+          // Check if record exists
+          const existing = await this.localDb.query<SyncRecord>(
+            `SELECT id FROM ${tableName} WHERE id = ?`,
+            [record.id]
+          );
+
+          if (existing.length > 0) {
+            // Update existing record
+            await this.updateLocalRecord(tableName, record, now);
+            result.recordsUpdated++;
+          } else {
+            // Insert new record
+            try {
+              await this.insertLocalRecord(tableName, record, now);
+              result.recordsCreated++;
+            } catch (insertError: any) {
+              // Handle foreign key constraint errors
+              if (insertError?.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+                // Retry this record later (after other records are inserted)
+                failedRecords.push(record);
+                console.warn(`[SyncService] Foreign key constraint for ${tableName} record ${record.id}, will retry`);
+              } else {
+                throw insertError;
+              }
+            }
+          }
+
+          // Handle soft deletes
+          if (record.is_deleted) {
+            await this.localDb.execute(
+              `UPDATE ${tableName} SET is_deleted = 1, sync_status = 'synced', last_synced_at = ? WHERE id = ?`,
+              [now, record.id]
+            );
+            result.recordsDeleted++;
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          // Don't add foreign key errors to result.errors yet, we'll retry them
+          if ((error as any)?.code !== 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+            result.errors.push(
+              `Error processing record ${record.id}: ${errorMsg}`
+            );
+          } else {
+            failedRecords.push(record);
+          }
+        }
+      }
+
+      // Step 4: Retry failed records (foreign key constraints should be resolved now)
+      if (failedRecords.length > 0) {
+        console.log(`[SyncService] Retrying ${failedRecords.length} ${tableName} records with foreign key constraints...`);
+        for (const record of failedRecords) {
           try {
-            // Check if record exists
             const existing = await this.localDb.query<SyncRecord>(
               `SELECT id FROM ${tableName} WHERE id = ?`,
               [record.id]
             );
 
-            const now = new Date().toISOString();
-            if (existing.length > 0) {
-              // Update existing record
-              await this.updateLocalRecord(tableName, record, now);
-              result.recordsUpdated++;
-            } else {
-              // Insert new record
+            if (existing.length === 0) {
               await this.insertLocalRecord(tableName, record, now);
               result.recordsCreated++;
+              console.log(`[SyncService] Successfully inserted ${tableName} record ${record.id} on retry`);
             }
-
-            // Handle soft deletes
-            if (record.is_deleted) {
-              await this.localDb.execute(
-                `UPDATE ${tableName} SET is_deleted = 1, sync_status = 'synced', last_synced_at = ? WHERE id = ?`,
-                [now, record.id]
-              );
-              result.recordsDeleted++;
-            }
-          } catch (error) {
+          } catch (retryError) {
             result.errors.push(
-              `Error processing record ${record.id}: ${error instanceof Error ? error.message : String(error)}`
+              `Error processing record ${record.id} on retry: ${retryError instanceof Error ? retryError.message : String(retryError)}`
             );
           }
         }
-      } else {
-        throw new Error('Download failed: Invalid response');
+      }
+
+      const totalDownloaded = allRecords.length;
+
+      result.recordsProcessed = totalDownloaded;
+      console.log(`[SyncService] ✓ Downloaded ${tableName}:`, {
+        totalRecords: totalDownloaded,
+        created: result.recordsCreated,
+        updated: result.recordsUpdated,
+        deleted: result.recordsDeleted,
+        errors: result.errors.length,
+      });
+
+      if (result.errors.length > 0) {
+        console.error(`[SyncService] ✗ Errors downloading ${tableName}:`, result.errors);
       }
     } catch (error) {
-      result.errors.push(
-        `Download error: ${error instanceof Error ? error.message : String(error)}`
-      );
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      result.errors.push(`Download error: ${errorMsg}`);
+      console.error(`[SyncService] ✗ Download failed for ${tableName}:`, errorMsg);
       throw error;
     }
+  }
+
+  /**
+   * Sort categories by hierarchy (topological sort)
+   * Parents come before children, handles multi-level hierarchies
+   */
+  private sortCategoriesByHierarchy(categories: SyncRecord[]): SyncRecord[] {
+    const categoryMap = new Map<string, SyncRecord>();
+    const sorted: SyncRecord[] = [];
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+
+    // Build map of all categories
+    for (const cat of categories) {
+      categoryMap.set(cat.id, cat);
+    }
+
+    // Helper function to get parent ID
+    const getParentId = (cat: SyncRecord): string | null => {
+      return (cat as any).parentCategoryId || (cat as any).parent_category_id || null;
+    };
+
+    // Topological sort using DFS
+    const visit = (category: SyncRecord) => {
+      const catId = category.id;
+      
+      if (visiting.has(catId)) {
+        // Circular reference detected, skip
+        console.warn(`[SyncService] Circular reference detected in category ${catId}`);
+        return;
+      }
+
+      if (visited.has(catId)) {
+        return;
+      }
+
+      visiting.add(catId);
+
+      // Visit parent first if it exists
+      const parentId = getParentId(category);
+      if (parentId) {
+        const parent = categoryMap.get(parentId);
+        if (parent && !visited.has(parentId)) {
+          visit(parent);
+        }
+      }
+
+      visiting.delete(catId);
+      visited.add(catId);
+      sorted.push(category);
+    };
+
+    // Visit all categories
+    for (const category of categories) {
+      if (!visited.has(category.id)) {
+        visit(category);
+      }
+    }
+
+    return sorted;
   }
 
   /**
@@ -445,7 +652,7 @@ export class SyncService {
       return value;
     }
     
-    if (Buffer.isBuffer(value)) {
+    if (this.isBuffer(value)) {
       return value;
     }
 
@@ -472,6 +679,76 @@ export class SyncService {
   }
 
   /**
+   * Check if a field name represents a Prisma relation (not a scalar field or JSON field)
+   * Relations don't have "Id" suffix - that's the foreign key field
+   * e.g., "parentCategory" is a relation, "parentCategoryId" is the FK
+   */
+  private isRelationField(key: string, value: any): boolean {
+    // If the field ends with "Id" or "_id", it's a foreign key, not a relation
+    if (key.endsWith('Id') || key.endsWith('_id')) {
+      return false;
+    }
+
+    // Known JSON fields that should be kept (these are stored as JSON in SQLite)
+    const jsonFields = [
+      'options', 'metadata', 'dimensions', 'settings', 'config',
+      'customFields', 'attributes', 'properties', 'data'
+    ];
+
+    // If it's a known JSON field, keep it
+    if (jsonFields.includes(key)) {
+      return false;
+    }
+
+    // Exact match list of known Prisma relation fields (without "Id" suffix)
+    const exactRelationFields = [
+      'category', 'parentCategory', 'brand', 'supplier', 'product',
+      'variant', 'location', 'user', 'role', 'customer', 'order',
+      'taxCategory', 'taxRate', 'paymentMethod', 'cashRegister',
+      'expenseAccount', 'customerGroup', 'bankAccount'
+    ];
+
+    // Plural relation fields (one-to-many)
+    const pluralRelationFields = [
+      'categories', 'products', 'variants', 'inventoryItems',
+      'locations', 'users', 'customers', 'orders', 'addresses',
+      'lineItems', 'payments', 'discounts', 'items', 'lines'
+    ];
+
+    // Check exact match (case-insensitive)
+    const keyLower = key.toLowerCase();
+    if (exactRelationFields.some(f => f.toLowerCase() === keyLower)) {
+      return true;
+    }
+    if (pluralRelationFields.some(f => f.toLowerCase() === keyLower)) {
+      return true;
+    }
+
+    // If value is null/undefined, we can't check further
+    if (value === null || value === undefined) {
+      return false;
+    }
+
+    // If not an object, it's definitely not a relation
+    if (typeof value !== 'object') {
+      return false;
+    }
+
+    // If it's an array, keep it (could be a JSON array)
+    if (Array.isArray(value)) {
+      return false;
+    }
+
+    // If it's an object with an 'id' field, it's likely a relation
+    if (typeof value === 'object' && 'id' in value) {
+      return true;
+    }
+
+    // Default: not a relation
+    return false;
+  }
+
+  /**
    * Insert a record into local database
    */
   private async insertLocalRecord(
@@ -479,16 +756,24 @@ export class SyncService {
     record: SyncRecord,
     syncedAt: string
   ): Promise<void> {
-    // Remove sync-specific fields and sanitize all values
+    // Remove sync-specific fields, relation objects, and sanitize all values
     const cleanRecord: any = {};
     for (const [key, value] of Object.entries(record)) {
-      if (key !== 'sync_status' && key !== 'last_synced_at') {
-        const sanitized = this.sanitizeValueForSqlite(value);
-        // Include the value (even if null, as SQLite can handle null)
-        // But we'll only include the key if the value is not undefined
-        if (value !== undefined) {
-          cleanRecord[key] = sanitized;
-        }
+      // Skip sync fields
+      if (key === 'sync_status' || key === 'last_synced_at') {
+        continue;
+      }
+
+      // Skip Prisma relation objects (keep only scalar fields and JSON fields)
+      if (this.isRelationField(key, value)) {
+        console.log(`[SyncService] Skipping relation field ${tableName}.${key}`);
+        continue;
+      }
+
+      // Sanitize and include the value
+      const sanitized = this.sanitizeValueForSqlite(value);
+      if (value !== undefined) {
+        cleanRecord[key] = sanitized;
       }
     }
 
@@ -512,7 +797,7 @@ export class SyncService {
     // Final sanitization check - ensure all values are valid SQLite types
     const sanitizedValues = values.map((v, index) => {
       // Double-check the value is valid
-      if (v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'bigint' || Buffer.isBuffer(v)) {
+      if (v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'bigint' || this.isBuffer(v)) {
         return v;
       }
       // If somehow we still have an invalid type, log and convert to string
@@ -528,7 +813,7 @@ export class SyncService {
 
     // Final check on sync values too
     const finalParams = [...sanitizedValues, 'synced', syncedAt].map((v, index) => {
-      if (v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'bigint' || Buffer.isBuffer(v)) {
+      if (v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'bigint' || this.isBuffer(v)) {
         return v;
       }
       console.error(`[SyncService] Invalid SQLite type in final params at index ${index}:`, typeof v, v);
@@ -565,19 +850,25 @@ export class SyncService {
     record: SyncRecord,
     syncedAt: string
   ): Promise<void> {
-    // Remove sync-specific fields, id, and sanitize all values
+    // Remove sync-specific fields, id, relation objects, and sanitize all values
     const cleanRecord: any = {};
     for (const [key, value] of Object.entries(record)) {
-      if (
-        key !== 'id' &&
-        key !== 'sync_status' &&
-        key !== 'last_synced_at'
-      ) {
-        const sanitized = this.sanitizeValueForSqlite(value);
-        // Only include non-null values (null means the field should be omitted)
-        if (sanitized !== null) {
-          cleanRecord[key] = sanitized;
-        }
+      // Skip id and sync fields
+      if (key === 'id' || key === 'sync_status' || key === 'last_synced_at') {
+        continue;
+      }
+
+      // Skip Prisma relation objects
+      if (this.isRelationField(key, value)) {
+        console.log(`[SyncService] Skipping relation field ${tableName}.${key} in update`);
+        continue;
+      }
+
+      // Sanitize and include the value
+      const sanitized = this.sanitizeValueForSqlite(value);
+      // Only include non-null values (null means the field should be omitted)
+      if (sanitized !== null) {
+        cleanRecord[key] = sanitized;
       }
     }
 
@@ -732,6 +1023,7 @@ export class SyncService {
 
   /**
    * Force download all users from server (ignores lastSyncedAt)
+   * Handles pagination to download all users
    */
   private async downloadUserTableForced(): Promise<{ success: boolean; recordsDownloaded: number; errors: string[] }> {
     const result = {
@@ -741,55 +1033,72 @@ export class SyncService {
     };
 
     try {
-      // Download ALL users (no lastSyncedAt filter)
-      // Don't pass lastSyncedAt to get all users
+      // Download ALL users (no lastSyncedAt filter) with pagination
       console.log('[SyncService] Downloading all users from server (no lastSyncedAt filter)...');
-      const response = await this.apiClient.get<{
-        success: boolean;
-        data: {
-          records: SyncRecord[];
-          hasMore: boolean;
-          totalCount: number;
-        };
-      }>(`/api/sync/User/download`, {
-        limit: 1000, // Large limit to get all users
-        offset: 0,
-        // Explicitly don't pass lastSyncedAt
-      });
+      
+      let offset = 0;
+      let hasMore = true;
+      let totalDownloaded = 0;
 
-      if (response.success && response.data) {
-        const records = response.data.records || [];
-        console.log('[SyncService] Downloaded', records.length, 'users from server');
-        result.recordsDownloaded = records.length;
+      // Download all users with pagination
+      while (hasMore) {
+        const response = await this.apiClient.get<{
+          success: boolean;
+          data: {
+            records: SyncRecord[];
+            hasMore: boolean;
+            totalCount: number;
+          };
+        }>(`/api/sync/User/download`, {
+          limit: this.config.batchSize,
+          offset,
+          // Explicitly don't pass lastSyncedAt to get all users
+        });
 
-        // Upsert records in local DB
-        const now = new Date().toISOString();
-        for (const record of records) {
-          try {
-            // Check if record exists
-            const existing = await this.localDb.query<SyncRecord>(
-              `SELECT id FROM User WHERE id = ?`,
-              [record.id]
-            );
+        if (response.success && response.data) {
+          const records = response.data.records || [];
+          hasMore = response.data.hasMore || false;
+          totalDownloaded += records.length;
 
-            if (existing.length > 0) {
-              // Update existing record
-              await this.updateLocalRecord('User', record, now);
-            } else {
-              // Insert new record
-              await this.insertLocalRecord('User', record, now);
+          // Upsert records in local DB
+          const now = new Date().toISOString();
+          for (const record of records) {
+            try {
+              // Check if record exists
+              const existing = await this.localDb.query<SyncRecord>(
+                `SELECT id FROM User WHERE id = ?`,
+                [record.id]
+              );
+
+              if (existing.length > 0) {
+                // Update existing record
+                await this.updateLocalRecord('User', record, now);
+              } else {
+                // Insert new record
+                await this.insertLocalRecord('User', record, now);
+              }
+            } catch (error) {
+              const errorMsg = `Error processing user ${record.id}: ${error instanceof Error ? error.message : String(error)}`;
+              result.errors.push(errorMsg);
+              console.error('[SyncService]', errorMsg);
             }
-          } catch (error) {
-            const errorMsg = `Error processing user ${record.id}: ${error instanceof Error ? error.message : String(error)}`;
-            result.errors.push(errorMsg);
-            console.error('[SyncService]', errorMsg);
           }
-        }
 
-        result.success = result.errors.length === 0;
-      } else {
-        throw new Error('Download failed: Invalid response');
+          // Update offset for next batch
+          offset += records.length;
+
+          // If no more records, break
+          if (records.length === 0 || !hasMore) {
+            break;
+          }
+        } else {
+          throw new Error('Download failed: Invalid response');
+        }
       }
+
+      result.recordsDownloaded = totalDownloaded;
+      result.success = result.errors.length === 0;
+      console.log(`[SyncService] Downloaded ${totalDownloaded} users from server`);
     } catch (error) {
       const errorMsg = `Download error: ${error instanceof Error ? error.message : String(error)}`;
       result.errors.push(errorMsg);

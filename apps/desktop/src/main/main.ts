@@ -183,36 +183,16 @@ function setupIpcHandlers(): void {
       });
 
       if (result.success && result.user) {
-        // Set auth token if available (online login)
-        if (result.token) {
-          dataAccessService.setAuthToken(result.token);
-        }
-        
         // Trigger sync only if online login (has token)
         if (!result.isOffline && result.token) {
           try {
-            const { SyncService } = await import('@monorepo/shared-data-access');
-            const syncService = new SyncService(localDb, apiClient, {
-              syncInterval: 3600000,
-              batchSize: 100,
-            });
-            await syncService.initialize();
-            
-            // Sync User table immediately to get passwordHash for offline login
-            console.log('[IPC] Syncing User table immediately after login...');
-            await syncService.syncUserTable().catch((error) => {
-              console.error('[IPC] User table sync failed:', error);
-            });
-            
-            // Perform full sync in background
-            syncService.syncAll().catch((error) => {
-              console.error('[IPC] Full sync after login failed:', error);
-            });
-            
-            // Start periodic sync
-            syncService.startPeriodicSync();
+            // Initialize sync service with auth token
+            // This will: set auth token, sync User table immediately, start full sync, and start periodic sync
+            console.log('[IPC] Initializing sync service after successful login...');
+            await dataAccessService.initializeSyncService(result.token);
+            console.log('[IPC] Sync service initialized successfully');
           } catch (error) {
-            console.warn('[IPC] Failed to start sync after login:', error);
+            console.warn('[IPC] Failed to initialize sync service after login:', error);
           }
         } else if (result.isOffline) {
           console.log('[IPC] Offline login successful - user can work offline');
@@ -232,12 +212,62 @@ function setupIpcHandlers(): void {
   ipcMain.handle('auth:logout', async () => {
     try {
       if (dataAccessService) {
+        // Stop sync service
+        console.log('[IPC] Stopping sync service on logout...');
+        await dataAccessService.stopSyncService();
+
+        // Clear auth token
         dataAccessService.clearAuthToken();
+        console.log('[IPC] Logout complete - sync stopped and token cleared');
       }
       return { success: true };
     } catch (error) {
       console.error('[IPC] auth:logout error:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Logout failed' };
+    }
+  });
+
+  // Sync handlers
+  ipcMain.handle('sync:trigger-manual', async () => {
+    try {
+      if (!dataAccessService) {
+        return { success: false, error: 'DataAccessService not initialized' };
+      }
+
+      console.log('[IPC] Manual sync triggered...');
+      await dataAccessService.triggerManualSync();
+      console.log('[IPC] Manual sync completed');
+
+      return {
+        success: true,
+        lastSyncTime: dataAccessService.getLastSyncTime(),
+      };
+    } catch (error) {
+      console.error('[IPC] Manual sync failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Manual sync failed',
+      };
+    }
+  });
+
+  ipcMain.handle('sync:get-status', async () => {
+    try {
+      if (!dataAccessService) {
+        return { success: false, error: 'DataAccessService not initialized' };
+      }
+
+      return {
+        success: true,
+        isInProgress: dataAccessService.isSyncInProgress(),
+        lastSyncTime: dataAccessService.getLastSyncTime(),
+      };
+    } catch (error) {
+      console.error('[IPC] Get sync status failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get sync status',
+      };
     }
   });
 

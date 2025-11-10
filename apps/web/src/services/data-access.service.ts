@@ -156,15 +156,25 @@ class WebDataAccessService {
 
   /**
    * Initialize sync service after user login
-   * This should be called after successful online login
+   * This should be called after successful online login with auth token
    */
-  async initializeSyncService(userId: string): Promise<void> {
-    if (!this.localDb || !this.apiClient) {
-      console.warn('[WebDataAccessService] Cannot initialize sync: DB or API not ready');
-      return;
-    }
-
+  async initializeSyncService(authToken: string): Promise<void> {
     try {
+      // Stop existing sync service if any
+      if (this.syncService) {
+        console.log('[WebDataAccessService] Stopping existing sync service...');
+        this.syncService.stopPeriodicSync();
+        await this.syncService.close();
+      }
+
+      if (!this.localDb || !this.apiClient) {
+        throw new Error('Local DB and API client must be initialized before sync service');
+      }
+
+      // Set auth token
+      this.apiClient.setAuthToken(authToken);
+
+      console.log('[WebDataAccessService] Initializing sync service...');
       this.syncService = new SyncService(this.localDb, this.apiClient, {
         syncInterval: 3600000, // 1 hour
         batchSize: 100,
@@ -175,15 +185,37 @@ class WebDataAccessService {
       await this.syncService.initialize();
       console.log('[WebDataAccessService] Sync service initialized');
 
-      // Sync User table immediately for offline login
-      await this.syncService.syncTable('User', 'download');
-      console.log('[WebDataAccessService] User table synced');
+      // Sync User table immediately to get passwordHash for offline login
+      console.log('[WebDataAccessService] Syncing User table immediately...');
+      await this.syncService.syncUserTable().catch((error) => {
+        console.error('[WebDataAccessService] User table sync failed:', error);
+      });
 
-      // Start periodic sync
+      // Perform full sync in background
+      console.log('[WebDataAccessService] Starting full sync in background...');
+      this.syncService.syncAll().catch((error) => {
+        console.error('[WebDataAccessService] Full sync failed:', error);
+      });
+
+      // Start periodic sync (every 1 hour)
       this.syncService.startPeriodicSync();
-      console.log('[WebDataAccessService] Periodic sync started');
+      console.log('[WebDataAccessService] Periodic sync started (interval: 1 hour)');
     } catch (error) {
-      console.error('[WebDataAccessService] Sync service initialization failed:', error);
+      console.error('[WebDataAccessService] Failed to initialize sync service:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Stop sync service (call on logout)
+   */
+  async stopSyncService(): Promise<void> {
+    if (this.syncService) {
+      console.log('[WebDataAccessService] Stopping sync service...');
+      this.syncService.stopPeriodicSync();
+      await this.syncService.close();
+      this.syncService = null;
+      console.log('[WebDataAccessService] Sync service stopped');
     }
   }
 
@@ -192,6 +224,30 @@ class WebDataAccessService {
    */
   getSyncService(): SyncService | null {
     return this.syncService;
+  }
+
+  /**
+   * Check if sync is in progress
+   */
+  isSyncInProgress(): boolean {
+    return this.syncService?.isSyncInProgress() || false;
+  }
+
+  /**
+   * Get last sync time
+   */
+  getLastSyncTime(): Date | null {
+    return this.syncService?.getLastSyncTime() || null;
+  }
+
+  /**
+   * Manually trigger sync
+   */
+  async triggerManualSync(): Promise<void> {
+    if (!this.syncService) {
+      throw new Error('Sync service not initialized');
+    }
+    await this.syncService.syncAll();
   }
 
   getConnectionState(): ConnectionState {
@@ -318,10 +374,8 @@ class WebDataAccessService {
   async destroy(): Promise<void> {
     console.log('[WebDataAccessService] Destroying...');
 
-    if (this.syncService) {
-      this.syncService.stopPeriodicSync();
-      this.syncService = null;
-    }
+    // Stop sync service first
+    await this.stopSyncService();
 
     if (this.localDb) {
       await this.localDb.close();

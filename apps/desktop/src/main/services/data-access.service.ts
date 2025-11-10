@@ -14,6 +14,7 @@ import {
   getApiClient,
   ConnectionStatus,
   DataSource,
+  SyncService,
   type ConnectionState,
   type LocalDbClient,
   type HttpApiClient,
@@ -65,6 +66,7 @@ class DataAccessService {
   private dataSourceManager: ReturnType<typeof getDataSourceManager>;
   private localDb: LocalDbClient | null = null;
   private apiClient: HttpApiClient | null = null;
+  private syncService: SyncService | null = null;
   private isInitialized = false;
   private manualOverride = false;
   private preferredDataSource: DataSource | null = null;
@@ -349,10 +351,108 @@ class DataAccessService {
   };
 
   /**
+   * Initialize sync service after successful login
+   */
+  async initializeSyncService(authToken: string): Promise<void> {
+    try {
+      // Stop existing sync service if any
+      if (this.syncService) {
+        console.log('[DataAccessService] Stopping existing sync service...');
+        this.syncService.stopPeriodicSync();
+        await this.syncService.close();
+      }
+
+      if (!this.localDb || !this.apiClient) {
+        throw new Error('Local DB and API client must be initialized before sync service');
+      }
+
+      // Set auth token
+      this.apiClient.setAuthToken(authToken);
+
+      console.log('[DataAccessService] Initializing sync service...');
+      this.syncService = new SyncService(this.localDb, this.apiClient, {
+        syncInterval: 3600000, // 1 hour
+        batchSize: 100,
+        retryAttempts: 3,
+        retryDelay: 1000,
+      });
+
+      await this.syncService.initialize();
+      console.log('[DataAccessService] Sync service initialized');
+
+      // Sync User table immediately to get passwordHash for offline login
+      console.log('[DataAccessService] Syncing User table immediately...');
+      await this.syncService.syncUserTable().catch((error) => {
+        console.error('[DataAccessService] User table sync failed:', error);
+      });
+
+      // Perform full sync in background
+      console.log('[DataAccessService] Starting full sync in background...');
+      this.syncService.syncAll().catch((error) => {
+        console.error('[DataAccessService] Full sync failed:', error);
+      });
+
+      // Start periodic sync (every 1 hour)
+      this.syncService.startPeriodicSync();
+      console.log('[DataAccessService] Periodic sync started (interval: 1 hour)');
+    } catch (error) {
+      console.error('[DataAccessService] Failed to initialize sync service:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Stop sync service (call on logout)
+   */
+  async stopSyncService(): Promise<void> {
+    if (this.syncService) {
+      console.log('[DataAccessService] Stopping sync service...');
+      this.syncService.stopPeriodicSync();
+      await this.syncService.close();
+      this.syncService = null;
+      console.log('[DataAccessService] Sync service stopped');
+    }
+  }
+
+  /**
+   * Get sync service instance
+   */
+  getSyncService(): SyncService | null {
+    return this.syncService;
+  }
+
+  /**
+   * Check if sync is in progress
+   */
+  isSyncInProgress(): boolean {
+    return this.syncService?.isSyncInProgress() || false;
+  }
+
+  /**
+   * Get last sync time
+   */
+  getLastSyncTime(): Date | null {
+    return this.syncService?.getLastSyncTime() || null;
+  }
+
+  /**
+   * Manually trigger sync
+   */
+  async triggerManualSync(): Promise<void> {
+    if (!this.syncService) {
+      throw new Error('Sync service not initialized');
+    }
+    await this.syncService.syncAll();
+  }
+
+  /**
    * Clean up resources
    */
   async destroy(): Promise<void> {
     console.log('[DataAccessService] Destroying...');
+
+    // Stop sync service first
+    await this.stopSyncService();
 
     if (this.localDb) {
       await this.localDb.close();
