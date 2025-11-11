@@ -80,7 +80,7 @@ export class WebUserRepository extends BaseRepository {
    * Login user with online/offline support
    * Tries server first, falls back to local if offline
    */
-  async login(username: string, password: string): Promise<LoginResult> {
+  async login(email: string, password: string): Promise<LoginResult> {
     try {
       const sharedRepo = await this.getSharedUserRepo();
       
@@ -91,7 +91,7 @@ export class WebUserRepository extends BaseRepository {
         try {
           // Try online login
           console.log('[WebUserRepository] Attempting online login...');
-          const result = await sharedRepo.login({ username, password }, { useServer: true });
+          const result = await sharedRepo.login({ username: email, password }, { useServer: true });
 
           if (result.success && result.token && result.user) {
             // Set auth token for future API calls
@@ -149,7 +149,7 @@ export class WebUserRepository extends BaseRepository {
 
       // Try offline login using shared repository
       console.log('[WebUserRepository] Attempting offline login...');
-      const offlineResult = await sharedRepo.login({ username, password }, { useServer: false });
+      const offlineResult = await sharedRepo.login({ username: email, password }, { useServer: false });
 
       if (offlineResult.success && offlineResult.user) {
         console.log('[WebUserRepository] Offline login successful');

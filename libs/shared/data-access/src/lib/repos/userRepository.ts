@@ -158,7 +158,7 @@ export class UserRepository {
    */
   private async loginOnline(username: string, password: string): Promise<LoginResult> {
     try {
-      console.log('[UserRepository] Calling /api/auth/login with username:', username);
+      console.log('[UserRepository] Calling /api/auth/login');
       const response = await this.apiClient.post<{
         success: boolean;
         data: {
@@ -174,7 +174,7 @@ export class UserRepository {
           };
           token: string;
         };
-      }>('/api/auth/login', { username, password });
+      }>('/api/auth/login', { email: username, password });
       
       console.log('[UserRepository] Login API response:', {
         success: response.success,

@@ -12,7 +12,7 @@ export type WebAuthContextValue = {
   isAuthenticated: boolean;
   user: User | null;
   isOffline: boolean;
-  login: (username: string, password: string, remember?: boolean) => Promise<boolean>;
+  login: (email: string, password: string, remember?: boolean) => Promise<boolean>;
   logout: () => void;
 };
 
@@ -81,9 +81,9 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
     restoreSession();
   }, []);
 
-  const login = useCallback(async (username: string, password: string, remember = false) => {
+  const login = useCallback(async (email: string, password: string, remember = false) => {
     try {
-      const result: LoginResult = await userRepository.login(username, password);
+      const result: LoginResult = await userRepository.login(email, password);
 
       if (result.success && result.user) {
         setIsAuthenticated(true);

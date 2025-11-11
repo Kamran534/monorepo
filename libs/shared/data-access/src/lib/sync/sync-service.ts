@@ -393,7 +393,7 @@ export class SyncService {
 
   /**
    * Download server changes to local
-   * Forces full download (ignores lastSyncedAt) - same approach as User table
+   * Streams records page by page to avoid memory exhaustion
    * Handles pagination to download all records
    */
   private async downloadTable(
@@ -403,15 +403,17 @@ export class SyncService {
     try {
       // Force full download by not using lastSyncedAt (same as User table logic)
       // This ensures we get all records on initial sync
-      console.log(`[SyncService] Downloading all ${tableName} records from server (forced full download)...`);
+      console.log(`[SyncService] Downloading all ${tableName} records from server (streaming mode)...`);
 
       let offset = 0;
       let hasMore = true;
-      const allRecords: SyncRecord[] = [];
+      const now = new Date().toISOString();
+      const failedRecords: SyncRecord[] = [];
+      let totalDownloaded = 0;
 
-      // Step 1: Download ALL records first (with pagination)
+      // Stream records page by page instead of buffering all in memory
       while (hasMore) {
-        // Download from server (don't pass lastSyncedAt to get all records)
+        // Download one page from server
         const response = await this.apiClient.get<{
           success: boolean;
           data: {
@@ -432,85 +434,83 @@ export class SyncService {
           totalCount: response.data?.totalCount,
         });
 
-        if (response.success && response.data) {
-          const records = response.data.records || [];
-          hasMore = response.data.hasMore || false;
-          allRecords.push(...records);
-
-          // Update offset for next batch
-          offset += records.length;
-
-          // If no more records, break
-          if (records.length === 0 || !hasMore) {
-            break;
-          }
-        } else {
+        if (!response.success || !response.data) {
           throw new Error('Download failed: Invalid response');
         }
-      }
 
-      // Step 2: Sort all records to handle foreign key dependencies
-      let sortedRecords = [...allRecords];
-      if (tableName === 'Category') {
-        // Topological sort for categories: parents first, then children
-        sortedRecords = this.sortCategoriesByHierarchy(allRecords);
-      }
+        const records = response.data.records || [];
+        hasMore = response.data.hasMore || false;
+        totalDownloaded += records.length;
 
-      // Step 3: Insert/update all records in sorted order
-      const now = new Date().toISOString();
-      const failedRecords: SyncRecord[] = [];
-      
-      for (const record of sortedRecords) {
-        try {
-          // Check if record exists
-          const existing = await this.localDb.query<SyncRecord>(
-            `SELECT id FROM ${tableName} WHERE id = ?`,
-            [record.id]
-          );
+        // Process this page immediately (don't buffer)
+        // Sort this batch if needed (Categories only)
+        let sortedRecords = records;
+        if (tableName === 'Category') {
+          // Topological sort for categories: parents first, then children
+          sortedRecords = this.sortCategoriesByHierarchy(records);
+        }
 
-          if (existing.length > 0) {
-            // Update existing record
-            await this.updateLocalRecord(tableName, record, now);
-            result.recordsUpdated++;
-          } else {
-            // Insert new record
-            try {
-              await this.insertLocalRecord(tableName, record, now);
-              result.recordsCreated++;
-            } catch (insertError: any) {
-              // Handle foreign key constraint errors
-              if (insertError?.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
-                // Retry this record later (after other records are inserted)
-                failedRecords.push(record);
-                console.warn(`[SyncService] Foreign key constraint for ${tableName} record ${record.id}, will retry`);
-              } else {
-                throw insertError;
+        // Insert/update records from this page
+        for (const record of sortedRecords) {
+          try {
+            // Check if record exists
+            const existing = await this.localDb.query<SyncRecord>(
+              `SELECT id FROM ${tableName} WHERE id = ?`,
+              [record.id]
+            );
+
+            if (existing.length > 0) {
+              // Update existing record
+              await this.updateLocalRecord(tableName, record, now);
+              result.recordsUpdated++;
+            } else {
+              // Insert new record
+              try {
+                await this.insertLocalRecord(tableName, record, now);
+                result.recordsCreated++;
+              } catch (insertError: any) {
+                // Handle foreign key constraint errors
+                if (insertError?.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+                  // Retry this record later (after other records are inserted)
+                  failedRecords.push(record);
+                  console.warn(`[SyncService] Foreign key constraint for ${tableName} record ${record.id}, will retry`);
+                } else {
+                  throw insertError;
+                }
               }
             }
-          }
 
-          // Handle soft deletes
-          if (record.is_deleted) {
-            await this.localDb.execute(
-              `UPDATE ${tableName} SET is_deleted = 1, sync_status = 'synced', last_synced_at = ? WHERE id = ?`,
-              [now, record.id]
-            );
-            result.recordsDeleted++;
+            // Handle soft deletes
+            if (record.is_deleted) {
+              await this.localDb.execute(
+                `UPDATE ${tableName} SET is_deleted = 1, sync_status = 'synced', last_synced_at = ? WHERE id = ?`,
+                [now, record.id]
+              );
+              result.recordsDeleted++;
+            }
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            // Don't add foreign key errors to result.errors yet, we'll retry them
+            if ((error as any)?.code !== 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+              result.errors.push(
+                `Error processing record ${record.id}: ${errorMsg}`
+              );
+            } else {
+              failedRecords.push(record);
+            }
           }
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          // Don't add foreign key errors to result.errors yet, we'll retry them
-          if ((error as any)?.code !== 'SQLITE_CONSTRAINT_FOREIGNKEY') {
-            result.errors.push(
-              `Error processing record ${record.id}: ${errorMsg}`
-            );
-          } else {
-            failedRecords.push(record);
-          }
+        }
+
+        // Update offset for next batch
+        offset += records.length;
+
+        // If no more records, break
+        if (records.length === 0 || !hasMore) {
+          break;
         }
       }
 
-      // Step 4: Retry failed records (foreign key constraints should be resolved now)
+      // Retry failed records (foreign key constraints should be resolved now)
       if (failedRecords.length > 0) {
         console.log(`[SyncService] Retrying ${failedRecords.length} ${tableName} records with foreign key constraints...`);
         for (const record of failedRecords) {
@@ -532,8 +532,6 @@ export class SyncService {
           }
         }
       }
-
-      const totalDownloaded = allRecords.length;
 
       result.recordsProcessed = totalDownloaded;
       console.log(`[SyncService] ✓ Downloaded ${tableName}:`, {

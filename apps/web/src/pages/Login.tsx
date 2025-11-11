@@ -4,7 +4,7 @@ import { Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
 import { useWebAuth } from '../providers/WebAuthProvider';
 
 export function Login() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [bgFailed, setBgFailed] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -20,7 +20,7 @@ export function Login() {
     setErrorMessage('');
 
     try {
-      const ok = await login(username, password, remember);
+      const ok = await login(email, password, remember);
       if (ok) {
         navigate('/');
       } else {
@@ -76,12 +76,12 @@ export function Login() {
 
             <input
               type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full px-2.5 py-2 rounded-md border focus:outline-none focus:ring-2 text-sm"
               style={{ backgroundColor: 'var(--color-bg-primary)', color: 'var(--color-text-primary)', borderColor: 'color-mix(in oklab, var(--color-border) 80%, transparent)' }}
-              placeholder="Username or Email"
-              autoComplete="username"
+              placeholder="Email, Username, or Employee Code"
+              autoComplete="email"
               required
               disabled={isLoading}
             />
