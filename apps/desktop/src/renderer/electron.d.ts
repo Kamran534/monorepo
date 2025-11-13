@@ -13,6 +13,43 @@ interface ManualOverride {
   dataSource: 'server' | 'local' | null;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  parentCategoryId: string | null;
+  description: string | null;
+  image: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  parentCategory?: {
+    id: string;
+    name: string;
+  } | null;
+  childCategories?: Array<{
+    id: string;
+    name: string;
+    isActive: boolean;
+  }>;
+  _count?: {
+    products: number;
+  };
+}
+
+interface GetCategoriesResult {
+  success: boolean;
+  categories?: Category[];
+  error?: string;
+  isOffline?: boolean;
+}
+
+interface GetCategoryResult {
+  success: boolean;
+  category?: Category;
+  error?: string;
+}
+
 interface ElectronAPI {
   print: (options: {
     silent?: boolean;
@@ -26,6 +63,10 @@ interface ElectronAPI {
     getManualOverride: () => Promise<ManualOverride>;
     check: () => Promise<any>;
     onStateChange: (callback: (state: ConnectionState) => void) => () => void;
+  };
+  category: {
+    getAll: (includeInactive?: boolean) => Promise<GetCategoriesResult>;
+    getById: (categoryId: string) => Promise<GetCategoryResult>;
   };
 }
 

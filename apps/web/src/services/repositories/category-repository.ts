@@ -1,166 +1,122 @@
 /**
- * Category Repository
- * Handles category data access
+ * Category Repository for Web App
+ * Handles category data with online/offline support
  */
 
+import { CategoryRepository as SharedCategoryRepository, type Category } from '@monorepo/shared-data-access';
 import { BaseRepository } from './base-repository';
+import { dataAccessService } from '../data-access.service';
 
-export interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  parentId?: string;
-  imageUrl?: string;
-  displayOrder: number;
-  isActive: number;
-  createdAt: string;
-  updatedAt: string;
+export type { Category } from '@monorepo/shared-data-access';
+
+export interface GetCategoriesOptions {
+  includeInactive?: boolean;
 }
 
-export interface CategoryWithProducts extends Category {
-  productCount?: number;
-}
-
-export class CategoryRepository extends BaseRepository {
-  /**
-   * Get all categories
-   */
-  async getAllCategories(): Promise<Category[]> {
-    try {
-      if (this.isOnline()) {
-        // Fetch from server
-        const categories = await this.getApi().get<Category[]>('/api/categories');
-        // Save to local DB
-        await this.saveCategoriesToLocal(categories);
-        return categories;
-      } else {
-        // Fetch from local DB
-        return await this.getDb().query<Category>('Category');
-      }
-    } catch (error) {
-      console.error('[CategoryRepository] Get all categories failed:', error);
-      // Fallback to local DB
-      try {
-        return await this.getDb().query<Category>('Category');
-      } catch {
-        return [];
-      }
-    }
-  }
+export class WebCategoryRepository extends BaseRepository {
+  private sharedCategoryRepo: SharedCategoryRepository | null = null;
 
   /**
-   * Get category by ID
+   * Get or create the shared category repository
+   * Lazy initialization ensures dataAccessService is ready
    */
-  async getCategoryById(categoryId: string): Promise<Category | null> {
-    try {
-      if (this.isOnline()) {
-        const category = await this.getApi().get<Category>(`/api/categories/${categoryId}`);
-        if (category) {
-          await this.saveCategoryToLocal(category);
+  private async getSharedCategoryRepo(): Promise<SharedCategoryRepository> {
+    if (!this.sharedCategoryRepo) {
+      // Wait for data access service to be initialized
+      let retries = 0;
+      const maxRetries = 50; // Wait up to 5 seconds (50 * 100ms)
+      
+      while (retries < maxRetries) {
+        try {
+          // Try to access the service - if it throws, it's not ready
+          dataAccessService.getLocalDb();
+          dataAccessService.getApiClient();
+          break; // Service is ready
+        } catch {
+          // Service not ready yet, wait a bit
+          await new Promise(resolve => setTimeout(resolve, 100));
+          retries++;
         }
-        return category;
-      } else {
-        const categories = await this.getDb().query<Category>('Category', [{ id: categoryId }]);
-        return categories.length > 0 ? categories[0] : null;
       }
-    } catch (error) {
-      console.error('[CategoryRepository] Get category failed:', error);
-      return null;
-    }
-  }
 
-  /**
-   * Get category by slug
-   */
-  async getCategoryBySlug(slug: string): Promise<Category | null> {
-    try {
-      if (this.isOnline()) {
-        const category = await this.getApi().get<Category>(`/api/categories/slug/${slug}`);
-        if (category) {
-          await this.saveCategoryToLocal(category);
-        }
-        return category;
-      } else {
-        const categories = await this.getDb().query<Category>('Category', [{ slug }]);
-        return categories.length > 0 ? categories[0] : null;
+      if (retries >= maxRetries) {
+        throw new Error('Data access service not initialized. Please wait for app initialization.');
       }
-    } catch (error) {
-      console.error('[CategoryRepository] Get category by slug failed:', error);
-      // Try local DB as fallback
+
       try {
-        const categories = await this.getDb().query<Category>('Category', [{ slug }]);
-        return categories.length > 0 ? categories[0] : null;
-      } catch {
-        return null;
+        this.sharedCategoryRepo = new SharedCategoryRepository(
+          dataAccessService.getLocalDb(),
+          dataAccessService.getApiClient()
+        );
+      } catch (error) {
+        console.error('[WebCategoryRepository] Failed to initialize shared repository:', error);
+        throw new Error('Data access service not initialized. Please wait for app initialization.');
       }
     }
+    return this.sharedCategoryRepo;
   }
 
   /**
-   * Get root categories (no parent)
+   * Get all categories with online/offline support
+   * Tries server first, falls back to local if offline
    */
-  async getRootCategories(): Promise<Category[]> {
+  async getCategories(options?: GetCategoriesOptions): Promise<Category[]> {
     try {
-      if (this.isOnline()) {
-        const categories = await this.getApi().get<Category[]>('/api/categories/root');
-        await this.saveCategoriesToLocal(categories);
-        return categories;
-      } else {
-        const allCategories = await this.getDb().query<Category>('Category');
-        return allCategories.filter(c => !c.parentId);
+      const sharedRepo = await this.getSharedCategoryRepo();
+      const isOnline = this.isOnline();
+
+      // Try online first if we're online
+      const result = await sharedRepo.getCategories({
+        includeInactive: options?.includeInactive || false,
+        useServer: isOnline ? true : false,
+      });
+
+      if (result.success && result.categories) {
+        return result.categories;
       }
+
+      console.warn('[WebCategoryRepository] Failed to fetch categories:', result.error);
+      return [];
     } catch (error) {
-      console.error('[CategoryRepository] Get root categories failed:', error);
+      console.error('[WebCategoryRepository] Get categories error:', error);
       return [];
     }
   }
 
   /**
-   * Get subcategories of a parent category
+   * Get category by ID with online/offline support
    */
-  async getSubcategories(parentId: string): Promise<Category[]> {
+  async getCategoryById(categoryId: string): Promise<Category | null> {
     try {
-      if (this.isOnline()) {
-        const categories = await this.getApi().get<Category[]>(
-          `/api/categories/${parentId}/children`
-        );
-        await this.saveCategoriesToLocal(categories);
-        return categories;
-      } else {
-        return await this.getDb().query<Category>('Category', [{ parentId }]);
-      }
+      const sharedRepo = await this.getSharedCategoryRepo();
+      const isOnline = this.isOnline();
+
+      const category = await sharedRepo.getCategoryById(categoryId, {
+        useServer: isOnline ? true : false,
+      });
+
+      return category;
     } catch (error) {
-      console.error('[CategoryRepository] Get subcategories failed:', error);
-      // Fallback to local
-      try {
-        return await this.getDb().query<Category>('Category', [{ parentId }]);
-      } catch {
-        return [];
-      }
+      console.error('[WebCategoryRepository] Get category by ID error:', error);
+      return null;
     }
   }
 
-  // Private helper methods
-
-  private async saveCategoriesToLocal(categories: Category[]): Promise<void> {
-    try {
-      const db = this.getDb();
-      for (const category of categories) {
-        await db.execute('INSERT INTO Category VALUES (?)', [this.sanitizeForDb(category)]);
-      }
-    } catch (error) {
-      console.warn('[CategoryRepository] Failed to save categories to local:', error);
-    }
+  /**
+   * Get parent categories (categories with no parent)
+   */
+  async getParentCategories(options?: GetCategoriesOptions): Promise<Category[]> {
+    const categories = await this.getCategories(options);
+    return categories.filter(cat => cat.parentCategoryId === null);
   }
 
-  private async saveCategoryToLocal(category: Category): Promise<void> {
-    try {
-      await this.getDb().execute('INSERT INTO Category VALUES (?)', [
-        this.sanitizeForDb(category),
-      ]);
-    } catch (error) {
-      console.warn('[CategoryRepository] Failed to save category to local:', error);
-    }
+  /**
+   * Get child categories for a parent category
+   */
+  async getChildCategories(parentCategoryId: string, options?: GetCategoriesOptions): Promise<Category[]> {
+    const categories = await this.getCategories(options);
+    return categories.filter(cat => cat.parentCategoryId === parentCategoryId);
   }
 }
+
+

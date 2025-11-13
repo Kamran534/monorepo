@@ -413,18 +413,50 @@ export class WebIndexedDbClient implements LocalDbClient {
     }
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(storeName, 'readonly');
-      const store = transaction.objectStore(storeName);
-      const results: T[] = [];
+      try {
+        console.log('[WebIndexedDbClient] Creating transaction for store:', storeName);
+        console.log('[WebIndexedDbClient] DB state:', {
+          dbExists: !!this.db,
+          dbName: this.db?.name,
+          dbVersion: this.db?.version,
+          objectStoreNames: this.db ? Array.from(this.db.objectStoreNames) : [],
+        });
 
-      // Get all records first (IndexedDB doesn't support complex WHERE clauses natively)
-      const request = store.getAll();
+        if (!this.db) {
+          reject(new Error('Database not initialized'));
+          return;
+        }
 
-      request.onsuccess = () => {
-        let data = request.result as T[];
+        // Check if store exists
+        if (!this.db.objectStoreNames.contains(storeName)) {
+          reject(new Error(`Object store '${storeName}' does not exist. Available stores: ${Array.from(this.db.objectStoreNames).join(', ')}`));
+          return;
+        }
 
-        // Apply WHERE conditions if present
-        if (whereConditions.length > 0 && params && params.length > 0) {
+        const transaction = this.db.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const results: T[] = [];
+
+        transaction.onerror = () => {
+          console.error('[WebIndexedDbClient] Transaction error:', transaction.error);
+          reject(new Error(`Transaction failed: ${transaction.error?.message}`));
+        };
+
+        transaction.onabort = () => {
+          console.error('[WebIndexedDbClient] Transaction aborted');
+          reject(new Error('Transaction aborted'));
+        };
+
+        // Get all records first (IndexedDB doesn't support complex WHERE clauses natively)
+        console.log('[WebIndexedDbClient] Calling getAll() on store:', storeName);
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          console.log('[WebIndexedDbClient] getAll() success, result count:', request.result?.length || 0);
+          let data = request.result as T[];
+
+          // Apply WHERE conditions if present
+          if (whereConditions.length > 0 && params && params.length > 0) {
           // Map params to conditions
           // For OR conditions with same value (e.g., username = ? OR email = ? with same param), use first param value
           const paramValue = params[0]; // Use first param value for OR conditions
@@ -485,9 +517,14 @@ export class WebIndexedDbClient implements LocalDbClient {
         resolve(data);
       };
 
-      request.onerror = () => {
-        reject(new Error(`Query failed: ${request.error?.message}`));
-      };
+        request.onerror = () => {
+          console.error('[WebIndexedDbClient] getAll() error:', request.error);
+          reject(new Error(`Query failed: ${request.error?.message}`));
+        };
+      } catch (error) {
+        console.error('[WebIndexedDbClient] Exception in query():', error);
+        reject(error);
+      }
     });
   }
 

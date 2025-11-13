@@ -38,6 +38,7 @@ export function CategoryCard({
 }: CategoryCardProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const hasImage = !!category.image;
   const showImage = hasImage && !imageError && imageLoaded;
@@ -49,10 +50,15 @@ export function CategoryCard({
       if (imgRef.current.complete && imgRef.current.naturalHeight !== 0) {
         setImageLoaded(true);
         setImageError(false);
+        setImageLoading(false);
       } else if (imgRef.current.complete && imgRef.current.naturalHeight === 0) {
         // Image completed loading but has 0 height (error case)
         setImageError(true);
         setImageLoaded(false);
+        setImageLoading(false);
+      } else {
+        // Image is still loading
+        setImageLoading(true);
       }
     }
   }, [hasImage]);
@@ -92,17 +98,24 @@ export function CategoryCard({
             alt={category.name}
             loading="lazy"
             className="absolute inset-0 w-full h-full object-cover z-0"
+            onLoadStart={() => {
+              setImageLoading(true);
+              setImageError(false);
+            }}
             onError={() => {
               setImageError(true);
               setImageLoaded(false);
+              setImageLoading(false);
             }}
             onLoad={() => {
               setImageError(false);
               setImageLoaded(true);
+              setImageLoading(false);
             }}
             onAbort={() => {
               setImageError(true);
               setImageLoaded(false);
+              setImageLoading(false);
             }}
           />
           {/* Dark overlay for better text readability on images */}
@@ -112,13 +125,22 @@ export function CategoryCard({
         </>
       )}
 
-      {/* Icon - Left - Only shown if no image or image failed to load */}
+      {/* Icon and Text Placeholder - Only shown if no image or image failed to load */}
       {!showImage && (
         <div 
-          className="absolute inset-0 flex items-center justify-center z-[1]"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-[1]"
           style={{ color: 'var(--color-text-secondary)' }}
         >
           {category.icon || <Package size={48} style={{ opacity: 0.5 }} />}
+          {imageLoading && hasImage && (
+            <span className="text-xs opacity-50">Loading...</span>
+          )}
+          {imageError && hasImage && (
+            <span className="text-xs opacity-50">Image unavailable</span>
+          )}
+          {!hasImage && (
+            <span className="text-xs opacity-50">No image</span>
+          )}
         </div>
       )}
 

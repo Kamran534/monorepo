@@ -1,89 +1,279 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  // CategoryBreadcrumb,
   CategorySection,
+  Loading,
   type CategoryCardItem,
 } from '@monorepo/shared-ui';
+import { WebCategoryRepository, type Category } from '../services/repositories';
+
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
+
+// Singleton repository instance
+const categoryRepository = new WebCategoryRepository();
 
 export function Category() {
   const navigate = useNavigate();
+  const [parentCategories, setParentCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch categories on mount
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Debug: Check IndexedDB directly
+        let rawCategories: any[] = [];
+        try {
+          const dbName = 'cpos_web_db';
+          const dbRequest = indexedDB.open(dbName);
+          
+          await new Promise<void>((resolve, reject) => {
+            dbRequest.onsuccess = (event) => {
+              const db = (event.target as IDBOpenDBRequest).result;
+              console.log('[Category] 📊 IndexedDB opened successfully');
+              console.log('[Category] 📊 Object stores:', Array.from(db.objectStoreNames));
+              
+              const transaction = db.transaction('Category', 'readonly');
+              const store = transaction.objectStore('Category');
+              console.log('[Category] 📊 Store indexes:', Array.from(store.indexNames));
+              
+              const getAllRequest = store.getAll();
+              
+              getAllRequest.onsuccess = () => {
+                rawCategories = getAllRequest.result;
+                console.log('[Category] 📊 Direct IndexedDB - Categories in store:', rawCategories.length);
+                console.log('[Category] 📊 First 3 categories:', rawCategories.slice(0, 3));
+                console.log('[Category] 📊 Sample category structure:', rawCategories[0]);
+                
+                // Check parentCategoryId values
+                const parents = rawCategories.filter(c => c.parentCategoryId === null || c.parentCategoryId === undefined);
+                const children = rawCategories.filter(c => c.parentCategoryId !== null && c.parentCategoryId !== undefined);
+                console.log('[Category] 📊 Parent categories (null parentCategoryId):', parents.length);
+                console.log('[Category] 📊 Child categories (has parentCategoryId):', children.length);
+                console.log('[Category] 📊 Parent category names:', parents.map(p => p.name));
+                
+                resolve();
+              };
+              
+              getAllRequest.onerror = () => {
+                console.error('[Category] ❌ IndexedDB getAll failed:', getAllRequest.error);
+                reject(getAllRequest.error);
+              };
+            };
+            
+            dbRequest.onerror = () => {
+              console.error('[Category] ❌ IndexedDB open failed:', dbRequest.error);
+              reject(dbRequest.error);
+            };
+          });
+        } catch (dbError) {
+          console.error('[Category] ❌ Error checking IndexedDB directly:', dbError);
+        }
+        
+        // Check data source
+        const { dataAccessService } = await import('../services/data-access.service');
+        const connectionState = dataAccessService.getConnectionState();
+        console.log('[Category] Connection state:', connectionState);
+        console.log('[Category] Will fetch from:', connectionState.dataSource === 'server' ? 'SERVER' : 'LOCAL DB');
+        
+        console.log('[Category] About to call categoryRepository.getCategories...');
+        let categories: any[] = [];
+        
+        try {
+          categories = await categoryRepository.getCategories({
+            includeInactive: true, // Include all categories (active and inactive)
+          });
+          console.log('[Category] ✅ Repository returned:', categories.length, 'categories');
+        } catch (repoError) {
+          console.error('[Category] ❌ Repository failed, using raw data:', repoError);
+          // Fallback: Use raw categories from direct IndexedDB query
+          if (rawCategories.length > 0) {
+            console.log('[Category] 🔄 Fallback: Using', rawCategories.length, 'raw categories from IndexedDB');
+            categories = rawCategories;
+          } else {
+            throw new Error('Both repository and raw IndexedDB query failed');
+          }
+        }
+
+        console.log('[Category] ✅ Total categories to process:', categories.length);
+        console.log('[Category] Categories data:', categories);
+        console.log('[Category] First 3 categories:', categories.slice(0, 3));
+
+        // Filter for parent categories only (those without parentCategoryId)
+        const parents = categories.filter(cat => cat.parentCategoryId === null || cat.parentCategoryId === undefined);
+        
+        console.log('[Category] Parent categories found:', parents.length);
+        console.log('[Category] Parent category names:', parents.map(p => p.name));
+
+        // Build hierarchy if childCategories not populated (fallback case)
+        if (parents.length > 0 && !parents[0].childCategories) {
+          console.log('[Category] 🔧 Building hierarchy manually (childCategories not populated)');
+          parents.forEach(parent => {
+            parent.childCategories = categories
+              .filter(cat => cat.parentCategoryId === parent.id)
+              .map(child => ({
+                id: child.id,
+                name: child.name,
+                isActive: child.isActive,
+                image: child.image // Include image field
+              }));
+            console.log(`[Category] Parent "${parent.name}" has ${parent.childCategories.length} children`);
+          });
+        }
+
+        // Calculate total cards (parent + all their children)
+        const totalCards = parents.reduce((sum, parent) => {
+          return sum + 1 + (parent.childCategories?.length || 0);
+        }, 0);
+        console.log('[Category] Total cards to display:', totalCards);
+        
+        // Sort by sortOrder, then by name
+        parents.sort((a, b) => {
+          if (a.sortOrder !== b.sortOrder) {
+            return a.sortOrder - b.sortOrder;
+          }
+          return a.name.localeCompare(b.name);
+        });
+
+        setParentCategories(parents);
+      } catch (err) {
+        console.error('[Category] ❌ Failed to fetch categories:', err);
+        console.error('[Category] Error stack:', err instanceof Error ? err.stack : 'No stack trace');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch categories';
+        console.error('[Category] Setting error message:', errorMessage);
+        setError(errorMessage);
+      } finally {
+        console.log('[Category] Setting loading to false');
+        setLoading(false);
+      }
+    }
+
+    fetchCategories();
+  }, []);
 
   // Handler to navigate to category detail page showing products in that category
-  const handleCategoryClick = (categoryName: string) => {
-    navigate(`/category/${encodeURIComponent(categoryName)}`);
+  const handleCategoryClick = (categoryId: string, categoryName: string) => {
+    navigate(`/category/${encodeURIComponent(categoryName)}`, { state: { categoryId } });
   };
 
-  // Sample category data - replace with actual data
-  const fashionAccessoriesCategories: CategoryCardItem[] = [
-    { id: '1', name: 'Fashion Accessories', image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Fashion Accessories') },
-    { id: '2', name: 'Fashion Sunglasses', image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Fashion Sunglasses') },
-    { id: '3', name: 'Watches', image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Watches') },
-    { id: '4', name: 'Gloves & Scarves', image: 'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Gloves & Scarves') },
-    { id: '5', name: 'Handbags', image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Handbags') },
-    { id: '6', name: 'Jewelry', image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Jewelry') },
-  ];
-
-  const womenswearCategories: CategoryCardItem[] = [
-    { id: '7', name: 'Womenswear', image: 'https://images.unsplash.com/photo-1594633313593-bab3825d0caf?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Womenswear') },
-    { id: '8', name: 'Sweaters', image: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Sweaters') },
-    { id: '9', name: 'Womens Jeans', image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Womens Jeans') },
-    { id: '10', name: 'Tops', image: 'https://images.unsplash.com/photo-1594633313593-bab3825d0caf?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Tops') },
-    { id: '11', name: 'Dresses', image: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Dresses') },
-    { id: '12', name: 'Womens Shoes', image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Womens Shoes') },
-    { id: '13', name: 'Coats', image: 'https://images.unsplash.com/photo-1539533018447-63fcce2678e3?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Coats') },
-    { id: '14', name: 'Skirts', image: 'https://images.unsplash.com/photo-1594633313593-bab3825d0caf?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Skirts') },
-  ];
-
-  const menswearCategories: CategoryCardItem[] = [
-    { id: '15', name: 'Menswear', image: 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Menswear') },
-    { id: '16', name: 'Casual Shirts', image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Casual Shirts') },
-    { id: '17', name: 'Pants', image: 'https://images.unsplash.com/photo-1506629082955-511b1aa562c8?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Pants') },
-    { id: '18', name: 'Dress Shirts', image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Dress Shirts') },
-    { id: '19', name: 'Suits & Sportcoats', image: 'https://images.unsplash.com/photo-1552374196-c4e7ffc6e126?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Suits & Sportcoats') },
-    { id: '20', name: 'Coats & Jackets', image: 'https://images.unsplash.com/photo-1539533018447-63fcce2678e3?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Coats & Jackets') },
-    { id: '21', name: 'Mens Jeans', image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Mens Jeans') },
-    { id: '22', name: 'Mens Shoes', image: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&h=400&fit=crop', onClick: () => handleCategoryClick('Mens Shoes') },
-  ];
-
-  // const handleBack = () => {
-  //   console.log('Back clicked');
-  //   // TODO: Navigate back
-  // };
-
-  const handleSectionClick = (title: string) => {
-    console.log(`Section ${title} clicked`);
-    // TODO: Navigate to sub-category
+  const handleSectionClick = (categoryId: string, categoryName: string) => {
+    console.log(`Section ${categoryName} clicked`);
+    // Navigate to the parent category's detail page
+    navigate(`/category/${encodeURIComponent(categoryName)}`, { state: { categoryId } });
   };
+
+  // Convert Category to CategoryCardItem
+  const convertToCardItem = (category: Category): CategoryCardItem => {
+    // Build image URL - use server URL for relative paths
+    let imageUrl = category.image || '';
+    if (imageUrl && !imageUrl.startsWith('http')) {
+      // Relative path - prepend server URL
+      imageUrl = `${SERVER_URL}/${imageUrl}`;
+    }
+
+    return {
+      id: category.id,
+      name: category.name,
+      image: imageUrl,
+      onClick: () => handleCategoryClick(category.id, category.name),
+    };
+  };
+
+  if (loading) {
+    return <Loading fullScreen message="Loading categories..." size="lg" />;
+  }
+
+  if (error) {
+    return (
+      <div className="h-full w-full p-8 flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+        <div className="text-center max-w-2xl">
+          <h2 className="text-xl font-bold text-red-600 mb-4">Error Loading Categories</h2>
+          <p className="text-red-600 mb-4 font-mono text-sm bg-red-50 p-4 rounded">{error}</p>
+          <p className="text-gray-600 mb-4">
+            Check the browser console (F12) for detailed error logs.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (parentCategories.length === 0) {
+    return (
+      <div className="h-full w-full p-8 flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+        <div className="text-center">
+          <p className="text-gray-600">No categories available</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full w-full p-8" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
-      {/* Breadcrumb Navigation */}
-      {/* <CategoryBreadcrumb
-        currentCategory="Fashion Accessories"
-        onBack={handleBack}
-      /> */}
+    <div className="h-full w-full p-8 overflow-auto" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+      {/* Render each parent category as a section with its children */}
+      {parentCategories.map((parentCategory) => {
+        // Get child categories from the childCategories array
+        const childCategories = parentCategory.childCategories || [];
+        
+        // Build image URL for parent category
+        let parentImageUrl = parentCategory.image || '';
+        if (parentImageUrl && !parentImageUrl.startsWith('http')) {
+          // For local development, try local assets first, then fallback to server
+          parentImageUrl = `/${parentImageUrl}`;
+        }
+        // If no image, use a placeholder or empty
+        if (!parentImageUrl) {
+          parentImageUrl = '/assets/images/categories/placeholder.png';
+        }
 
-      {/* Category Sections */}
-      <CategorySection
-        title="Fashion Accessories"
-        categories={fashionAccessoriesCategories}
-        onTitleClick={() => handleSectionClick('Fashion Accessories')}
-        columns={6}
-      />
+        // Include the parent category itself as the first card
+        const categoryItems: CategoryCardItem[] = [
+          // Parent category as first item
+          {
+            id: parentCategory.id,
+            name: parentCategory.name,
+            image: parentImageUrl,
+            onClick: () => handleCategoryClick(parentCategory.id, parentCategory.name),
+          },
+          // Then add all child categories
+          ...childCategories.map((child) => {
+            // Build image URL for child category
+            let childImageUrl = (child as any).image || '';
+            if (childImageUrl && !childImageUrl.startsWith('http')) {
+              childImageUrl = `/${childImageUrl}`;
+            }
+            if (!childImageUrl) {
+              childImageUrl = '/assets/images/categories/placeholder.png';
+            }
+            
+            return {
+              id: child.id,
+              name: child.name,
+              image: childImageUrl,
+              onClick: () => handleCategoryClick(child.id, child.name),
+            };
+          }),
+        ];
 
-      <CategorySection
-        title="Womenswear"
-        categories={womenswearCategories}
-        onTitleClick={() => handleSectionClick('Womenswear')}
-        columns={6}
-      />
-
-      <CategorySection
-        title="Menswear"
-        categories={menswearCategories}
-        onTitleClick={() => handleSectionClick('Menswear')}
-        columns={6}
-      />
+        return (
+          <CategorySection
+            key={parentCategory.id}
+            title={parentCategory.name}
+            categories={categoryItems}
+            onTitleClick={() => handleSectionClick(parentCategory.id, parentCategory.name)}
+            columns={6}
+          />
+        );
+      })}
     </div>
   );
 }

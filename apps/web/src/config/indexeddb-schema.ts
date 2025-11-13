@@ -60,9 +60,8 @@ export const cposSchema: IndexedDBSchema = {
     Category: {
       keyPath: 'id',
       indexes: {
-        name: { keyPath: 'name', unique: true },
-        slug: { keyPath: 'slug', unique: true },
-        parentId: { keyPath: 'parentId' },
+        name: { keyPath: 'name', unique: false }, // Changed to non-unique as categories can have same name in different parents
+        parentCategoryId: { keyPath: 'parentCategoryId' }, // Fixed: was parentId, should be parentCategoryId
       },
     },
     Brand: {

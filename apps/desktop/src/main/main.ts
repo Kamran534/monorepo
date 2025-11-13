@@ -251,6 +251,90 @@ function setupIpcHandlers(): void {
     }
   });
 
+  // Category handlers
+  ipcMain.handle('category:get-all', async (event, includeInactive: boolean = false) => {
+    console.log('[IPC] ========== CATEGORY:GET-ALL CALLED ==========');
+    console.log('[IPC] Include inactive:', includeInactive);
+    
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const { CategoryRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+      
+      // Check if we should use server
+      const connectionState = dataAccessService.getConnectionState();
+      const useServer = connectionState.dataSource === 'server';
+      
+      console.log('[IPC] Category fetch - Using:', useServer ? 'server' : 'local');
+      
+      const categoryRepo = new CategoryRepository(localDb, apiClient);
+      const result = await categoryRepo.getCategories({
+        includeInactive,
+        useServer: useServer ? true : false,
+      });
+      
+      console.log('[IPC] Category result:', {
+        success: result.success,
+        count: result.categories?.length || 0,
+        isOffline: result.isOffline,
+      });
+
+      return result;
+    } catch (error) {
+      console.error('[IPC] category:get-all error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch categories',
+      };
+    }
+  });
+
+  ipcMain.handle('category:get-by-id', async (event, categoryId: string) => {
+    console.log('[IPC] ========== CATEGORY:GET-BY-ID CALLED ==========');
+    console.log('[IPC] Category ID:', categoryId);
+    
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const { CategoryRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+      
+      // Check if we should use server
+      const connectionState = dataAccessService.getConnectionState();
+      const useServer = connectionState.dataSource === 'server';
+      
+      const categoryRepo = new CategoryRepository(localDb, apiClient);
+      const category = await categoryRepo.getCategoryById(categoryId, {
+        useServer: useServer ? true : false,
+      });
+      
+      if (category) {
+        return {
+          success: true,
+          category,
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Category not found',
+        };
+      }
+    } catch (error) {
+      console.error('[IPC] category:get-by-id error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch category',
+      };
+    }
+  });
+
   ipcMain.handle('sync:get-status', async () => {
     try {
       if (!dataAccessService) {
