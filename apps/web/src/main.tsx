@@ -8,6 +8,7 @@ import '@monorepo/shared-ui/styles/components.css';
 import App from './app/app';
 import { registerSW } from 'virtual:pwa-register';
 import { dataAccessService } from './services/data-access.service';
+import { StoreProvider } from '@monorepo/shared-store';
 
 // Initialize data access service
 dataAccessService.initialize().catch((error) => {
@@ -20,7 +21,9 @@ const root = ReactDOM.createRoot(
 
 root.render(
   <StrictMode>
-    <App />
+    <StoreProvider>
+      <App />
+    </StoreProvider>
   </StrictMode>
 );
 

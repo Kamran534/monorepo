@@ -50,6 +50,25 @@ interface GetCategoryResult {
   error?: string;
 }
 
+interface Product {
+  id: string;
+  productNumber: string;
+  name: string;
+  description?: string;
+  categoryId?: string;
+  price: string;
+  image?: string;
+  rating?: number;
+  reviewCount?: number;
+}
+
+interface GetProductsResult {
+  success: boolean;
+  products?: Product[];
+  error?: string;
+  isOffline?: boolean;
+}
+
 interface ElectronAPI {
   print: (options: {
     silent?: boolean;
@@ -67,6 +86,9 @@ interface ElectronAPI {
   category: {
     getAll: (includeInactive?: boolean) => Promise<GetCategoriesResult>;
     getById: (categoryId: string) => Promise<GetCategoryResult>;
+  };
+  product: {
+    getAll: () => Promise<GetProductsResult>;
   };
 }
 

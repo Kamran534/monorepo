@@ -92,11 +92,13 @@
     "@react-native-community/cli": "18.0.0",
     "@react-native-community/cli-platform-android": "18.0.0",
     "@react-native-community/cli-platform-ios": "18.0.0",
+    "@reduxjs/toolkit": "^2.10.1",
     "bcryptjs": "^2.4.3",
     "lucide-react": "^0.552.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.7",
+    "react-redux": "^9.2.0",
     "react-router-dom": "^7.9.5"
   }
 }

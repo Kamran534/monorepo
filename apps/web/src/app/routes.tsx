@@ -2,7 +2,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Dashboard } from '../pages/Dashboard';
 import { Products } from '../pages/Products';
 import { Category } from '../pages/Category';
-import { CategoryDetail } from '../pages/CategoryDetail';
 import { ProductDetail } from '../pages/ProductDetail';
 import { Transactions } from '../pages/Transactions';
 import { Login } from '../pages/Login';
@@ -18,7 +17,7 @@ export function AppRoutes() {
       <Route path="/products" element={<Products />} />
       <Route path="/products/:productId" element={<ProductDetail />} />
       <Route path="/category" element={<Category />} />
-      <Route path="/category/:categoryName" element={<CategoryDetail />} />
+      <Route path="/category/:categoryName" element={<Products />} />
       <Route path="/transactions" element={<Transactions />} />
       <Route path="/login" element={<Login />} />
       <Route path="/customers" element={null} />

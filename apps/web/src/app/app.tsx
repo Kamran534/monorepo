@@ -180,10 +180,16 @@ function AppContent() {
     navigate(item.path);
   };
 
-  // Search handler
+  // Search handler - navigate to products page with search query
   const handleSearch = (query: string) => {
-    console.log('Searching for:', query);
-    // TODO: Implement search functionality
+    if (query.trim()) {
+      navigate(`/products?search=${encodeURIComponent(query.trim())}`);
+    } else {
+      // If search is empty, navigate to products page without query
+      if (location.pathname === '/products') {
+        navigate('/products');
+      }
+    }
   };
 
   // Show splash first time only, independent of auth readiness

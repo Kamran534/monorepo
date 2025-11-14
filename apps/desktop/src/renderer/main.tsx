@@ -3,12 +3,13 @@ import { createRoot } from 'react-dom/client';
 import { HashRouter, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Layout, SidebarItem, useTheme, CartProvider, ToastProvider, SplashScreen, useCart } from '@monorepo/shared-ui';
 import { DesktopAuthProvider, useDesktopAuth } from '@monorepo/shared-ui';
-import { 
-  Home, 
-  Package, 
-  Receipt, 
-  Users, 
-  Settings, 
+import { StoreProvider } from '@monorepo/shared-store';
+import {
+  Home,
+  Package,
+  Receipt,
+  Users,
+  Settings,
   Store,
   HelpCircle
 } from 'lucide-react';
@@ -186,10 +187,16 @@ function AppContent() {
     navigate(item.path);
   };
 
-  // Search handler
+  // Search handler - navigate to products page with search query
   const handleSearch = (query: string) => {
-    console.log('Searching for:', query);
-    // TODO: Implement search functionality
+    if (query.trim()) {
+      navigate(`/products?search=${encodeURIComponent(query.trim())}`);
+    } else {
+      // If search is empty, navigate to products page without query
+      if (location.pathname === '/products') {
+        navigate('/products');
+      }
+    }
   };
 
   // Show splash first time only, independent of auth readiness
@@ -257,13 +264,15 @@ function AppContent() {
 function App() {
   return (
     <HashRouter>
-      <DesktopAuthProvider>
-        <CartProvider>
-          <ToastProvider>
-            <AppContent />
-          </ToastProvider>
-        </CartProvider>
-      </DesktopAuthProvider>
+      <StoreProvider>
+        <DesktopAuthProvider>
+          <CartProvider>
+            <ToastProvider>
+              <AppContent />
+            </ToastProvider>
+          </CartProvider>
+        </DesktopAuthProvider>
+      </StoreProvider>
     </HashRouter>
   );
 }

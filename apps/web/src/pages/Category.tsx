@@ -1,11 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CategorySection,
   Loading,
   type CategoryCardItem,
 } from '@monorepo/shared-ui';
+import {
+  useAppDispatch,
+  useAppSelector,
+  fetchCategories,
+  selectCategories,
+  selectCategoriesLoading,
+  selectCategoriesError,
+  selectIsOffline,
+  selectCacheAge,
+} from '@monorepo/shared-store';
 import { WebCategoryRepository, type Category } from '../services/repositories';
+import { dataAccessService } from '../services/data-access.service';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
 
@@ -14,146 +25,49 @@ const categoryRepository = new WebCategoryRepository();
 
 export function Category() {
   const navigate = useNavigate();
-  const [parentCategories, setParentCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
 
-  // Fetch categories on mount
+  // Get data from Redux store
+  const categories = useAppSelector(selectCategories);
+  const loading = useAppSelector(selectCategoriesLoading);
+  const error = useAppSelector(selectCategoriesError);
+  const isOffline = useAppSelector(selectIsOffline);
+  const cacheAge = useAppSelector(selectCacheAge);
+
+  // Fetch categories on mount (will use cache if available)
   useEffect(() => {
-    async function fetchCategories() {
+    const fetchData = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        
-        // Debug: Check IndexedDB directly
-        let rawCategories: any[] = [];
-        try {
-          const dbName = 'cpos_web_db';
-          const dbRequest = indexedDB.open(dbName);
-          
-          await new Promise<void>((resolve, reject) => {
-            dbRequest.onsuccess = (event) => {
-              const db = (event.target as IDBOpenDBRequest).result;
-              console.log('[Category] 📊 IndexedDB opened successfully');
-              console.log('[Category] 📊 Object stores:', Array.from(db.objectStoreNames));
-              
-              const transaction = db.transaction('Category', 'readonly');
-              const store = transaction.objectStore('Category');
-              console.log('[Category] 📊 Store indexes:', Array.from(store.indexNames));
-              
-              const getAllRequest = store.getAll();
-              
-              getAllRequest.onsuccess = () => {
-                rawCategories = getAllRequest.result;
-                console.log('[Category] 📊 Direct IndexedDB - Categories in store:', rawCategories.length);
-                console.log('[Category] 📊 First 3 categories:', rawCategories.slice(0, 3));
-                console.log('[Category] 📊 Sample category structure:', rawCategories[0]);
-                
-                // Check parentCategoryId values
-                const parents = rawCategories.filter(c => c.parentCategoryId === null || c.parentCategoryId === undefined);
-                const children = rawCategories.filter(c => c.parentCategoryId !== null && c.parentCategoryId !== undefined);
-                console.log('[Category] 📊 Parent categories (null parentCategoryId):', parents.length);
-                console.log('[Category] 📊 Child categories (has parentCategoryId):', children.length);
-                console.log('[Category] 📊 Parent category names:', parents.map(p => p.name));
-                
-                resolve();
-              };
-              
-              getAllRequest.onerror = () => {
-                console.error('[Category] ❌ IndexedDB getAll failed:', getAllRequest.error);
-                reject(getAllRequest.error);
-              };
-            };
-            
-            dbRequest.onerror = () => {
-              console.error('[Category] ❌ IndexedDB open failed:', dbRequest.error);
-              reject(dbRequest.error);
-            };
-          });
-        } catch (dbError) {
-          console.error('[Category] ❌ Error checking IndexedDB directly:', dbError);
+        console.log('[Category] Checking cache...');
+        if (cacheAge !== null) {
+          console.log(`[Category] Using cached data (age: ${cacheAge}s)`);
+        } else {
+          console.log('[Category] No cache found, fetching...');
         }
-        
-        // Check data source
-        const { dataAccessService } = await import('../services/data-access.service');
+
+        // Check connection state
         const connectionState = dataAccessService.getConnectionState();
         console.log('[Category] Connection state:', connectionState);
-        console.log('[Category] Will fetch from:', connectionState.dataSource === 'server' ? 'SERVER' : 'LOCAL DB');
-        
-        console.log('[Category] About to call categoryRepository.getCategories...');
-        let categories: any[] = [];
-        
-        try {
-          categories = await categoryRepository.getCategories({
-            includeInactive: true, // Include all categories (active and inactive)
-          });
-          console.log('[Category] ✅ Repository returned:', categories.length, 'categories');
-        } catch (repoError) {
-          console.error('[Category] ❌ Repository failed, using raw data:', repoError);
-          // Fallback: Use raw categories from direct IndexedDB query
-          if (rawCategories.length > 0) {
-            console.log('[Category] 🔄 Fallback: Using', rawCategories.length, 'raw categories from IndexedDB');
-            categories = rawCategories;
-          } else {
-            throw new Error('Both repository and raw IndexedDB query failed');
-          }
-        }
+        console.log('[Category] Data source:', connectionState.dataSource);
 
-        console.log('[Category] ✅ Total categories to process:', categories.length);
-        console.log('[Category] Categories data:', categories);
-        console.log('[Category] First 3 categories:', categories.slice(0, 3));
+        // Dispatch fetch action (will skip if cache is valid)
+        await dispatch(
+          fetchCategories({
+            repository: categoryRepository,
+            options: {
+              includeInactive: false, // Only active categories
+            },
+          })
+        ).unwrap();
 
-        // Filter for parent categories only (those without parentCategoryId)
-        const parents = categories.filter(cat => cat.parentCategoryId === null || cat.parentCategoryId === undefined);
-        
-        console.log('[Category] Parent categories found:', parents.length);
-        console.log('[Category] Parent category names:', parents.map(p => p.name));
-
-        // Build hierarchy if childCategories not populated (fallback case)
-        if (parents.length > 0 && !parents[0].childCategories) {
-          console.log('[Category] 🔧 Building hierarchy manually (childCategories not populated)');
-          parents.forEach(parent => {
-            parent.childCategories = categories
-              .filter(cat => cat.parentCategoryId === parent.id)
-              .map(child => ({
-                id: child.id,
-                name: child.name,
-                isActive: child.isActive,
-                image: child.image // Include image field
-              }));
-            console.log(`[Category] Parent "${parent.name}" has ${parent.childCategories.length} children`);
-          });
-        }
-
-        // Calculate total cards (parent + all their children)
-        const totalCards = parents.reduce((sum, parent) => {
-          return sum + 1 + (parent.childCategories?.length || 0);
-        }, 0);
-        console.log('[Category] Total cards to display:', totalCards);
-        
-        // Sort by sortOrder, then by name
-        parents.sort((a, b) => {
-          if (a.sortOrder !== b.sortOrder) {
-            return a.sortOrder - b.sortOrder;
-          }
-          return a.name.localeCompare(b.name);
-        });
-
-        setParentCategories(parents);
+        console.log('[Category] Fetch completed successfully');
       } catch (err) {
         console.error('[Category] ❌ Failed to fetch categories:', err);
-        console.error('[Category] Error stack:', err instanceof Error ? err.stack : 'No stack trace');
-        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch categories';
-        console.error('[Category] Setting error message:', errorMessage);
-        setError(errorMessage);
-      } finally {
-        console.log('[Category] Setting loading to false');
-        setLoading(false);
       }
-    }
+    };
 
-    fetchCategories();
-  }, []);
+    fetchData();
+  }, [dispatch, cacheAge]); // dispatch is stable from Redux, cacheAge included for completeness
 
   // Handler to navigate to category detail page showing products in that category
   const handleCategoryClick = (categoryId: string, categoryName: string) => {
@@ -183,8 +97,42 @@ export function Category() {
     };
   };
 
+  // Filter for parent categories only
+  const parentCategories = categories.filter(
+    cat => cat.parentCategoryId === null || cat.parentCategoryId === undefined
+  );
+
+  // Build hierarchy if needed
+  parentCategories.forEach(parent => {
+    if (!parent.childCategories) {
+      parent.childCategories = categories
+        .filter(cat => cat.parentCategoryId === parent.id)
+        .map(child => ({
+          id: child.id,
+          name: child.name,
+          isActive: child.isActive,
+          image: child.image,
+        }));
+    }
+  });
+
+  // Sort by sortOrder, then by name
+  parentCategories.sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) {
+      return a.sortOrder - b.sortOrder;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
   if (loading) {
-    return <Loading fullScreen message="Loading categories..." size="lg" />;
+    return (
+      <div className="fixed inset-0 flex items-center justify-center z-40" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+        <Loading
+          message={isOffline ? "Loading categories from local storage..." : "Loading categories..."}
+          size="lg"
+        />
+      </div>
+    );
   }
 
   if (error) {
@@ -197,7 +145,18 @@ export function Category() {
             Check the browser console (F12) for detailed error logs.
           </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              // Force refresh by passing forceRefresh option
+              dispatch(
+                fetchCategories({
+                  repository: categoryRepository,
+                  options: {
+                    includeInactive: false,
+                  },
+                  forceRefresh: true,
+                })
+              );
+            }}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Retry
@@ -211,7 +170,14 @@ export function Category() {
     return (
       <div className="h-full w-full p-8 flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
         <div className="text-center">
-          <p className="text-gray-600">No categories available</p>
+          <p className="text-gray-600">
+            {isOffline ? 'No categories available offline' : 'No categories available'}
+          </p>
+          {cacheAge !== null && (
+            <p className="text-gray-500 text-sm mt-2">
+              Last updated: {cacheAge}s ago
+            </p>
+          )}
         </div>
       </div>
     );
@@ -223,7 +189,7 @@ export function Category() {
       {parentCategories.map((parentCategory) => {
         // Get child categories from the childCategories array
         const childCategories = parentCategory.childCategories || [];
-        
+
         // Build image URL for parent category
         let parentImageUrl = parentCategory.image || '';
         if (parentImageUrl && !parentImageUrl.startsWith('http')) {
@@ -254,7 +220,7 @@ export function Category() {
             if (!childImageUrl) {
               childImageUrl = '/assets/images/categories/placeholder.png';
             }
-            
+
             return {
               id: child.id,
               name: child.name,

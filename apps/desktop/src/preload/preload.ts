@@ -83,12 +83,20 @@ try {
         return ipcRenderer.invoke('category:get-by-id', categoryId);
       },
     },
+    // Product API
+    product: {
+      getAll: () => {
+        console.log('[Preload] product.getAll called');
+        return ipcRenderer.invoke('product:get-all');
+      },
+    },
   });
-  console.log('[Preload] Exposed electronAPI with connection, auth, sync, and category API');
+  console.log('[Preload] Exposed electronAPI with connection, auth, sync, category, and product API');
   console.log('[Preload] Connection methods exposed: getState, setManual, getManualOverride, check, onStateChange');
   console.log('[Preload] Auth methods exposed: login, logout');
   console.log('[Preload] Sync methods exposed: triggerManual, getStatus');
   console.log('[Preload] Category methods exposed: getAll, getById');
+  console.log('[Preload] Product methods exposed: getAll');
 } catch (error) {
   console.error('[Preload] Failed to expose APIs:', error);
 }

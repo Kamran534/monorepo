@@ -1,66 +1,68 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CategorySection,
   Loading,
   type CategoryCardItem,
 } from '@monorepo/shared-ui';
+import {
+  useAppDispatch,
+  useAppSelector,
+  fetchCategories,
+  selectCategories,
+  selectCategoriesLoading,
+  selectCategoriesError,
+  selectIsOffline,
+  selectCacheAge,
+} from '@monorepo/shared-store';
+import { getDesktopCategoryRepository } from '../renderer/repositories/DesktopCategoryRepository';
+import type { Category } from '@monorepo/shared-data-access';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
 
+// Get repository instance
+const categoryRepository = getDesktopCategoryRepository();
+
 export function Category() {
   const navigate = useNavigate();
-  const [parentCategories, setParentCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
 
-  // Fetch categories on mount
+  // Get data from Redux store
+  const categories = useAppSelector(selectCategories);
+  const loading = useAppSelector(selectCategoriesLoading);
+  const error = useAppSelector(selectCategoriesError);
+  const isOffline = useAppSelector(selectIsOffline);
+  const cacheAge = useAppSelector(selectCacheAge);
+
+  // Fetch categories on mount (will use cache if available)
   useEffect(() => {
-    async function fetchCategories() {
+    const fetchData = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        
-        const result = await window.electronAPI.category.getAll(true); // Include inactive categories
-
-        if (result.success && result.categories) {
-          console.log('[Category] Total categories fetched:', result.categories.length);
-          console.log('[Category] Categories:', result.categories);
-
-          // Filter for parent categories only (those without parentCategoryId)
-          const parents = result.categories.filter(cat => cat.parentCategoryId === null);
-          
-          console.log('[Category] Parent categories:', parents.length);
-          console.log('[Category] Parents:', parents);
-
-          // Calculate total cards (parent + all their children)
-          const totalCards = parents.reduce((sum, parent) => {
-            return sum + 1 + (parent.childCategories?.length || 0);
-          }, 0);
-          console.log('[Category] Total cards to display:', totalCards);
-          
-          // Sort by sortOrder, then by name
-          parents.sort((a, b) => {
-            if (a.sortOrder !== b.sortOrder) {
-              return a.sortOrder - b.sortOrder;
-            }
-            return a.name.localeCompare(b.name);
-          });
-
-          setParentCategories(parents);
+        console.log('[Category] Checking cache...');
+        if (cacheAge !== null) {
+          console.log(`[Category] Using cached data (age: ${cacheAge}s)`);
         } else {
-          setError(result.error || 'Failed to fetch categories');
+          console.log('[Category] No cache found, fetching...');
         }
-      } catch (err) {
-        console.error('[Category] Failed to fetch categories:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch categories');
-      } finally {
-        setLoading(false);
-      }
-    }
 
-    fetchCategories();
-  }, []);
+        // Dispatch fetch action (will skip if cache is valid)
+        await dispatch(
+          fetchCategories({
+            repository: categoryRepository,
+            options: {
+              includeInactive: false, // Only active categories
+            },
+          })
+        ).unwrap();
+
+        console.log('[Category] Fetch completed successfully');
+      } catch (err) {
+        console.error('[Category] ❌ Failed to fetch categories:', err);
+      }
+    };
+
+    fetchData();
+  }, []); // Empty dependency - only fetch once on mount
 
   // Handler to navigate to category detail page showing products in that category
   const handleCategoryClick = (categoryId: string, categoryName: string) => {
@@ -73,17 +75,66 @@ export function Category() {
     navigate(`/category/${encodeURIComponent(categoryName)}`, { state: { categoryId } });
   };
 
+  // Filter for parent categories only
+  const parentCategories = categories.filter(
+    cat => cat.parentCategoryId === null || cat.parentCategoryId === undefined
+  );
+
+  // Build hierarchy if needed
+  parentCategories.forEach(parent => {
+    if (!parent.childCategories) {
+      parent.childCategories = categories
+        .filter(cat => cat.parentCategoryId === parent.id)
+        .map(child => ({
+          id: child.id,
+          name: child.name,
+          isActive: child.isActive,
+          image: child.image,
+        }));
+    }
+  });
+
+  // Sort by sortOrder, then by name
+  parentCategories.sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) {
+      return a.sortOrder - b.sortOrder;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
   if (loading) {
-    return <Loading fullScreen message="Loading categories..." size="lg" />;
+    return (
+      <div className="fixed inset-0 flex items-center justify-center z-40" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+        <Loading
+          message={isOffline ? "Loading categories from local database..." : "Loading categories..."}
+          size="lg"
+        />
+      </div>
+    );
   }
 
   if (error) {
     return (
       <div className="h-full w-full p-8 flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
-        <div className="text-center">
-          <p className="text-red-600 mb-4">{error}</p>
+        <div className="text-center max-w-2xl">
+          <h2 className="text-xl font-bold text-red-600 mb-4">Error Loading Categories</h2>
+          <p className="text-red-600 mb-4 font-mono text-sm bg-red-50 p-4 rounded">{error}</p>
+          <p className="text-gray-600 mb-4">
+            Check the Electron console for detailed error logs.
+          </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              // Force refresh by passing forceRefresh option
+              dispatch(
+                fetchCategories({
+                  repository: categoryRepository,
+                  options: {
+                    includeInactive: false,
+                  },
+                  forceRefresh: true,
+                })
+              );
+            }}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Retry
@@ -97,7 +148,14 @@ export function Category() {
     return (
       <div className="h-full w-full p-8 flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
         <div className="text-center">
-          <p className="text-gray-600">No categories available</p>
+          <p className="text-gray-600">
+            {isOffline ? 'No categories available in local database' : 'No categories available'}
+          </p>
+          {cacheAge !== null && (
+            <p className="text-gray-500 text-sm mt-2">
+              Last updated: {cacheAge}s ago
+            </p>
+          )}
         </div>
       </div>
     );
@@ -109,11 +167,11 @@ export function Category() {
       {parentCategories.map((parentCategory) => {
         // Get child categories from the childCategories array
         const childCategories = parentCategory.childCategories || [];
-        
+
         // Build image URL for parent category
         let parentImageUrl = parentCategory.image || '';
         if (parentImageUrl && !parentImageUrl.startsWith('http')) {
-          // For local development, try local assets first
+          // For local development, try local assets first, then fallback to server
           parentImageUrl = `/${parentImageUrl}`;
         }
         // If no image, use a placeholder or empty
@@ -140,7 +198,7 @@ export function Category() {
             if (!childImageUrl) {
               childImageUrl = '/assets/images/categories/placeholder.png';
             }
-            
+
             return {
               id: child.id,
               name: child.name,

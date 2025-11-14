@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { ComponentProps } from '../types.js';
 
 export interface NavbarAction {
@@ -46,8 +47,16 @@ export function Navbar({
   className = '',
   onSignOut,
 }: Omit<NavbarProps, 'title'>) {
-  const [searchQuery, setSearchQuery] = useState('');
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const urlSearchQuery = searchParams.get('search') || '';
+  const [searchQuery, setSearchQuery] = useState(urlSearchQuery);
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Sync search input with URL search parameter
+  useEffect(() => {
+    setSearchQuery(urlSearchQuery);
+  }, [urlSearchQuery]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;

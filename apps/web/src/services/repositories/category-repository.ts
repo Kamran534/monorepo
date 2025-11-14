@@ -1,19 +1,21 @@
 /**
  * Category Repository for Web App
  * Handles category data with online/offline support
+ * Implements the CategoryRepository interface expected by Redux store
  */
 
-import { CategoryRepository as SharedCategoryRepository, type Category } from '@monorepo/shared-data-access';
+import {
+  CategoryRepository as SharedCategoryRepository,
+  type Category,
+  type GetCategoriesOptions,
+  type GetCategoriesResult,
+} from '@monorepo/shared-data-access';
 import { BaseRepository } from './base-repository';
 import { dataAccessService } from '../data-access.service';
 
-export type { Category } from '@monorepo/shared-data-access';
+export type { Category, GetCategoriesOptions, GetCategoriesResult } from '@monorepo/shared-data-access';
 
-export interface GetCategoriesOptions {
-  includeInactive?: boolean;
-}
-
-export class WebCategoryRepository extends BaseRepository {
+export class WebCategoryRepository extends BaseRepository implements SharedCategoryRepository {
   private sharedCategoryRepo: SharedCategoryRepository | null = null;
 
   /**
@@ -58,28 +60,28 @@ export class WebCategoryRepository extends BaseRepository {
 
   /**
    * Get all categories with online/offline support
-   * Tries server first, falls back to local if offline
+   * Returns GetCategoriesResult to match Redux store interface
    */
-  async getCategories(options?: GetCategoriesOptions): Promise<Category[]> {
+  async getCategories(options?: GetCategoriesOptions): Promise<GetCategoriesResult> {
     try {
       const sharedRepo = await this.getSharedCategoryRepo();
       const isOnline = this.isOnline();
 
-      // Try online first if we're online
+      // Use the shared repository which returns GetCategoriesResult
       const result = await sharedRepo.getCategories({
         includeInactive: options?.includeInactive || false,
         useServer: isOnline ? true : false,
       });
 
-      if (result.success && result.categories) {
-        return result.categories;
-      }
-
-      console.warn('[WebCategoryRepository] Failed to fetch categories:', result.error);
-      return [];
+      return result;
     } catch (error) {
-      console.error('[WebCategoryRepository] Get categories error:', error);
-      return [];
+      const errorMsg = error instanceof Error ? error.message : 'Failed to fetch categories';
+      console.error('[WebCategoryRepository] Get categories error:', errorMsg);
+      return {
+        success: false,
+        error: errorMsg,
+        isOffline: true,
+      };
     }
   }
 
@@ -106,16 +108,22 @@ export class WebCategoryRepository extends BaseRepository {
    * Get parent categories (categories with no parent)
    */
   async getParentCategories(options?: GetCategoriesOptions): Promise<Category[]> {
-    const categories = await this.getCategories(options);
-    return categories.filter(cat => cat.parentCategoryId === null);
+    const result = await this.getCategories(options);
+    if (result.success && result.categories) {
+      return result.categories.filter(cat => cat.parentCategoryId === null);
+    }
+    return [];
   }
 
   /**
    * Get child categories for a parent category
    */
   async getChildCategories(parentCategoryId: string, options?: GetCategoriesOptions): Promise<Category[]> {
-    const categories = await this.getCategories(options);
-    return categories.filter(cat => cat.parentCategoryId === parentCategoryId);
+    const result = await this.getCategories(options);
+    if (result.success && result.categories) {
+      return result.categories.filter(cat => cat.parentCategoryId === parentCategoryId);
+    }
+    return [];
   }
 }
 

@@ -335,6 +335,156 @@ function setupIpcHandlers(): void {
     }
   });
 
+  // Product handlers
+  ipcMain.handle('product:get-all', async () => {
+    console.log('[IPC] ========== PRODUCT:GET-ALL CALLED ==========');
+    
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+      
+      // Check if we should use server
+      const connectionState = dataAccessService.getConnectionState();
+      const useServer = connectionState.dataSource === 'server';
+      
+      console.log('[IPC] Product fetch - Using:', useServer ? 'server' : 'local');
+      
+      if (useServer) {
+        // Fetch from API
+        try {
+          const response = await apiClient.get('/api/products?includeVariants=false&includeInventory=false');
+          const products = response.data?.data || response.data || [];
+          
+          console.log('[IPC] Product result from API:', {
+            success: true,
+            count: products.length,
+            isOffline: false,
+          });
+
+          // Transform products to match Product interface
+          const SERVER_URL = process.env.SERVER_URL || 'http://localhost:4000';
+          const transformedProducts = products.map((p: any) => {
+            // Handle image URL - prepend server URL if relative
+            let imageUrl = p.imageUrl || p.image || null;
+            if (imageUrl && !imageUrl.startsWith('http')) {
+              imageUrl = `${SERVER_URL}/${imageUrl}`;
+            }
+
+            return {
+              id: p.id,
+              productNumber: p.productCode || p.sku || p.id,
+              name: p.name,
+              description: p.description,
+              categoryId: p.categoryId,
+              price: `$${(p.basePrice || p.price || 0).toFixed(2)}`,
+              image: imageUrl,
+              rating: undefined,
+              reviewCount: undefined,
+            };
+          });
+
+          // Sync products to local DB for offline access
+          try {
+            for (const product of products) {
+              await localDb.execute(
+                `INSERT OR REPLACE INTO product (id, productCode, name, description, categoryId, images, isActive, createdAt, updatedAt)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  product.id,
+                  product.productCode || product.sku || product.id,
+                  product.name,
+                  product.description || null,
+                  product.categoryId || null,
+                  JSON.stringify(product.imageUrl || product.image ? [product.imageUrl || product.image] : []),
+                  product.isActive ? 1 : 0,
+                  product.createdAt || new Date().toISOString(),
+                  product.updatedAt || new Date().toISOString(),
+                ]
+              );
+            }
+            console.log('[IPC] ✓ Products synced to local DB');
+          } catch (syncError) {
+            console.warn('[IPC] ⚠️ Failed to sync products to local DB (non-fatal):', syncError);
+          }
+
+          return {
+            success: true,
+            products: transformedProducts,
+            isOffline: false,
+          };
+        } catch (apiError) {
+          console.warn('[IPC] API fetch failed, falling back to local:', apiError);
+          // Fall through to local fetch
+        }
+      }
+
+      // Fetch from local SQLite database
+      const products = await localDb.query(
+        `SELECT 
+          id,
+          productCode,
+          name,
+          description,
+          categoryId,
+          images,
+          isActive,
+          createdAt,
+          updatedAt
+        FROM product
+        WHERE isActive = 1
+        ORDER BY name ASC`
+      );
+
+      // Transform to match Product interface
+      const transformedProducts = products.map((p: any) => {
+        // Parse images JSON array and get first image
+        let imageUrl = null;
+        try {
+          const images = p.images ? JSON.parse(p.images) : [];
+          imageUrl = Array.isArray(images) && images.length > 0 ? images[0] : null;
+        } catch {
+          imageUrl = null;
+        }
+
+        return {
+          id: p.id,
+          productNumber: p.productCode || p.id,
+          name: p.name,
+          description: p.description,
+          categoryId: p.categoryId,
+          price: '$0.00', // Price not stored in product table, would need to get from variants
+          image: imageUrl,
+          rating: undefined,
+          reviewCount: undefined,
+        };
+      });
+
+      console.log('[IPC] Product result from local DB:', {
+        success: true,
+        count: transformedProducts.length,
+        isOffline: true,
+      });
+
+      return {
+        success: true,
+        products: transformedProducts,
+        isOffline: true,
+      };
+    } catch (error) {
+      console.error('[IPC] product:get-all error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch products',
+        products: [],
+        isOffline: true,
+      };
+    }
+  });
+
   ipcMain.handle('sync:get-status', async () => {
     try {
       if (!dataAccessService) {

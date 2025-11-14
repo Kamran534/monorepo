@@ -5,16 +5,16 @@ export default [
   ...nx.configs['flat/typescript'],
   ...nx.configs['flat/javascript'],
   {
-      "ignores": [
-        "**/dist",
-        "**/vite.config.*.timestamp*",
-        "**/vitest.config.*.timestamp*",
-        "**/*.config.ts",
-        "**/*.config.js",
-        "**/*.config.mjs",
-        "apps/desktop/src/main/**",
-        "apps/desktop/src/preload/**"
-      ]
+    ignores: [
+      '**/dist',
+      '**/vite.config.*.timestamp*',
+      '**/vitest.config.*.timestamp*',
+      '**/*.config.ts',
+      '**/*.config.js',
+      '**/*.config.mjs',
+      'apps/desktop/src/main/**',
+      'apps/desktop/src/preload/**',
+    ],
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
