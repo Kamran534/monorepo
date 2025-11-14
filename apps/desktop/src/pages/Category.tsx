@@ -45,13 +45,25 @@ export function Category() {
           console.log('[Category] No cache found, fetching...');
         }
 
-        // Dispatch fetch action (will skip if cache is valid)
+        // Dispatch fetch action
+        // Redux condition will check cache and skip if valid
+        // For desktop, we need to check the connection status via electron API
+        let isOnline = true;
+        try {
+          const connectionState = await window.electronAPI.connection.getState();
+          isOnline = connectionState.dataSource === 'server';
+          console.log('[Category] Connection state:', connectionState);
+        } catch (error) {
+          console.warn('[Category] Failed to get connection state, assuming online:', error);
+        }
+
         await dispatch(
           fetchCategories({
             repository: categoryRepository,
             options: {
               includeInactive: false, // Only active categories
             },
+            forceRefresh: false, // Let Redux condition handle cache check
           })
         ).unwrap();
 

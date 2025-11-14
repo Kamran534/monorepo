@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Package, ShoppingCart, Eye } from 'lucide-react';
+import { Package, ShoppingCart } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
 import { ViewMode } from './ProductActionButtons.js';
 
@@ -55,8 +55,9 @@ function ProductGridCard({ product, isSelected, hideDetails, onProductClick, for
   
   return (
     <div
+      onClick={() => onProductClick?.(product)}
       className={`
-        relative group
+        relative
         flex flex-col
         p-4
         rounded
@@ -67,6 +68,7 @@ function ProductGridCard({ product, isSelected, hideDetails, onProductClick, for
         active:scale-[0.98]
         min-h-[180px]
         overflow-hidden
+        cursor-pointer
       `}
       style={{
         backgroundColor: showImage
@@ -144,17 +146,33 @@ function ProductGridCard({ product, isSelected, hideDetails, onProductClick, for
         </span>
       </div>
       
-      {/* Bottom Section - Rating (left) and Price (right) */}
+      {/* Bottom Section - Action Buttons (left) and Price (right) */}
       <div className="absolute bottom-4 left-0 right-0 flex items-center justify-between px-4 z-[5]">
-        {/* Rating - Bottom Left */}
-        <div>
+        {/* Action Buttons - Bottom Left */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onAddProduct?.(product); }}
+            className="w-6 h-6 rounded-full flex items-center justify-center hover:opacity-90 transition-opacity"
+            style={{
+              backgroundColor: isSelected
+                ? 'rgba(255,255,255,0.2)'
+                : 'var(--color-primary-500)',
+              color: 'var(--color-text-light)',
+            }}
+            title="Add to cart"
+            aria-label="Add to cart"
+          >
+            <ShoppingCart className="w-3.5 h-3.5" />
+          </button>
+          {/* Rating - Next to button */}
           {!hideDetails && product.rating && (
-            <span className="text-xs opacity-80">
+            <span className="text-xs opacity-80 ml-1">
               {formatRating(product.rating, product.reviewCount)}
             </span>
           )}
           {hideDetails && (
-            <span className="text-sm">...</span>
+            <span className="text-sm ml-1">...</span>
           )}
         </div>
         
@@ -165,37 +183,6 @@ function ProductGridCard({ product, isSelected, hideDetails, onProductClick, for
               {product.price}
             </span>
           )}
-        </div>
-      </div>
-
-      {/* Hover Actions Overlay */}
-      <div
-        className="absolute inset-0 z-[6] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-        style={{
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.45), rgba(0,0,0,0.45))',
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onAddProduct?.(product); }}
-            className="w-10 h-10 rounded-full flex items-center justify-center hover:opacity-90"
-            style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'var(--color-text-light)', border: '1px solid rgba(255,255,255,0.25)' }}
-            title="Add to cart"
-            aria-label="Add to cart"
-          >
-            <ShoppingCart className="w-5 h-5" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onProductClick?.(product); }}
-            className="w-10 h-10 rounded-full flex items-center justify-center hover:opacity-90"
-            style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'var(--color-text-light)', border: '1px solid rgba(255,255,255,0.25)' }}
-            title="View details"
-            aria-label="View details"
-          >
-            <Eye className="w-5 h-5" />
-          </button>
         </div>
       </div>
     </div>
@@ -292,6 +279,11 @@ export function ProductList({
             Rating
           </span>
         </div>
+        <div className="w-24 flex-shrink-0">
+          <span className="text-xs font-semibold uppercase" style={{ color: 'var(--color-text-secondary)' }}>
+            Actions
+          </span>
+        </div>
       </div>
 
       {/* Product Rows - Scrollable */}
@@ -300,10 +292,10 @@ export function ProductList({
           const isSelected = product.id === selectedProductId;
           
           return (
-            <button
+            <div
               key={product.id}
               onClick={() => onProductClick?.(product)}
-              className={`w-full flex items-center border-b py-3 px-4 transition-colors text-left ${
+              className={`w-full flex items-center border-b py-3 px-4 transition-colors cursor-pointer ${
                 isSelected ? '' : ''
               }`}
               style={{
@@ -345,7 +337,30 @@ export function ProductList({
               <div className="w-32 flex-shrink-0">
                 <span className="text-sm">{hideDetails ? '...' : formatRating(product.rating, product.reviewCount)}</span>
               </div>
-            </button>
+              
+              {/* Add to Cart Button */}
+              <div className="w-24 flex-shrink-0 flex justify-center">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddProduct?.(product);
+                  }}
+                  className="px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity flex items-center gap-1.5"
+                  style={{
+                    backgroundColor: isSelected
+                      ? 'rgba(255,255,255,0.2)'
+                      : 'var(--color-primary-500)',
+                    color: 'var(--color-text-light)',
+                  }}
+                  title="Add to cart"
+                  aria-label="Add to cart"
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  <span>Add</span>
+                </button>
+              </div>
+            </div>
           );
         })}
       </div>

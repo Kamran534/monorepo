@@ -275,7 +275,7 @@ export class CategoryRepository {
         // Get product count for this category
         try {
           const countResult = await this.localDb.query<{ count: number }>(
-            `SELECT COUNT(*) as count FROM Product WHERE categoryId = ?`,
+            `SELECT COUNT(*) as count FROM products WHERE category_id = ?`,
             [category.id]
           );
           category._count = {
@@ -471,7 +471,7 @@ export class CategoryRepository {
       // Get product count
       try {
         const countResult = await this.localDb.query<{ count: number }>(
-          `SELECT COUNT(*) as count FROM Product WHERE categoryId = ?`,
+          `SELECT COUNT(*) as count FROM products WHERE category_id = ?`,
           [category.id]
         );
         category._count = {

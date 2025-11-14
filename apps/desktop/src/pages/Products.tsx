@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCart, useToast, Loading } from '@monorepo/shared-ui';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -11,16 +11,19 @@ import {
   SortDirection,
   RatingFilter,
   PriceFilter,
+  Pagination,
 } from '@monorepo/shared-ui';
 import {
   useAppDispatch,
   useAppSelector,
   fetchProducts,
+  setProductPage,
   selectProducts,
   selectProductsLoading,
   selectProductsError,
   selectProductsIsOffline,
   selectProductCacheAge,
+  selectProductPagination,
 } from '@monorepo/shared-store';
 import { getDesktopProductRepository } from '../renderer/repositories/DesktopProductRepository.js';
 
@@ -47,6 +50,7 @@ export function Products() {
   const error = useAppSelector(selectProductsError);
   const isOffline = useAppSelector(selectProductsIsOffline);
   const cacheAge = useAppSelector(selectProductCacheAge);
+  const pagination = useAppSelector(selectProductPagination);
   
   // Load view mode from localStorage, default to 'list'
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -100,21 +104,35 @@ export function Products() {
     sessionStorage.setItem(ACTION_STATE_STORAGE_KEY, JSON.stringify(payload));
   }, [sortField, sortDirection, hideDetails, ratingFilter, priceFilter]);
 
-  // Fetch products on mount (will use cache if available)
+  // Skip effect-triggered fetch when we've already fetched manually (e.g., pagination click)
+  const skipPaginationFetchRef = React.useRef(false);
+
+  // Fetch products on mount and when page changes (will use cache if available)
   useEffect(() => {
+    if (skipPaginationFetchRef.current) {
+      skipPaginationFetchRef.current = false;
+      return;
+    }
+
     const fetchData = async () => {
       try {
         console.log('[Products] Checking cache...');
         if (cacheAge !== null) {
-          console.log(`[Products] Using cached data (age: ${cacheAge}s)`);
+          console.log(`[Products] Cache age: ${cacheAge}s`);
         } else {
           console.log('[Products] No cache found, fetching...');
         }
 
-        // Dispatch fetch action (will skip if cache is valid)
+        // Dispatch fetch action with pagination options
+        // Redux condition will check cache and skip if valid
         await dispatch(
           fetchProducts({
             repository: productRepository,
+            options: {
+              page: pagination.page,
+              limit: pagination.limit,
+            },
+            forceRefresh: false, // Let Redux condition handle cache check
           })
         ).unwrap();
 
@@ -125,8 +143,34 @@ export function Products() {
     };
 
     fetchData();
-  }, [dispatch, cacheAge]); // dispatch is stable from Redux, cacheAge included for completeness
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch, pagination.page, pagination.limit]); // Fetch when page or limit changes
 
+
+  // Handle page change
+  const handlePageChange = async (page: number) => {
+    if (page === pagination.page) {
+      return;
+    }
+
+    skipPaginationFetchRef.current = true;
+    dispatch(setProductPage(page));
+
+    try {
+      await dispatch(
+        fetchProducts({
+          repository: productRepository,
+          options: {
+            page,
+            limit: pagination.limit,
+          },
+          forceRefresh: true,
+        })
+      ).unwrap();
+    } catch (err) {
+      console.error('[Products] ❌ Failed to fetch page:', err);
+    }
+  };
 
   // Helper function to parse price from string (e.g., "$29.99" -> 29.99)
   const parsePrice = (priceStr?: string): number | null => {
@@ -297,20 +341,35 @@ export function Products() {
       </div>
 
       {/* Product List Section */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <ProductList
-          products={products}
-          selectedProductId={selectedProductId}
-          onProductClick={handleProductClick}
-          hideDetails={hideDetails}
-          viewMode={viewMode}
-          onAddProduct={(product) => {
-            const numericPrice = parseFloat((product.price || '0').replace(/[^0-9.]/g, '')) || 0;
-            addItem({ name: product.name, price: numericPrice, quantity: 1 });
-            show('Added to cart', 'success');
-          }}
-          className="h-full"
-        />
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ProductList
+            products={products}
+            selectedProductId={selectedProductId}
+            onProductClick={handleProductClick}
+            hideDetails={hideDetails}
+            viewMode={viewMode}
+            onAddProduct={(product) => {
+              const numericPrice = parseFloat((product.price || '0').replace(/[^0-9.]/g, '')) || 0;
+              addItem({ name: product.name, price: numericPrice, quantity: 1 });
+              show('Added to cart', 'success');
+            }}
+            className="h-full"
+          />
+        </div>
+        
+        {/* Pagination - Hide when searching */}
+        {!searchQuery.trim() && pagination.totalPages > 1 && (
+          <div className="flex-shrink-0 px-4 py-3 border-t" style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-primary)' }}>
+            <Pagination
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={handlePageChange}
+              itemsPerPage={pagination.limit}
+              totalItems={pagination.total}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

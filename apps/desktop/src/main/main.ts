@@ -336,8 +336,9 @@ function setupIpcHandlers(): void {
   });
 
   // Product handlers
-  ipcMain.handle('product:get-all', async () => {
+  ipcMain.handle('product:get-all', async (_event, options?: { page?: number; limit?: number }) => {
     console.log('[IPC] ========== PRODUCT:GET-ALL CALLED ==========');
+    console.log('[IPC] Pagination options:', options);
     
     try {
       if (!dataAccessService) {
@@ -353,15 +354,48 @@ function setupIpcHandlers(): void {
       
       console.log('[IPC] Product fetch - Using:', useServer ? 'server' : 'local');
       
+      const page = options?.page || 1;
+      const limit = options?.limit || 50;
+      
       if (useServer) {
         // Fetch from API
         try {
-          const response = await apiClient.get('/api/products?includeVariants=false&includeInventory=false');
-          const products = response.data?.data || response.data || [];
+          const apiUrl = `/api/products?includeVariants=false&includeInventory=false&page=${page}&limit=${limit}`;
+          console.log('[IPC] Fetching from API:', apiUrl);
+          const response = await apiClient.get(apiUrl);
+          
+          console.log('[IPC] API response structure:', {
+            hasData: !!response.data?.data,
+            hasProducts: !!response.data?.products,
+            isArray: Array.isArray(response.data),
+            keys: response.data ? Object.keys(response.data) : [],
+            total: response.data?.total,
+            meta: response.data?.meta,
+            page: response.data?.page,
+            limit: response.data?.limit,
+          });
+          
+          let products = response.data?.data || response.data?.products || (Array.isArray(response.data) ? response.data : []) || [];
+          let total = response.data?.total || response.data?.meta?.total || response.data?.data?.total || (Array.isArray(response.data) ? response.data.length : products.length);
+          const responseLimit = response.data?.limit || response.data?.meta?.limit || response.data?.data?.limit || limit;
+          
+          // If API returned more products than requested, apply client-side pagination
+          if (products.length > limit && (!responseLimit || responseLimit !== limit)) {
+            console.warn('[IPC] API returned more products than requested, applying client-side pagination');
+            const startIndex = (page - 1) * limit;
+            const endIndex = startIndex + limit;
+            products = products.slice(startIndex, endIndex);
+          }
+          
+          const totalPages = Math.ceil(total / limit);
           
           console.log('[IPC] Product result from API:', {
             success: true,
             count: products.length,
+            expected: limit,
+            page,
+            total,
+            totalPages,
             isOffline: false,
           });
 
@@ -415,6 +449,12 @@ function setupIpcHandlers(): void {
             success: true,
             products: transformedProducts,
             isOffline: false,
+            pagination: {
+              page: response.data?.page || response.data?.meta?.page || page,
+              limit: responseLimit || limit,
+              total,
+              totalPages,
+            },
           };
         } catch (apiError) {
           console.warn('[IPC] API fetch failed, falling back to local:', apiError);
@@ -422,7 +462,22 @@ function setupIpcHandlers(): void {
         }
       }
 
-      // Fetch from local SQLite database
+      // Fetch from local SQLite database with pagination
+      // limit is already declared above, reuse it
+      const offset = ((options?.page || 1) - 1) * limit;
+      
+      console.log('[IPC] Local DB pagination:', { page: options?.page || 1, limit, offset });
+      
+      // First, get total count
+      const countResult = await localDb.query<{ count: number }>(
+        `SELECT COUNT(*) as count FROM product WHERE isActive = 1`
+      );
+      const total = countResult[0]?.count || 0;
+      const totalPages = Math.ceil(total / limit);
+      
+      console.log('[IPC] Total products in DB:', total, 'Total pages:', totalPages);
+
+      // Use template literals for LIMIT and OFFSET since they're numbers (no SQL injection risk)
       const products = await localDb.query(
         `SELECT 
           id,
@@ -436,8 +491,11 @@ function setupIpcHandlers(): void {
           updatedAt
         FROM product
         WHERE isActive = 1
-        ORDER BY name ASC`
+        ORDER BY name ASC
+        LIMIT ${limit} OFFSET ${offset}`
       );
+      
+      console.log('[IPC] Products fetched from local DB:', products.length, 'Expected:', limit);
 
       // Transform to match Product interface
       const transformedProducts = products.map((p: any) => {
@@ -467,12 +525,24 @@ function setupIpcHandlers(): void {
         success: true,
         count: transformedProducts.length,
         isOffline: true,
+        pagination: {
+          page: options?.page || 1,
+          limit,
+          total,
+          totalPages,
+        },
       });
 
       return {
         success: true,
         products: transformedProducts,
         isOffline: true,
+        pagination: {
+          page: options?.page || 1,
+          limit,
+          total,
+          totalPages,
+        },
       };
     } catch (error) {
       console.error('[IPC] product:get-all error:', error);

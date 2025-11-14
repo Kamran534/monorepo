@@ -67,6 +67,12 @@ interface GetProductsResult {
   products?: Product[];
   error?: string;
   isOffline?: boolean;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 interface ElectronAPI {
@@ -88,7 +94,7 @@ interface ElectronAPI {
     getById: (categoryId: string) => Promise<GetCategoryResult>;
   };
   product: {
-    getAll: () => Promise<GetProductsResult>;
+    getAll: (options?: { page?: number; limit?: number }) => Promise<GetProductsResult>;
   };
 }
 

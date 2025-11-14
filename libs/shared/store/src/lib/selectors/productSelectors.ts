@@ -63,3 +63,6 @@ export const selectProductCacheAge = createSelector(
   }
 );
 
+// Pagination selectors
+export const selectProductPagination = (state: RootState) => state.product.pagination;
+

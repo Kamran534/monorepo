@@ -47,6 +47,7 @@ export const fetchCategories = createAsyncThunk<
     repository: CategoryRepository;
     options?: GetCategoriesOptions;
     forceRefresh?: boolean;
+    isOnline?: boolean;
   },
   { rejectValue: string }
 >(
@@ -67,25 +68,37 @@ export const fetchCategories = createAsyncThunk<
   },
   {
     condition: ({ forceRefresh = false }, { getState }) => {
-      // Skip fetch if cache is still valid (unless force refresh)
-      if (forceRefresh) return true;
+      // Always allow if force refresh
+      if (forceRefresh) {
+        console.log('[Redux] Force refresh requested');
+        return true;
+      }
 
       const state = getState() as { category: CategoryState };
-      const { lastFetched, cacheTimeout, loading } = state.category;
+      const { lastFetched, cacheTimeout, loading, categories } = state.category;
 
       // Don't fetch if already loading
       if (loading) {
-        console.log('[Redux] Skipping fetch - already loading');
+        console.log('[Redux] Skipping category fetch - already loading');
         return false;
       }
 
-      // Check if cache is still valid
-      if (lastFetched) {
+      // Check if we have cached data that's still valid
+      if (lastFetched && categories.length > 0) {
         const timeSinceLastFetch = Date.now() - lastFetched;
         if (timeSinceLastFetch < cacheTimeout) {
-          console.log('[Redux] Using cached categories (age:', Math.round(timeSinceLastFetch / 1000), 'seconds)');
-          return false;
+          console.log('[Redux] Using cached categories (age:', Math.round(timeSinceLastFetch / 1000), 'seconds, valid for', Math.round(cacheTimeout / 1000), 'seconds)');
+          return false; // Skip fetch, use cache
+        } else {
+          console.log('[Redux] Cache expired (age:', Math.round(timeSinceLastFetch / 1000), 'seconds), fetching fresh data');
+          return true; // Cache expired, fetch fresh data
         }
+      }
+
+      // No cache or empty categories - fetch
+      if (!lastFetched || categories.length === 0) {
+        console.log('[Redux] No cache found or categories empty, fetching...');
+        return true;
       }
 
       return true;

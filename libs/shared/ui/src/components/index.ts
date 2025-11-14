@@ -40,3 +40,7 @@ export type { SplashScreenProps } from './SplashScreen.js';
 // SidePanel component
 export { SidePanel } from './SidePanel.js';
 export type { SidePanelProps } from './SidePanel.js';
+
+// Pagination component
+export { Pagination } from './Pagination.js';
+export type { PaginationProps } from './Pagination.js';

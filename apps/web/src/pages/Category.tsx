@@ -50,13 +50,17 @@ export function Category() {
         console.log('[Category] Connection state:', connectionState);
         console.log('[Category] Data source:', connectionState.dataSource);
 
-        // Dispatch fetch action (will skip if cache is valid)
+        // Dispatch fetch action
+        // Redux condition will check cache and skip if valid
+        const isOnline = connectionState.dataSource === 'server';
         await dispatch(
           fetchCategories({
             repository: categoryRepository,
             options: {
               includeInactive: false, // Only active categories
+              useServer: isOnline,
             },
+            forceRefresh: false, // Let Redux condition handle cache check
           })
         ).unwrap();
 

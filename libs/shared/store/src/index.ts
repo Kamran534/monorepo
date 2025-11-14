@@ -54,8 +54,9 @@ export {
   setCacheTimeout as setProductCacheTimeout,
   clearError as clearProductError,
   setOfflineMode as setProductOfflineMode,
+  setPage as setProductPage,
 } from './lib/slices/productSlice';
-export type { ProductState, Product, ProductRepository, GetProductsResult } from './lib/slices/productSlice';
+export type { ProductState, Product, ProductRepository, GetProductsResult, GetProductsOptions } from './lib/slices/productSlice';
 
 // Product selectors
 export {
@@ -71,4 +72,5 @@ export {
   selectProductCount,
   selectProductIsCacheFresh,
   selectProductCacheAge,
+  selectProductPagination,
 } from './lib/selectors/productSelectors';

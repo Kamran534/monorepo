@@ -13,7 +13,7 @@ export class DesktopProductRepository implements ProductRepository {
   /**
    * Get all products via Electron IPC
    */
-  async getAllProducts(): Promise<GetProductsResult> {
+  async getAllProducts(options?: { page?: number; limit?: number }): Promise<GetProductsResult> {
     try {
       // Check if electronAPI is available
       if (typeof window === 'undefined' || !window.electronAPI || !window.electronAPI.product) {
@@ -30,13 +30,14 @@ export class DesktopProductRepository implements ProductRepository {
         };
       }
 
-      console.log('[DesktopProductRepository] Calling electronAPI.product.getAll');
-      const result = await window.electronAPI.product.getAll();
+      console.log('[DesktopProductRepository] Calling electronAPI.product.getAll with options:', options);
+      const result = await window.electronAPI.product.getAll(options);
 
       console.log('[DesktopProductRepository] Result:', {
         success: result.success,
         productCount: result.products?.length || 0,
         isOffline: result.isOffline,
+        pagination: result.pagination,
       });
 
       return {
@@ -44,6 +45,7 @@ export class DesktopProductRepository implements ProductRepository {
         products: result.products || [],
         error: result.error,
         isOffline: result.isOffline,
+        pagination: result.pagination,
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';

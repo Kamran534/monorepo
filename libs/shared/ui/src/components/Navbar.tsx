@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { ComponentProps } from '../types.js';
+import { useKeyboardShortcuts } from '@monorepo/shared-hooks-keyboard-shortcuts';
 
 export interface NavbarAction {
   id: string;
@@ -52,11 +53,28 @@ export function Navbar({
   const urlSearchQuery = searchParams.get('search') || '';
   const [searchQuery, setSearchQuery] = useState(urlSearchQuery);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Sync search input with URL search parameter
   useEffect(() => {
     setSearchQuery(urlSearchQuery);
   }, [urlSearchQuery]);
+
+  // Keyboard shortcut: Ctrl+/ to focus search input
+  useKeyboardShortcuts({
+    shortcuts: onSearch ? [
+      {
+        key: '/',
+        ctrl: true,
+        action: () => {
+          searchInputRef.current?.focus();
+        },
+        description: 'Focus search bar',
+        preventDefault: true,
+      },
+    ] : [],
+    enabled: !!onSearch,
+  });
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -135,6 +153,7 @@ export function Navbar({
                   </svg>
                 </div>
                 <input
+                  ref={searchInputRef}
                   type="search"
                   value={searchQuery}
                   onChange={handleSearchChange}

@@ -8,6 +8,8 @@ import { BaseRepository } from './base-repository';
 export interface Product {
   id: string;
   sku: string;
+  productCode?: string;
+  barcode?: string;
   name: string;
   description?: string;
   categoryId?: string;

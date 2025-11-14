@@ -85,9 +85,9 @@ try {
     },
     // Product API
     product: {
-      getAll: () => {
-        console.log('[Preload] product.getAll called');
-        return ipcRenderer.invoke('product:get-all');
+      getAll: (options?: { page?: number; limit?: number }) => {
+        console.log('[Preload] product.getAll called with options:', options);
+        return ipcRenderer.invoke('product:get-all', options);
       },
     },
   });
