@@ -145,34 +145,16 @@ function setupIpcHandlers(): void {
         throw new Error('DataAccessService not initialized');
       }
 
-      const { UserRepository, DataSource, ConnectionStatus } = await import('@monorepo/shared-data-access');
+      // Use shared UserRepository for login (handles online/offline automatically)
+      const { UserRepository } = await import('@monorepo/shared-data-access');
       const localDb = dataAccessService.getLocalDb();
       const apiClient = dataAccessService.getApiClient();
+      const userRepository = new UserRepository(localDb, apiClient);
       
-      console.log('[IPC] LocalDb exists:', !!localDb);
-      console.log('[IPC] ApiClient exists:', !!apiClient);
-      console.log('[IPC] ApiClient baseUrl:', (apiClient as any).config?.baseUrl || 'unknown');
+      console.log('[IPC] Attempting login (will try online first, then offline)...');
       
-      // For login, ALWAYS try server first, regardless of manual override
-      // Manual override only affects data operations, not authentication
-      // This ensures users can always log in when server is available
-      const manualOverride = dataAccessService.getManualOverride();
-      
-      console.log('[IPC] Login - Server preference:', {
-        manualOverride: manualOverride.enabled ? manualOverride.dataSource : 'auto',
-        note: 'Login always tries server first (manual override only affects data operations)',
-        willTryServer: true,
-      });
-      
-      const userRepo = new UserRepository(localDb, apiClient);
-      console.log('[IPC] UserRepository created, calling login...');
-      
-      // Always pass undefined to let UserRepository try server first
-      // This ensures login works even if user has set manual override to local
-      const result = await userRepo.login(
-        { username, password },
-        { useServer: undefined } // Always try server first for login
-      );
+      // Pass undefined for useServer to enable auto-detection with fallback
+      const result = await userRepository.login({ username, password }, { useServer: undefined });
       
       console.log('[IPC] Login result:', {
         success: result.success,
@@ -181,30 +163,52 @@ function setupIpcHandlers(): void {
         isOffline: result.isOffline,
         error: result.error,
       });
-
+      
       if (result.success && result.user) {
-        // Trigger sync only if online login (has token)
-        if (!result.isOffline && result.token) {
+        // Set auth token if available (online login)
+        if (result.token) {
+          apiClient.setAuthToken(result.token);
+          
+          // Initialize sync service for online login
           try {
-            // Initialize sync service with auth token
-            // This will: set auth token, sync User table immediately, start full sync, and start periodic sync
-            console.log('[IPC] Initializing sync service after successful login...');
+            console.log('[IPC] Initializing sync service after successful online login...');
             await dataAccessService.initializeSyncService(result.token);
             console.log('[IPC] Sync service initialized successfully');
           } catch (error) {
             console.warn('[IPC] Failed to initialize sync service after login:', error);
           }
-        } else if (result.isOffline) {
-          console.log('[IPC] Offline login successful - user can work offline');
         }
+        
+        return {
+          success: true,
+          user: {
+            id: result.user.id,
+            username: result.user.username,
+            email: result.user.email,
+            firstName: result.user.firstName,
+            lastName: result.user.lastName,
+            roleId: result.user.roleId,
+            roleName: result.user.roleName || '',
+            employeeCode: result.user.employeeCode || undefined,
+            isActive: result.user.isActive ? true : false,
+          },
+          token: result.token,
+          isOffline: result.isOffline || false,
+        };
       }
 
-      return result;
+      // Login failed
+      return {
+        success: false,
+        error: result.error || 'Invalid credentials. Please check your username and password.',
+        isOffline: result.isOffline || false,
+      };
     } catch (error) {
       console.error('[IPC] auth:login error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Login failed',
+        isOffline: true,
       };
     }
   });
@@ -261,8 +265,6 @@ function setupIpcHandlers(): void {
         throw new Error('DataAccessService not initialized');
       }
 
-      const { CategoryRepository } = await import('@monorepo/shared-data-access');
-      const localDb = dataAccessService.getLocalDb();
       const apiClient = dataAccessService.getApiClient();
       
       // Check if we should use server
@@ -271,24 +273,38 @@ function setupIpcHandlers(): void {
       
       console.log('[IPC] Category fetch - Using:', useServer ? 'server' : 'local');
       
-      const categoryRepo = new CategoryRepository(localDb, apiClient);
-      const result = await categoryRepo.getCategories({
-        includeInactive,
-        useServer: useServer ? true : false,
-      });
-      
-      console.log('[IPC] Category result:', {
-        success: result.success,
-        count: result.categories?.length || 0,
-        isOffline: result.isOffline,
-      });
+      if (useServer) {
+        // Fetch from API
+        const response = await apiClient.get(`/api/categories?includeInactive=${includeInactive}`);
+        
+        if (response.success && response.data) {
+          const categories = Array.isArray(response.data) ? response.data : response.data.data || [];
+          return {
+            success: true,
+            categories,
+            isOffline: false,
+          };
+        }
 
-      return result;
+        return {
+          success: false,
+          error: response.error || 'Failed to fetch categories',
+          isOffline: false,
+        };
+      } else {
+        // TODO: Implement local database fetch
+        return {
+          success: false,
+          error: 'Local database not yet implemented',
+          isOffline: true,
+        };
+      }
     } catch (error) {
       console.error('[IPC] category:get-all error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch categories',
+        isOffline: true,
       };
     }
   });
@@ -302,28 +318,31 @@ function setupIpcHandlers(): void {
         throw new Error('DataAccessService not initialized');
       }
 
-      const { CategoryRepository } = await import('@monorepo/shared-data-access');
-      const localDb = dataAccessService.getLocalDb();
       const apiClient = dataAccessService.getApiClient();
       
       // Check if we should use server
       const connectionState = dataAccessService.getConnectionState();
       const useServer = connectionState.dataSource === 'server';
       
-      const categoryRepo = new CategoryRepository(localDb, apiClient);
-      const category = await categoryRepo.getCategoryById(categoryId, {
-        useServer: useServer ? true : false,
-      });
-      
-      if (category) {
-        return {
-          success: true,
-          category,
-        };
-      } else {
+      if (useServer) {
+        const response = await apiClient.get(`/api/categories/${categoryId}`);
+        
+        if (response.success && response.data) {
+          return {
+            success: true,
+            category: response.data,
+          };
+        }
+
         return {
           success: false,
-          error: 'Category not found',
+          error: response.error || 'Category not found',
+        };
+      } else {
+        // TODO: Implement local database fetch
+        return {
+          success: false,
+          error: 'Local database not yet implemented',
         };
       }
     } catch (error) {
@@ -331,6 +350,181 @@ function setupIpcHandlers(): void {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch category',
+      };
+    }
+  });
+
+  // Customer handlers
+  ipcMain.handle('customer:get-all', async () => {
+    console.log('[IPC] ========== CUSTOMER:GET-ALL CALLED ==========');
+    
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+      
+      // Check if we should use server
+      const connectionState = dataAccessService.getConnectionState();
+      const useServer = connectionState.dataSource === 'server';
+      
+      console.log('[IPC] Customer fetch - Using:', useServer ? 'server' : 'local');
+      
+      if (useServer) {
+        // Fetch from API
+        const response = await apiClient.get('/api/customers');
+        
+        // Handle different response formats: response.data or response.data.data
+        const customersData = response.data?.data || response.data || [];
+        
+        if (response.success && Array.isArray(customersData)) {
+          // Map database customer to UI customer format
+          const customers = customersData.map((dbCustomer: any) => ({
+            id: dbCustomer.id,
+            name: `${dbCustomer.firstName || ''} ${dbCustomer.lastName || ''}`.trim(),
+            email: dbCustomer.email || '',
+            phone: dbCustomer.phone || '',
+            address: dbCustomer.addresses?.[0] 
+              ? `${dbCustomer.addresses[0].street1 || ''}, ${dbCustomer.addresses[0].city || ''}, ${dbCustomer.addresses[0].state || ''} ${dbCustomer.addresses[0].postalCode || ''}`.trim()
+              : '',
+          }));
+
+          return {
+            success: true,
+            customers,
+            isOffline: false,
+          };
+        }
+
+        return {
+          success: false,
+          error: response.error || 'Failed to fetch customers',
+          isOffline: false,
+        };
+      } else {
+        // TODO: Implement local database fetch
+        return {
+          success: false,
+          error: 'Local database not yet implemented',
+          isOffline: true,
+        };
+      }
+    } catch (error) {
+      console.error('[IPC] customer:get-all error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch customers',
+        isOffline: true,
+      };
+    }
+  });
+
+  ipcMain.handle('customer:create', async (_event, data: { name: string; email?: string; phone?: string; address?: string }) => {
+    console.log('[IPC] ========== CUSTOMER:CREATE CALLED ==========');
+    
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const apiClient = dataAccessService.getApiClient();
+      const response = await apiClient.post('/api/customers', data);
+      
+      if (response.success && response.data) {
+        const dbCustomer = response.data;
+        const customer = {
+          id: dbCustomer.id,
+          name: `${dbCustomer.firstName || ''} ${dbCustomer.lastName || ''}`.trim(),
+          email: dbCustomer.email || '',
+          phone: dbCustomer.phone || '',
+          address: dbCustomer.addresses?.[0] 
+            ? `${dbCustomer.addresses[0].street1 || ''}, ${dbCustomer.addresses[0].city || ''}, ${dbCustomer.addresses[0].state || ''} ${dbCustomer.addresses[0].postalCode || ''}`.trim()
+            : '',
+        };
+
+        return {
+          success: true,
+          customer,
+        };
+      }
+
+      return {
+        success: false,
+        error: response.error || 'Failed to create customer',
+      };
+    } catch (error) {
+      console.error('[IPC] customer:create error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create customer',
+      };
+    }
+  });
+
+  ipcMain.handle('customer:update', async (_event, id: string, data: { name: string; email?: string; phone?: string; address?: string }) => {
+    console.log('[IPC] ========== CUSTOMER:UPDATE CALLED ==========');
+    
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const apiClient = dataAccessService.getApiClient();
+      const response = await apiClient.put(`/api/customers/${id}`, data);
+      
+      if (response.success && response.data) {
+        const dbCustomer = response.data;
+        const customer = {
+          id: dbCustomer.id,
+          name: `${dbCustomer.firstName || ''} ${dbCustomer.lastName || ''}`.trim(),
+          email: dbCustomer.email || '',
+          phone: dbCustomer.phone || '',
+          address: dbCustomer.addresses?.[0] 
+            ? `${dbCustomer.addresses[0].street1 || ''}, ${dbCustomer.addresses[0].city || ''}, ${dbCustomer.addresses[0].state || ''} ${dbCustomer.addresses[0].postalCode || ''}`.trim()
+            : '',
+        };
+
+        return {
+          success: true,
+          customer,
+        };
+      }
+
+      return {
+        success: false,
+        error: response.error || 'Failed to update customer',
+      };
+    } catch (error) {
+      console.error('[IPC] customer:update error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update customer',
+      };
+    }
+  });
+
+  ipcMain.handle('customer:delete', async (_event, id: string) => {
+    console.log('[IPC] ========== CUSTOMER:DELETE CALLED ==========');
+    
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const apiClient = dataAccessService.getApiClient();
+      const response = await apiClient.delete(`/api/customers/${id}`);
+      
+      return {
+        success: response.success || false,
+        error: response.error,
+      };
+    } catch (error) {
+      console.error('[IPC] customer:delete error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete customer',
       };
     }
   });

@@ -3,7 +3,7 @@
  * Handles authentication and user data with online/offline support
  */
 
-import { DataSource, UserRepository as SharedUserRepository } from '@monorepo/shared-data-access';
+import { UserRepository as SharedUserRepository } from '@monorepo/shared-data-access';
 import { BaseRepository } from './base-repository';
 import { dataAccessService } from '../data-access.service';
 
@@ -31,11 +31,6 @@ export interface LoginResult {
 export class WebUserRepository extends BaseRepository {
   private sharedUserRepo: SharedUserRepository | null = null;
 
-  constructor() {
-    super();
-    // Lazy initialization - will be created when first needed
-  }
-
   /**
    * Get or create the shared user repository
    * Lazy initialization ensures dataAccessService is ready
@@ -52,7 +47,7 @@ export class WebUserRepository extends BaseRepository {
           dataAccessService.getLocalDb();
           dataAccessService.getApiClient();
           break; // Service is ready
-        } catch (error) {
+        } catch {
           // Service not ready yet, wait a bit
           await new Promise(resolve => setTimeout(resolve, 100));
           retries++;
@@ -78,100 +73,60 @@ export class WebUserRepository extends BaseRepository {
 
   /**
    * Login user with online/offline support
-   * Tries server first, falls back to local if offline
+   * Tries server first, falls back to local if offline or server unavailable
    */
   async login(email: string, password: string): Promise<LoginResult> {
     try {
       const sharedRepo = await this.getSharedUserRepo();
       
-      // Determine if we should try server login
-      const isOnline = this.isOnline();
+      // Always try online login first (shared repo will handle fallback)
+      // Pass undefined for useServer to enable auto-detection with fallback
+      console.log('[WebUserRepository] Attempting login (will try online first, then offline)...');
+      const result = await sharedRepo.login({ username: email, password }, { useServer: undefined });
 
-      if (isOnline) {
-        try {
-          // Try online login
-          console.log('[WebUserRepository] Attempting online login...');
-          const result = await sharedRepo.login({ username: email, password }, { useServer: true });
-
-          if (result.success && result.token && result.user) {
-            // Set auth token for future API calls
-            dataAccessService.setAuthToken(result.token);
-
-            // Note: UserRepository.login already fetches and saves user data to local DB
-            // No need to call fetchAndSaveOfflineUserData separately
-
-            console.log('[WebUserRepository] Online login successful');
-            return {
-              success: true,
-              user: result.user as User,
-              token: result.token,
-              isOffline: false,
-            };
-          }
-          
-          // If login succeeded but no token/user, something went wrong
-          if (result.success && (!result.token || !result.user)) {
-            console.error('[WebUserRepository] Login succeeded but missing token or user:', result);
-            return {
-              success: false,
-              isOffline: false,
-              error: 'Login succeeded but incomplete response from server',
-            };
-          }
-        } catch (error: any) {
-          const errorMsg = error.message || 'Login failed';
-          console.error('[WebUserRepository] Online login error:', {
-            message: errorMsg,
-            stack: error.stack,
-            error,
-          });
-          
-          // If it's an authentication error (401, 403) or invalid credentials, don't fall back to offline
-          // Only fall back for network/server errors
-          const isAuthError = errorMsg.includes('Invalid') || 
-                             errorMsg.includes('credentials') || 
-                             errorMsg.includes('401') || 
-                             errorMsg.includes('403') ||
-                             errorMsg.includes('unauthorized');
-          
-          if (isAuthError) {
-            return {
-              success: false,
-              isOffline: false,
-              error: 'Invalid credentials. Please check your username and password.',
-            };
-          }
-          
-          // For network/server errors, fall through to offline login
-          console.warn('[WebUserRepository] Online login failed (network/server error), trying offline...');
+      if (result.success && result.user) {
+        // Set auth token if available (online login)
+        if (result.token) {
+          dataAccessService.setAuthToken(result.token);
         }
-      }
 
-      // Try offline login using shared repository
-      console.log('[WebUserRepository] Attempting offline login...');
-      const offlineResult = await sharedRepo.login({ username: email, password }, { useServer: false });
-
-      if (offlineResult.success && offlineResult.user) {
-        console.log('[WebUserRepository] Offline login successful');
+        console.log(`[WebUserRepository] Login successful (${result.isOffline ? 'offline' : 'online'})`);
+        
+        // Map shared User to local User type, ensuring createdAt, updatedAt, and isActive are properly converted
+        const sharedUser = result.user;
+        const localUser: User = {
+          id: sharedUser.id,
+          username: sharedUser.username,
+          email: sharedUser.email,
+          firstName: sharedUser.firstName,
+          lastName: sharedUser.lastName,
+          roleId: sharedUser.roleId,
+          isActive: sharedUser.isActive ? 1 : 0,
+          passwordHash: sharedUser.passwordHash,
+          createdAt: (sharedUser as { createdAt?: string }).createdAt || this.now(),
+          updatedAt: (sharedUser as { updatedAt?: string }).updatedAt || this.now(),
+        };
+        
         return {
           success: true,
-          user: offlineResult.user as User,
-          isOffline: true,
+          user: localUser,
+          token: result.token,
+          isOffline: result.isOffline || false,
         };
       }
 
-      // Offline login failed - return the error from shared repository
+      // Login failed - return the error from shared repository
       return {
         success: false,
-        isOffline: true,
-        error: offlineResult.error || 'Invalid credentials. Please check your username and password.',
+        isOffline: result.isOffline || false,
+        error: result.error || 'Invalid credentials. Please check your username and password.',
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[WebUserRepository] Login error:', error);
       return {
         success: false,
         isOffline: true,
-        error: error.message || 'Login failed',
+        error: error instanceof Error ? error.message : 'Login failed',
       };
     }
   }

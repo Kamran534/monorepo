@@ -44,3 +44,6 @@ export type { SidePanelProps } from './SidePanel.js';
 // Pagination component
 export { Pagination } from './Pagination.js';
 export type { PaginationProps } from './Pagination.js';
+
+// Customer components
+export * from './customer/index.js';

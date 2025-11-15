@@ -8,7 +8,11 @@ import '@monorepo/shared-ui/styles/components.css';
 import App from './app/app';
 import { registerSW } from 'virtual:pwa-register';
 import { dataAccessService } from './services/data-access.service';
-import { StoreProvider } from '@monorepo/shared-store';
+import { StoreProvider, setCustomerRepository } from '@monorepo/shared-store';
+import { WebCustomerRepository } from './services/repositories/customer-repository';
+
+// Configure repositories before app initialization
+setCustomerRepository(new WebCustomerRepository());
 
 // Initialize data access service
 dataAccessService.initialize().catch((error) => {

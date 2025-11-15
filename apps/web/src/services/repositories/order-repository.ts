@@ -186,14 +186,14 @@ export class OrderRepository extends BaseRepository {
         return savedOrder;
       } else {
         // Save to local DB with pending sync status
-        const orderWithSync = this.addSyncMetadata(order);
+        const orderWithSync = this.addSyncMetadata(order as unknown as Record<string, unknown>);
         await this.getDb().execute('INSERT INTO SaleOrder VALUES (?)', [
           this.sanitizeForDb(orderWithSync),
         ]);
 
         // Save line items
         for (const item of lineItems) {
-          const itemWithSync = this.addSyncMetadata(item);
+          const itemWithSync = this.addSyncMetadata(item as unknown as Record<string, unknown>);
           await this.getDb().execute('INSERT INTO OrderLineItem VALUES (?)', [
             this.sanitizeForDb(itemWithSync),
           ]);
@@ -201,7 +201,7 @@ export class OrderRepository extends BaseRepository {
 
         // Save payments
         for (const payment of payments) {
-          const paymentWithSync = this.addSyncMetadata(payment);
+          const paymentWithSync = this.addSyncMetadata(payment as unknown as Record<string, unknown>);
           await this.getDb().execute('INSERT INTO OrderPayment VALUES (?)', [
             this.sanitizeForDb(paymentWithSync),
           ]);
@@ -209,7 +209,7 @@ export class OrderRepository extends BaseRepository {
 
         // Save discounts
         for (const discount of discounts) {
-          const discountWithSync = this.addSyncMetadata(discount);
+          const discountWithSync = this.addSyncMetadata(discount as unknown as Record<string, unknown>);
           await this.getDb().execute('INSERT INTO OrderDiscount VALUES (?)', [
             this.sanitizeForDb(discountWithSync),
           ]);
@@ -276,7 +276,7 @@ export class OrderRepository extends BaseRepository {
   /**
    * Get recent orders
    */
-  async getRecentOrders(limit: number = 50): Promise<SaleOrder[]> {
+  async getRecentOrders(limit = 50): Promise<SaleOrder[]> {
     try {
       if (this.isOnline()) {
         return await this.getApi().get<SaleOrder[]>('/api/orders/recent', {

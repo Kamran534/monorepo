@@ -6,12 +6,60 @@
  */
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import type {
-  Category,
-  CategoryRepository,
-  GetCategoriesOptions,
-  GetCategoriesResult
-} from '@monorepo/shared-data-access';
+
+// Category types (defined locally to avoid buildable/non-buildable library issues)
+export interface Category {
+  id: string;
+  name: string;
+  parentCategoryId: string | null;
+  description: string | null;
+  image: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  parentCategory?: {
+    id: string;
+    name: string;
+  } | null;
+  childCategories?: Array<{
+    id: string;
+    name: string;
+    isActive: boolean;
+    image: string | null;
+  }>;
+  _count?: {
+    products: number;
+  };
+}
+
+export interface GetCategoriesOptions {
+  /**
+   * Whether to include inactive categories
+   * Default: false
+   */
+  includeInactive?: boolean;
+  
+  /**
+   * Whether to use server for fetching categories
+   * If false, will use local database directly
+   * If undefined, will check server availability automatically
+   */
+  useServer?: boolean;
+}
+
+export interface GetCategoriesResult {
+  success: boolean;
+  categories?: Category[];
+  error?: string;
+  isOffline?: boolean;
+}
+
+// Interface for category repository (only methods needed by Redux)
+export interface CategoryRepository {
+  getCategories(options?: GetCategoriesOptions): Promise<GetCategoriesResult>;
+  getCategoryById(categoryId: string, options?: GetCategoriesOptions): Promise<Category | null>;
+}
 
 export interface CategoryState {
   // Data

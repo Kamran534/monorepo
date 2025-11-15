@@ -84,29 +84,31 @@ export class WebProductRepository implements StoreProductRepository {
       console.log('[WebProductRepository] Server URL:', SERVER_URL);
 
       if (useServer) {
-        // Fetch from API
+        // Fetch from API using the API client (which has auth token)
         try {
           const pageNum = options?.page || 1;
           const limitNum = options?.limit || 50;
-          const apiUrl = `${SERVER_URL}/api/products?includeVariants=false&includeInventory=false&page=${pageNum}&limit=${limitNum}`;
+          const apiUrl = `/api/products?includeVariants=false&includeInventory=false&page=${pageNum}&limit=${limitNum}`;
           console.log('[WebProductRepository] Fetching from API:', apiUrl);
 
-          const response = await fetch(apiUrl, {
-            headers: {
-              'Content-Type': 'application/json',
-              ...(localStorage.getItem('authToken') && {
-                Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-              }),
-            },
+          const apiClient = dataAccessService.getApiClient();
+          const response = await apiClient.get<{
+            success?: boolean;
+            data?: ApiProduct[] | { data?: ApiProduct[] };
+            products?: ApiProduct[];
+            total?: number;
+            meta?: { total?: number; page?: number; limit?: number };
+            page?: number;
+            limit?: number;
+          }>(apiUrl);
+
+          console.log('[WebProductRepository] API response:', {
+            success: response.success,
+            hasData: !!response.data,
+            keys: Object.keys(response),
           });
 
-          console.log('[WebProductRepository] API response status:', response.status);
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          const data = await response.json();
+          const data = response.data || response;
           console.log('[WebProductRepository] API response data structure:', {
             hasData: !!data.data,
             hasProducts: !!data.products,

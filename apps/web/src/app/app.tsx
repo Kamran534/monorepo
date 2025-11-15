@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BrowserRouter, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Layout, SidebarItem, useTheme, CartProvider, ToastProvider, SplashScreen, useCart } from '@monorepo/shared-ui';
+import { Layout, SidebarItem, useTheme, CartProvider, TransactionCustomerProvider, ToastProvider, SplashScreen, useCart } from '@monorepo/shared-ui';
 import {
   Home,
   Package,
@@ -259,9 +259,11 @@ export function App() {
     <BrowserRouter>
       <WebAuthProvider>
         <CartProvider>
-          <ToastProvider>
-            <AppContent />
-          </ToastProvider>
+          <TransactionCustomerProvider>
+            <ToastProvider>
+              <AppContent />
+            </ToastProvider>
+          </TransactionCustomerProvider>
         </CartProvider>
       </WebAuthProvider>
     </BrowserRouter>

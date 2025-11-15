@@ -56,6 +56,9 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
 
           // Restore token if available
           if (session.token) {
+            // Always set the auth token first
+            dataAccessService.setAuthToken(session.token);
+            
             // If we were online, try to initialize sync with token
             if (!session.isOffline) {
               try {
@@ -63,9 +66,6 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
               } catch (error) {
                 console.warn('[WebAuthProvider] Failed to initialize sync on restore:', error);
               }
-            } else {
-              // Just set the token for offline mode
-              dataAccessService.setAuthToken(session.token);
             }
           }
 
@@ -110,6 +110,11 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
           console.warn('[WebAuthProvider] Failed to save session:', error);
         }
 
+        // Set auth token for API client (UserRepository should have already set it, but ensure it's set)
+        if (result.token) {
+          dataAccessService.setAuthToken(result.token);
+        }
+        
         // Initialize sync if online
         if (!result.isOffline && result.token) {
           try {

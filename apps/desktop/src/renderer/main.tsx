@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HashRouter, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Layout, SidebarItem, useTheme, CartProvider, ToastProvider, SplashScreen, useCart } from '@monorepo/shared-ui';
+import { Layout, SidebarItem, useTheme, CartProvider, TransactionCustomerProvider, ToastProvider, SplashScreen, useCart } from '@monorepo/shared-ui';
 import { DesktopAuthProvider, useDesktopAuth } from '@monorepo/shared-ui';
-import { StoreProvider } from '@monorepo/shared-store';
+import { StoreProvider, setCustomerRepository } from '@monorepo/shared-store';
 import {
   Home,
   Package,
@@ -16,11 +16,15 @@ import {
 import { AppRoutes } from './routes.js';
 import { Login } from '../pages/Login.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
+import { getDesktopCustomerRepository } from './repositories/DesktopCustomerRepository.js';
 
 // Import styles
 import '@monorepo/shared-ui/styles/globals.css';
 import '@monorepo/shared-ui/styles/components.css';
 import './styles.css';
+
+// Configure repositories before app initialization
+setCustomerRepository(getDesktopCustomerRepository());
 
 // Logo component
 const StoreLogo = () => <Store className="w-full h-full" />;
@@ -267,9 +271,11 @@ function App() {
       <StoreProvider>
         <DesktopAuthProvider>
           <CartProvider>
-            <ToastProvider>
-              <AppContent />
-            </ToastProvider>
+            <TransactionCustomerProvider>
+              <ToastProvider>
+                <AppContent />
+              </ToastProvider>
+            </TransactionCustomerProvider>
           </CartProvider>
         </DesktopAuthProvider>
       </StoreProvider>

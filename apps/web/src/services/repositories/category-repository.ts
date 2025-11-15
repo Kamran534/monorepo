@@ -10,12 +10,13 @@ import {
   type GetCategoriesOptions,
   type GetCategoriesResult,
 } from '@monorepo/shared-data-access';
+import type { CategoryRepository } from '@monorepo/shared-store';
 import { BaseRepository } from './base-repository';
 import { dataAccessService } from '../data-access.service';
 
 export type { Category, GetCategoriesOptions, GetCategoriesResult } from '@monorepo/shared-data-access';
 
-export class WebCategoryRepository extends BaseRepository implements SharedCategoryRepository {
+export class WebCategoryRepository extends BaseRepository implements CategoryRepository {
   private sharedCategoryRepo: SharedCategoryRepository | null = null;
 
   /**

@@ -69,13 +69,15 @@ A **production-ready, cross-platform** Point of Sale (POS) system powered by Nx,
 
 - ✅ **Product Catalog** – Hierarchical categories with rich product information
 - ✅ **Product Search** – Real-time search with URL-based filtering and auto-routing
+- ✅ **Customer Management** – Full customer CRUD operations with Redux integration
 - ✅ **Transaction Management** – Fast checkout with multiple payment methods
+- ✅ **Order & Sales Tracking** – Complete order management system
 - ✅ **Inventory Tracking** – Real-time stock levels and alerts
 - ✅ **Receipt Printing** – Thermal printer support with custom templates
 - ✅ **Barcode Scanning** – Hardware scanner integration across platforms
 - ✅ **Keyboard Shortcuts** – Power-user workflows for speed
 - ✅ **Multi-currency** – International sales support
-- ✅ **State Management** – Redux store with intelligent caching for categories and products
+- ✅ **State Management** – Redux store with intelligent caching for categories, products, and customers
 
 ### 🌐 Offline & Sync
 
@@ -299,6 +301,7 @@ monorepo/
 │       │   │   │   ├── category/     # CategoryCard, CategorySection, CategoryBreadcrumb
 │       │   │   │   ├── home/         # Home sections (Start, Inventory, Product, etc.)
 │       │   │   │   ├── products/     # Product list, filters, info, images, specs
+│       │   │   │   ├── customer/     # Customer list, forms, management
 │       │   │   │   ├── transactions/ # Numpad, transaction lines, quantity panel
 │       │   │   │   ├── receipt/      # Invoice component
 │       │   │   │   ├── Layout.tsx    # Main layout wrapper
@@ -340,7 +343,7 @@ monorepo/
 │       │   │   │   ├── store.tsx    # Store configuration
 │       │   │   │   ├── provider.tsx # StoreProvider component
 │       │   │   │   ├── hooks.ts     # Typed Redux hooks
-│       │   │   │   ├── slices/      # Redux slices (category, etc.)
+│       │   │   │   ├── slices/      # Redux slices (category, product, customer)
 │       │   │   │   └── selectors/   # Memoized selectors
 │       │   │   └── index.ts
 │       │   └── package.json
@@ -398,6 +401,7 @@ monorepo/
 - `/products` - Product listing with real-time search, filtering, and sorting
 - `/products?search=<query>` - Product search with URL-based filtering
 - `/products/:id` - Product detail view
+- `/customers` - Customer management (list, create, edit, delete)
 - `/transaction` - Checkout and payment
 - `/settings` - Application settings
 
@@ -495,14 +499,19 @@ window.electronAPI = {
    - `ProductActionButtons` - Add to cart, buy now buttons
    - `RelatedProducts` - Recommendations carousel
 
-4. **Transaction Components**
+4. **Customer Components**
+   - `CustomerList` - Customer listing and management
+   - `CustomerForm` - Customer creation and editing forms
+   - `CustomerCard` - Individual customer card display
+
+5. **Transaction Components**
    - `TransactionLines` - Cart line items
    - `TransactionNumpad` - Numeric input pad
    - `TransactionQuantityPanel` - Quantity selector
    - `TransactionActions` - Payment and action buttons
    - `TransactionVerticalNav` - Quick navigation
 
-5. **Home Components**
+6. **Home Components**
    - `StartSection` - Quick start actions
    - `ProductSection` - Featured products
    - `InventorySection` - Inventory status
@@ -510,7 +519,7 @@ window.electronAPI = {
    - `AccountSettingsSection` - User settings
    - `ImageSlider` - Image carousel
 
-6. **Receipt Components**
+7. **Receipt Components**
    - `Invoice` - Receipt template for printing
 
 **Theme System**:
@@ -715,6 +724,7 @@ Provides intelligent caching and state management across all applications:
 - ✅ **DevTools Support** – Redux DevTools for debugging
 - ✅ **Product State Management** – Full Redux integration for products with search and filtering
 - ✅ **Category State Management** – Redux integration for categories with hierarchical support
+- ✅ **Customer State Management** – Redux integration for customers with CRUD operations
 
 **Architecture**:
 
@@ -816,6 +826,21 @@ selectProductById(id)     // Specific product by ID
 selectProductsByCategoryId(id) // Products in category
 selectProductCount        // Total product count
 selectProductIsCacheFresh // Is cache still valid?
+```
+
+**Customer Selectors**:
+```typescript
+// Basic selectors
+selectCustomers           // All customers
+selectCustomersLoading    // Loading state
+selectCustomersError      // Error message
+selectCustomersIsOffline  // Offline mode indicator
+selectCustomerCacheAge    // Cache age in seconds
+
+// Memoized selectors (optimized)
+selectCustomerById(id)    // Specific customer by ID
+selectCustomerCount       // Total customer count
+selectCustomerIsCacheFresh // Is cache still valid?
 ```
 
 **Cache Control**:
@@ -2098,7 +2123,7 @@ mainWindow.webContents.openDevTools();
 ## 📊 Project Status
 
 ![Status](https://img.shields.io/badge/Status-In%20Active%20Development-orange.svg)
-![Version](https://img.shields.io/badge/Version-0.2.0-blue.svg)
+![Version](https://img.shields.io/badge/Version-0.3.0-blue.svg)
 ![Platforms](https://img.shields.io/badge/Platforms-Web%20%7C%20Desktop%20%7C%20Mobile-1E90FF.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-100%25-3178C6.svg)
 
@@ -2129,6 +2154,10 @@ mainWindow.webContents.openDevTools();
 - ✅ Real-time product search with URL-based filtering
 - ✅ Product state management (web & desktop)
 - ✅ Centered loading animations across all pages
+- ✅ Customer management system with full CRUD operations
+- ✅ Customer Redux integration with caching
+- ✅ Order and sales tracking functionality
+- ✅ Product listing with pagination support
 
 ### 🛣️ Roadmap
 

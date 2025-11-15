@@ -75,6 +75,27 @@ interface GetProductsResult {
   };
 }
 
+interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+}
+
+interface GetCustomersResult {
+  success: boolean;
+  customers?: Customer[];
+  error?: string;
+  isOffline?: boolean;
+}
+
+interface CreateCustomerResult {
+  success: boolean;
+  customer?: Customer;
+  error?: string;
+}
+
 interface ElectronAPI {
   print: (options: {
     silent?: boolean;
@@ -95,6 +116,12 @@ interface ElectronAPI {
   };
   product: {
     getAll: (options?: { page?: number; limit?: number }) => Promise<GetProductsResult>;
+  };
+  customer: {
+    getAll: () => Promise<GetCustomersResult>;
+    create: (data: { name: string; email?: string; phone?: string; address?: string }) => Promise<CreateCustomerResult>;
+    update: (id: string, data: { name: string; email?: string; phone?: string; address?: string }) => Promise<CreateCustomerResult>;
+    delete: (id: string) => Promise<{ success: boolean; error?: string }>;
   };
 }
 

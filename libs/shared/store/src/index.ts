@@ -24,7 +24,7 @@ export {
   clearError,
   setOfflineMode,
 } from './lib/slices/categorySlice';
-export type { CategoryState } from './lib/slices/categorySlice';
+export type { CategoryState, CategoryRepository, Category, GetCategoriesOptions, GetCategoriesResult } from './lib/slices/categorySlice';
 
 // Category selectors
 export {
@@ -74,3 +74,36 @@ export {
   selectProductCacheAge,
   selectProductPagination,
 } from './lib/selectors/productSelectors';
+
+// Customer slice
+export {
+  fetchCustomers,
+  createCustomer,
+  updateCustomer,
+  deleteCustomer,
+  setCustomerRepository,
+  clearCache as clearCustomerCache,
+  setSelectedCustomer,
+  setCacheTimeout as setCustomerCacheTimeout,
+  clearError as clearCustomerError,
+  setOfflineMode as setCustomerOfflineMode,
+} from './lib/slices/customerSlice';
+export type { CustomerState, CustomerRepository, Customer, CreateCustomerData, GetCustomersOptions, GetCustomersResult, CreateCustomerResult } from './lib/slices/customerSlice';
+
+// Customer selectors
+export {
+  selectCustomerState,
+  selectCustomers,
+  selectCustomersLoading,
+  selectCustomersCreating,
+  selectCustomersUpdating,
+  selectCustomersDeleting,
+  selectCustomersError,
+  selectSelectedCustomer,
+  selectCustomersIsOffline,
+  selectCustomersLastFetched,
+  selectCustomerById,
+  selectCustomerCount,
+  selectCustomerIsCacheFresh,
+  selectCustomerCacheAge,
+} from './lib/selectors/customerSelectors';

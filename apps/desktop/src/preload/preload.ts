@@ -90,13 +90,33 @@ try {
         return ipcRenderer.invoke('product:get-all', options);
       },
     },
+    // Customer API
+    customer: {
+      getAll: () => {
+        console.log('[Preload] customer.getAll called');
+        return ipcRenderer.invoke('customer:get-all');
+      },
+      create: (data: { name: string; email?: string; phone?: string; address?: string }) => {
+        console.log('[Preload] customer.create called');
+        return ipcRenderer.invoke('customer:create', data);
+      },
+      update: (id: string, data: { name: string; email?: string; phone?: string; address?: string }) => {
+        console.log('[Preload] customer.update called');
+        return ipcRenderer.invoke('customer:update', id, data);
+      },
+      delete: (id: string) => {
+        console.log('[Preload] customer.delete called');
+        return ipcRenderer.invoke('customer:delete', id);
+      },
+    },
   });
-  console.log('[Preload] Exposed electronAPI with connection, auth, sync, category, and product API');
+  console.log('[Preload] Exposed electronAPI with connection, auth, sync, category, product, and customer API');
   console.log('[Preload] Connection methods exposed: getState, setManual, getManualOverride, check, onStateChange');
   console.log('[Preload] Auth methods exposed: login, logout');
   console.log('[Preload] Sync methods exposed: triggerManual, getStatus');
   console.log('[Preload] Category methods exposed: getAll, getById');
   console.log('[Preload] Product methods exposed: getAll');
+  console.log('[Preload] Customer methods exposed: getAll, create, update, delete');
 } catch (error) {
   console.error('[Preload] Failed to expose APIs:', error);
 }

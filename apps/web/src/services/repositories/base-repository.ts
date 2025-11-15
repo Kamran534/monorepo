@@ -33,7 +33,7 @@ export abstract class BaseRepository {
       return data;
     }
 
-    const sanitized: any = Array.isArray(data) ? [] : {};
+    const sanitized: T = (Array.isArray(data) ? [] : {}) as T;
 
     for (const [key, value] of Object.entries(data)) {
       if (value === undefined) {
@@ -41,13 +41,13 @@ export abstract class BaseRepository {
       }
 
       if (value === null) {
-        sanitized[key] = null;
+        (sanitized as Record<string, unknown>)[key] = null;
       } else if (value instanceof Date) {
-        sanitized[key] = value.toISOString();
+        (sanitized as Record<string, unknown>)[key] = value.toISOString();
       } else if (typeof value === 'object') {
-        sanitized[key] = this.sanitizeForDb(value);
+        (sanitized as Record<string, unknown>)[key] = this.sanitizeForDb(value);
       } else {
-        sanitized[key] = value;
+        (sanitized as Record<string, unknown>)[key] = value;
       }
     }
 
@@ -71,7 +71,7 @@ export abstract class BaseRepository {
   /**
    * Add sync metadata to a record
    */
-  protected addSyncMetadata<T extends Record<string, any>>(data: T): T & {
+  protected addSyncMetadata<T extends Record<string, unknown>>(data: T): T & {
     sync_status: string;
     last_synced_at: string | null;
     is_deleted: number;
