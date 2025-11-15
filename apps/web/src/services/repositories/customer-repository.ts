@@ -14,15 +14,16 @@ import type {
 } from '@monorepo/shared-store';
 import { BaseRepository } from './base-repository';
 
-interface DbCustomer {
+// IndexedDB customer type (matches cposSchema with camelCase fields)
+interface IndexedDBCustomer {
   id: string;
-  customer_code: string;
-  first_name: string;
-  last_name: string;
+  customerCode: string;
+  firstName: string;
+  lastName: string;
   email?: string | null;
   phone?: string | null;
-  mobile_phone?: string | null;
-  customer_group_id?: string | null;
+  mobilePhone?: string | null;
+  customerGroupId?: string | null;
   sync_status: string;
   last_synced_at: string | null;
   is_deleted: number;
@@ -30,17 +31,18 @@ interface DbCustomer {
   updatedAt?: string;
 }
 
-interface DbCustomerAddress {
+// IndexedDB customer address type (matches cposSchema with camelCase fields)
+interface IndexedDBCustomerAddress {
   id: string;
-  customer_id: string;
-  address_type: string;
+  customerId: string;
+  addressType: string;
   street1: string;
   street2?: string | null;
   city: string;
   state: string;
-  postal_code: string;
+  postalCode: string;
   country: string;
-  is_default: number;
+  isDefault: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -83,15 +85,16 @@ export class WebCustomerRepository extends BaseRepository implements CustomerRep
 
       for (const dbCustomer of dbCustomers) {
         // Map API customer to IndexedDB format
-        const customerObject: DbCustomer = {
+        // Note: Schema uses camelCase (customerCode, customerGroupId), not snake_case
+        const customerObject = {
           id: dbCustomer.id,
-          customer_code: dbCustomer.customerCode || dbCustomer.id,
-          first_name: dbCustomer.firstName || '',
-          last_name: dbCustomer.lastName || '',
+          customerCode: dbCustomer.customerCode || dbCustomer.id,
+          firstName: dbCustomer.firstName || '',
+          lastName: dbCustomer.lastName || '',
           email: dbCustomer.email || null,
           phone: dbCustomer.phone || null,
-          mobile_phone: dbCustomer.mobilePhone || null,
-          customer_group_id: dbCustomer.customerGroupId || null,
+          mobilePhone: dbCustomer.mobilePhone || null,
+          customerGroupId: dbCustomer.customerGroupId || null,
           sync_status: 'synced',
           last_synced_at: now,
           is_deleted: 0,
@@ -99,8 +102,8 @@ export class WebCustomerRepository extends BaseRepository implements CustomerRep
           updatedAt: dbCustomer.updatedAt ? (dbCustomer.updatedAt instanceof Date ? dbCustomer.updatedAt.toISOString() : dbCustomer.updatedAt) : now,
         };
 
-        // Save customer to IndexedDB
-        await db.execute('customers', [customerObject]);
+        // Save customer to IndexedDB (store name is 'Customer' in cposSchema)
+        await db.execute('Customer', [customerObject]);
 
         // Save customer addresses if they exist
         if (dbCustomer.addresses && Array.isArray(dbCustomer.addresses)) {
@@ -110,21 +113,22 @@ export class WebCustomerRepository extends BaseRepository implements CustomerRep
               console.warn('[WebCustomerRepository] Skipping address without ID for customer:', dbCustomer.id);
               continue;
             }
-            const addressObject: DbCustomerAddress = {
+            // Note: Schema uses camelCase (customerId, addressType, postalCode, isDefault), not snake_case
+            const addressObject = {
               id: address.id,
-              customer_id: dbCustomer.id,
-              address_type: address.addressType || 'Both',
+              customerId: dbCustomer.id,
+              addressType: address.addressType || 'Both',
               street1: address.street1 || '',
               street2: address.street2 || null,
               city: address.city || '',
               state: address.state || '',
-              postal_code: address.postalCode || '',
+              postalCode: address.postalCode || '',
               country: address.country || '',
-              is_default: address.isDefault ? 1 : 0,
+              isDefault: address.isDefault ? 1 : 0,
               createdAt: address.createdAt ? (address.createdAt instanceof Date ? address.createdAt.toISOString() : address.createdAt) : now,
               updatedAt: address.updatedAt ? (address.updatedAt instanceof Date ? address.updatedAt.toISOString() : address.updatedAt) : now,
             };
-            await db.execute('customer_addresses', [addressObject]);
+            await db.execute('CustomerAddress', [addressObject]);
           }
         }
       }
@@ -144,42 +148,60 @@ export class WebCustomerRepository extends BaseRepository implements CustomerRep
       const db = this.getDb();
       
       // Query all customers from IndexedDB
-      const dbCustomers = await db.query<DbCustomer>('SELECT * FROM customers WHERE is_deleted = 0');
+      // Fetch all and filter in JavaScript since IndexedDB query parser may not handle all WHERE clauses
+      // Store name is 'Customer' in cposSchema (PascalCase)
+      const allCustomers = await db.query<IndexedDBCustomer>('SELECT * FROM Customer');
       
-      if (!dbCustomers || dbCustomers.length === 0) {
+      if (!allCustomers || allCustomers.length === 0) {
+        console.log('[WebCustomerRepository] No customers found in IndexedDB');
         return [];
       }
+      
+      // Filter out deleted customers (is_deleted is a number: 0 = not deleted, 1 = deleted)
+      const dbCustomers = allCustomers.filter(c => c.is_deleted === 0);
+      
+      if (dbCustomers.length === 0) {
+        console.log('[WebCustomerRepository] All customers in IndexedDB are marked as deleted');
+        return [];
+      }
+      
+      console.log('[WebCustomerRepository] Found', dbCustomers.length, 'active customers in IndexedDB (out of', allCustomers.length, 'total)');
 
       // Get addresses for all customers
       // Query all addresses and filter in memory (simpler than complex WHERE IN clause)
-      const allAddresses = await db.query<DbCustomerAddress>('SELECT * FROM customer_addresses');
+      // Store name is 'CustomerAddress' in cposSchema (PascalCase)
+      // Note: Schema uses camelCase (customerId), not snake_case (customer_id)
+      const allAddresses = await db.query<IndexedDBCustomerAddress>('SELECT * FROM CustomerAddress');
       const customerIdsSet = new Set(dbCustomers.map(c => c.id));
-      const addresses = allAddresses.filter(addr => customerIdsSet.has(addr.customer_id));
+      const addresses = allAddresses.filter(addr => customerIdsSet.has(addr.customerId));
 
       // Group addresses by customer ID
-      const addressesByCustomer = new Map<string, DbCustomerAddress[]>();
+      // Note: Schema uses camelCase (customerId), not snake_case (customer_id)
+      const addressesByCustomer = new Map<string, IndexedDBCustomerAddress[]>();
       for (const address of addresses) {
-        if (!addressesByCustomer.has(address.customer_id)) {
-          addressesByCustomer.set(address.customer_id, []);
+        const customerId = address.customerId;
+        if (!addressesByCustomer.has(customerId)) {
+          addressesByCustomer.set(customerId, []);
         }
-        const customerAddresses = addressesByCustomer.get(address.customer_id);
+        const customerAddresses = addressesByCustomer.get(customerId);
         if (customerAddresses) {
           customerAddresses.push(address);
         }
       }
 
       // Map to UI Customer format
+      // Note: Schema uses camelCase (firstName, lastName, postalCode), not snake_case
       const customers: Customer[] = dbCustomers.map(dbCustomer => {
         const customerAddresses = addressesByCustomer.get(dbCustomer.id) || [];
-        const defaultAddress = customerAddresses.find(a => a.is_default === 1) || customerAddresses[0];
+        const defaultAddress = customerAddresses.find(a => a.isDefault === 1) || customerAddresses[0];
 
         return {
           id: dbCustomer.id,
-          name: `${dbCustomer.first_name} ${dbCustomer.last_name}`.trim(),
+          name: `${dbCustomer.firstName || ''} ${dbCustomer.lastName || ''}`.trim(),
           email: dbCustomer.email || '',
           phone: dbCustomer.phone || '',
           address: defaultAddress
-            ? `${defaultAddress.street1 || ''}, ${defaultAddress.city || ''}, ${defaultAddress.state || ''} ${defaultAddress.postal_code || ''}`.trim()
+            ? `${defaultAddress.street1 || ''}, ${defaultAddress.city || ''}, ${defaultAddress.state || ''} ${defaultAddress.postalCode || ''}`.trim()
             : '',
         };
       });
@@ -198,61 +220,64 @@ export class WebCustomerRepository extends BaseRepository implements CustomerRep
     try {
       const isOnline = this.isOnline();
 
+      // Try API first if online and server is not explicitly disabled
       if (isOnline && options?.useServer !== false) {
-        // Fetch from API
-        const api = this.getApi();
-        const response = await api.get<{ success: boolean; data?: ApiCustomer[] | { data?: ApiCustomer[] }; error?: string }>('/api/customers');
-        
-        // Handle different response formats: response.data or response.data.data
-        const responseData = response.data;
-        const customersData = (Array.isArray(responseData) ? responseData : (responseData as { data?: ApiCustomer[] })?.data || []) || [];
-        
-        if (response.success && Array.isArray(customersData)) {
-          // Sync customers to IndexedDB in the background
-          this.syncCustomersToLocal(customersData).catch(err => {
-            console.warn('[WebCustomerRepository] Background sync failed:', err);
-          });
+        try {
+          // Fetch from API
+          const api = this.getApi();
+          const response = await api.get<{ success: boolean; data?: ApiCustomer[] | { data?: ApiCustomer[] }; error?: string }>('/api/customers');
+          
+          // Handle different response formats: response.data or response.data.data
+          const responseData = response.data;
+          const customersData = (Array.isArray(responseData) ? responseData : (responseData as { data?: ApiCustomer[] })?.data || []) || [];
+          
+          if (response.success && Array.isArray(customersData)) {
+            // Sync customers to IndexedDB in the background
+            this.syncCustomersToLocal(customersData).catch(err => {
+              console.warn('[WebCustomerRepository] Background sync failed:', err);
+            });
 
-          // Map database customer to UI customer format
-          const customers: Customer[] = customersData.map((dbCustomer: ApiCustomer) => ({
-            id: dbCustomer.id,
-            name: `${dbCustomer.firstName || ''} ${dbCustomer.lastName || ''}`.trim(),
-            email: dbCustomer.email || '',
-            phone: dbCustomer.phone || '',
-            address: dbCustomer.addresses?.[0] 
-              ? `${dbCustomer.addresses[0].street1 || ''}, ${dbCustomer.addresses[0].city || ''}, ${dbCustomer.addresses[0].state || ''} ${dbCustomer.addresses[0].postalCode || ''}`.trim()
-              : '',
-          }));
+            // Map database customer to UI customer format
+            const customers: Customer[] = customersData.map((dbCustomer: ApiCustomer) => ({
+              id: dbCustomer.id,
+              name: `${dbCustomer.firstName || ''} ${dbCustomer.lastName || ''}`.trim(),
+              email: dbCustomer.email || '',
+              phone: dbCustomer.phone || '',
+              address: dbCustomer.addresses?.[0] 
+                ? `${dbCustomer.addresses[0].street1 || ''}, ${dbCustomer.addresses[0].city || ''}, ${dbCustomer.addresses[0].state || ''} ${dbCustomer.addresses[0].postalCode || ''}`.trim()
+                : '',
+            }));
 
-          return {
-            success: true,
-            customers,
-            isOffline: false,
-          };
+            return {
+              success: true,
+              customers,
+              isOffline: false,
+            };
+          }
+
+          // API returned unsuccessful response, fall through to local database
+          console.warn('[WebCustomerRepository] API returned unsuccessful response, falling back to local database');
+        } catch (apiError) {
+          // API call failed, fall back to local database
+          console.warn('[WebCustomerRepository] API call failed, falling back to local database:', apiError);
         }
-
-        return {
-          success: false,
-          error: response.error || 'Failed to fetch customers',
-          isOffline: false,
-        };
-      } else {
-        // Offline mode - read from IndexedDB
-        console.log('[WebCustomerRepository] Offline mode - reading from IndexedDB');
-        const customers = await this.getCustomersFromLocal();
-        return {
-          success: true,
-          customers,
-          isOffline: true,
-        };
       }
+
+      // Offline mode or API failed - read from IndexedDB
+      console.log('[WebCustomerRepository] Reading from IndexedDB');
+      const customers = await this.getCustomersFromLocal();
+      return {
+        success: true,
+        customers,
+        isOffline: true,
+      };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to fetch customers';
       console.error('[WebCustomerRepository] Get customers error:', errorMsg);
       return {
         success: false,
         error: errorMsg,
-        isOffline: !this.isOnline(),
+        isOffline: true,
       };
     }
   }
@@ -410,14 +435,17 @@ export class WebCustomerRepository extends BaseRepository implements CustomerRep
           try {
             const db = this.getDb();
             // Delete customer by ID (IndexedDB delete uses the key directly)
-            await db.execute('DELETE FROM customers', [id]);
+            // Store name is 'Customer' in cposSchema (PascalCase)
+            await db.execute('DELETE FROM Customer', [id]);
             // Delete addresses - need to query first, then delete each
-            const addresses = await db.query<DbCustomerAddress>(
-              'SELECT * FROM customer_addresses WHERE customer_id = ?',
+            // Store name is 'CustomerAddress' in cposSchema (PascalCase)
+            // Note: Schema uses camelCase (customerId), not snake_case (customer_id)
+            const addresses = await db.query<IndexedDBCustomerAddress>(
+              'SELECT * FROM CustomerAddress WHERE customerId = ?',
               [id]
             );
             for (const address of addresses) {
-              await db.execute('DELETE FROM customer_addresses', [address.id]);
+              await db.execute('DELETE FROM CustomerAddress', [address.id]);
             }
             console.log('[WebCustomerRepository] ✓ Deleted customer from IndexedDB:', id);
           } catch (err) {

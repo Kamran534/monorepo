@@ -265,6 +265,7 @@ function setupIpcHandlers(): void {
         throw new Error('DataAccessService not initialized');
       }
 
+      const localDb = dataAccessService.getLocalDb();
       const apiClient = dataAccessService.getApiClient();
       
       // Check if we should use server
@@ -273,32 +274,21 @@ function setupIpcHandlers(): void {
       
       console.log('[IPC] Category fetch - Using:', useServer ? 'server' : 'local');
       
-      if (useServer) {
-        // Fetch from API
-        const response = await apiClient.get(`/api/categories?includeInactive=${includeInactive}`);
-        
-        if (response.success && response.data) {
-          const categories = Array.isArray(response.data) ? response.data : response.data.data || [];
-          return {
-            success: true,
-            categories,
-            isOffline: false,
-          };
-        }
-
-        return {
-          success: false,
-          error: response.error || 'Failed to fetch categories',
-          isOffline: false,
-        };
-      } else {
-        // TODO: Implement local database fetch
-        return {
-          success: false,
-          error: 'Local database not yet implemented',
-          isOffline: true,
-        };
-      }
+      // Use shared CategoryRepository for both online and offline modes
+      const { CategoryRepository } = await import('@monorepo/shared-data-access');
+      const categoryRepository = new CategoryRepository(localDb, apiClient);
+      
+      const result = await categoryRepository.getCategories({
+        includeInactive,
+        useServer: useServer ? true : false,
+      });
+      
+      return {
+        success: result.success,
+        categories: result.categories || [],
+        error: result.error,
+        isOffline: result.isOffline || false,
+      };
     } catch (error) {
       console.error('[IPC] category:get-all error:', error);
       return {
@@ -318,33 +308,32 @@ function setupIpcHandlers(): void {
         throw new Error('DataAccessService not initialized');
       }
 
+      const localDb = dataAccessService.getLocalDb();
       const apiClient = dataAccessService.getApiClient();
       
       // Check if we should use server
       const connectionState = dataAccessService.getConnectionState();
       const useServer = connectionState.dataSource === 'server';
       
-      if (useServer) {
-        const response = await apiClient.get(`/api/categories/${categoryId}`);
-        
-        if (response.success && response.data) {
-          return {
-            success: true,
-            category: response.data,
-          };
-        }
-
+      // Use shared CategoryRepository for both online and offline modes
+      const { CategoryRepository } = await import('@monorepo/shared-data-access');
+      const categoryRepository = new CategoryRepository(localDb, apiClient);
+      
+      const category = await categoryRepository.getCategoryById(categoryId, {
+        useServer: useServer ? true : false,
+      });
+      
+      if (category) {
         return {
-          success: false,
-          error: response.error || 'Category not found',
-        };
-      } else {
-        // TODO: Implement local database fetch
-        return {
-          success: false,
-          error: 'Local database not yet implemented',
+          success: true,
+          category,
         };
       }
+
+      return {
+        success: false,
+        error: 'Category not found',
+      };
     } catch (error) {
       console.error('[IPC] category:get-by-id error:', error);
       return {
@@ -404,12 +393,98 @@ function setupIpcHandlers(): void {
           isOffline: false,
         };
       } else {
-        // TODO: Implement local database fetch
-        return {
-          success: false,
-          error: 'Local database not yet implemented',
-          isOffline: true,
-        };
+        // Fetch from local SQLite database
+        console.log('[IPC] Fetching customers from local SQLite database');
+        
+        try {
+          // Query all customers from local database
+          const dbCustomers = await localDb.query<{
+            id: string;
+            firstName: string;
+            lastName: string;
+            email: string | null;
+            phone: string | null;
+          }>('SELECT id, firstName, lastName, email, phone FROM Customer');
+          
+          if (!dbCustomers || dbCustomers.length === 0) {
+            console.log('[IPC] No customers found in local database');
+            return {
+              success: true,
+              customers: [],
+              isOffline: true,
+            };
+          }
+          
+          // Get addresses for all customers
+          let addresses: Array<{
+            id: string;
+            customerId: string;
+            street1: string;
+            street2: string | null;
+            city: string;
+            state: string;
+            postalCode: string;
+            isDefault: number;
+          }> = [];
+          
+          if (dbCustomers.length > 0) {
+            const customerIds = dbCustomers.map(c => c.id);
+            const placeholders = customerIds.map(() => '?').join(',');
+            addresses = await localDb.query<{
+              id: string;
+              customerId: string;
+              street1: string;
+              street2: string | null;
+              city: string;
+              state: string;
+              postalCode: string;
+              isDefault: number;
+            }>(`SELECT id, customerId, street1, street2, city, state, postalCode, isDefault 
+                 FROM CustomerAddress 
+                 WHERE customerId IN (${placeholders})`, 
+                 customerIds);
+          }
+          
+          // Group addresses by customer ID
+          const addressesByCustomer = new Map<string, typeof addresses>();
+          for (const address of addresses) {
+            if (!addressesByCustomer.has(address.customerId)) {
+              addressesByCustomer.set(address.customerId, []);
+            }
+            addressesByCustomer.get(address.customerId)!.push(address);
+          }
+          
+          // Map to UI Customer format
+          const customers = dbCustomers.map(dbCustomer => {
+            const customerAddresses = addressesByCustomer.get(dbCustomer.id) || [];
+            const defaultAddress = customerAddresses.find(a => a.isDefault === 1) || customerAddresses[0];
+            
+            return {
+              id: dbCustomer.id,
+              name: `${dbCustomer.firstName || ''} ${dbCustomer.lastName || ''}`.trim(),
+              email: dbCustomer.email || '',
+              phone: dbCustomer.phone || '',
+              address: defaultAddress
+                ? `${defaultAddress.street1 || ''}, ${defaultAddress.city || ''}, ${defaultAddress.state || ''} ${defaultAddress.postalCode || ''}`.trim()
+                : '',
+            };
+          });
+          
+          console.log('[IPC] ✓ Loaded', customers.length, 'customers from local database');
+          
+          return {
+            success: true,
+            customers,
+            isOffline: true,
+          };
+        } catch (dbError) {
+          console.error('[IPC] Failed to fetch customers from local database:', dbError);
+          return {
+            success: false,
+            error: dbError instanceof Error ? dbError.message : 'Failed to fetch customers from local database',
+            isOffline: true,
+          };
+        }
       }
     } catch (error) {
       console.error('[IPC] customer:get-all error:', error);
