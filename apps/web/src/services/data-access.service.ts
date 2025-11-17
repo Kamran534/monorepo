@@ -15,8 +15,10 @@ import {
   type LocalDbClient,
   type HttpApiClient,
   SyncService,
+  CPOS_INDEXEDDB_SCHEMA,
+  CPOS_DB_VERSION,
+  CPOS_DB_NAME,
 } from '@monorepo/shared-data-access';
-import { cposSchema } from '../config/indexeddb-schema';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
 
@@ -105,14 +107,14 @@ class WebDataAccessService {
 
     console.log('[WebDataAccessService] Initializing...');
     console.log('[WebDataAccessService] Server URL:', SERVER_URL);
-    console.log('[WebDataAccessService] Database: cpos_web_db');
+    console.log('[WebDataAccessService] Database:', CPOS_DB_NAME);
 
     try {
       // Initialize local database (IndexedDB) with full schema
       this.localDb = createLocalDbClient('web', {
-        dbName: 'cpos_web_db',
-        dbVersion: 1,
-        schema: cposSchema,
+        dbName: CPOS_DB_NAME,
+        dbVersion: CPOS_DB_VERSION,
+        schema: CPOS_INDEXEDDB_SCHEMA,
       });
       await this.localDb.initialize();
       console.log('[WebDataAccessService] Local database initialized with schema');

@@ -13,3 +13,18 @@ export type { TransactionQuantityPanelProps } from './TransactionQuantityPanel.j
 export { TransactionVerticalNav } from './TransactionVerticalNav.js';
 export type { TransactionVerticalNavProps } from './TransactionVerticalNav.js';
 
+export {
+  DiscountPrompt,
+  CouponPrompt,
+  AdjustmentPrompt,
+  PreviewPrompt,
+  formatCurrency,
+} from './TransactionPrompts.js';
+export type {
+  DiscountPromptProps,
+  CouponPromptProps,
+  AdjustmentPromptProps,
+  PreviewPromptProps,
+  PreviewLineItem,
+} from './TransactionPrompts.js';
+

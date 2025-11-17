@@ -8,6 +8,7 @@ export interface BarcodeScannerOptions {
   endCharacters?: string[];
   scanTimeout?: number;
   preventDefault?: boolean;
+  enabled?: boolean;
 }
 
 /**
@@ -22,7 +23,8 @@ export function useBarcodeScanner({
   maxLength = 100,
   endCharacters = ['\n', '\r', 'Enter'],
   scanTimeout = 100,
-  preventDefault = true
+  preventDefault = true,
+  enabled = true,
 }: BarcodeScannerOptions) {
   const bufferRef = useRef<string[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,6 +53,11 @@ export function useBarcodeScanner({
   }, [onScan, onError, minLength, maxLength]);
 
   useEffect(() => {
+    if (!enabled) {
+      resetBuffer();
+      return;
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const currentTime = Date.now();
       const timeSinceLastKeypress = currentTime - lastKeypressTimeRef.current;
@@ -112,7 +119,7 @@ export function useBarcodeScanner({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [onScan, onError, minLength, maxLength, endCharacters, scanTimeout, preventDefault, processBarcode, resetBuffer]);
+  }, [onScan, onError, minLength, maxLength, endCharacters, scanTimeout, preventDefault, processBarcode, resetBuffer, enabled]);
 
   return { resetBuffer };
 }

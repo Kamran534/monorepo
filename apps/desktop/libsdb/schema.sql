@@ -528,7 +528,18 @@ CREATE TABLE IF NOT EXISTS SaleOrder (
     status TEXT DEFAULT 'Open' CHECK(status IN ('Open', 'Completed', 'Voided', 'Parked', 'OnHold')),
     subtotal REAL NOT NULL,
     taxAmount REAL NOT NULL,
+
+    -- Order-level discounts
     discountAmount REAL DEFAULT 0,
+    discountPercent REAL DEFAULT 0,
+
+    -- Order-level adjustment
+    adjustmentAmount REAL DEFAULT 0,
+    adjustmentReason TEXT,
+
+    -- Coupon code
+    couponCode TEXT,
+
     totalAmount REAL NOT NULL,
     amountPaid REAL DEFAULT 0,
     changeAmount REAL DEFAULT 0,
@@ -562,9 +573,21 @@ CREATE TABLE IF NOT EXISTS OrderLineItem (
     id TEXT PRIMARY KEY NOT NULL,
     orderId TEXT NOT NULL,
     variantId TEXT NOT NULL,
+
+    -- Sales person at line item level
+    salesPersonId TEXT,
+
     quantity INTEGER NOT NULL,
     unitPrice REAL NOT NULL,
+
+    -- Line-level discounts (sale discount)
     lineDiscount REAL DEFAULT 0,
+    lineDiscountPercent REAL DEFAULT 0,
+
+    -- Custom discount at line level
+    customDiscountAmount REAL DEFAULT 0,
+    customDiscountPercent REAL DEFAULT 0,
+
     lineTax REAL DEFAULT 0,
     lineTotal REAL NOT NULL,
     cost REAL,
@@ -575,11 +598,13 @@ CREATE TABLE IF NOT EXISTS OrderLineItem (
     serialNumbers TEXT, -- JSON array
     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (orderId) REFERENCES SaleOrder(id) ON DELETE CASCADE,
-    FOREIGN KEY (variantId) REFERENCES ProductVariant(id)
+    FOREIGN KEY (variantId) REFERENCES ProductVariant(id),
+    FOREIGN KEY (salesPersonId) REFERENCES User(id)
 );
 
 CREATE INDEX idx_orderLineItem_orderId ON OrderLineItem(orderId);
 CREATE INDEX idx_orderLineItem_variantId ON OrderLineItem(variantId);
+CREATE INDEX idx_orderLineItem_salesPersonId ON OrderLineItem(salesPersonId);
 
 -- Update SerialNumber table to add foreign keys to SaleOrder and OrderLineItem
 -- These were forward referenced earlier
@@ -710,12 +735,19 @@ CREATE TABLE IF NOT EXISTS Promotion (
     maxDiscountAmount REAL,
     startDate TEXT NOT NULL,
     endDate TEXT NOT NULL,
+
+    -- Usage limits
     usageLimit INTEGER,
     usageCount INTEGER DEFAULT 0,
+    usageLimitPerCustomer INTEGER,
+    isSingleUse INTEGER DEFAULT 0,
+
     customerGroupIds TEXT, -- JSON array
     categoryIds TEXT, -- JSON array
     productIds TEXT, -- JSON array
     isActive INTEGER DEFAULT 1,
+    requiresCouponCode INTEGER DEFAULT 0,
+    description TEXT,
     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
     updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
 );

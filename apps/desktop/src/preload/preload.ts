@@ -93,6 +93,10 @@ try {
         console.log('[Preload] product.getById called with productId:', productId);
         return ipcRenderer.invoke('product:get-by-id', productId);
       },
+      lookupByBarcode: (barcode: string) => {
+        console.log('[Preload] product.lookupByBarcode called with barcode:', barcode);
+        return ipcRenderer.invoke('product:lookup-barcode', barcode);
+      },
     },
     // Customer API
     customer: {

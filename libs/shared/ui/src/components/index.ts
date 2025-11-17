@@ -47,3 +47,6 @@ export type { PaginationProps } from './Pagination.js';
 
 // Customer components
 export * from './customer/index.js';
+
+// Sales components
+export * from './sales/index.js';

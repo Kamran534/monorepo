@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TransactionLines,
@@ -6,6 +6,10 @@ import {
   TransactionActions,
   TransactionQuantityPanel,
   Invoice,
+  DiscountPrompt,
+  CouponPrompt,
+  AdjustmentPrompt,
+  PreviewPrompt,
   type ActionButton,
   type Product,
   useCart,
@@ -26,9 +30,18 @@ import {
   Banknote,
   Ruler,
   Trash2,
+  Percent,
+  TicketPercent,
+  SlidersHorizontal,
+  Eye,
 } from 'lucide-react';
+import type { ProductRepository, Product as StoreProduct } from '@monorepo/shared-store';
 
-export function Transactions() {
+export interface TransactionsProps {
+  productRepository?: ProductRepository;
+}
+
+export function Transactions({ productRepository }: TransactionsProps = {}) {
   const navigate = useNavigate();
   
   // Load initial state from localStorage
@@ -46,6 +59,19 @@ export function Transactions() {
   });
   
   const [isQuantityPanelOpen, setIsQuantityPanelOpen] = useState(false);
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
+  const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount');
+  const [discountInput, setDiscountInput] = useState('');
+  const [appliedDiscount, setAppliedDiscount] = useState<{ type: 'amount' | 'percent'; value: number } | null>(null);
+  const [couponCodeInput, setCouponCodeInput] = useState('');
+  const [couponValueInput, setCouponValueInput] = useState('');
+  const [couponData, setCouponData] = useState<{ code: string; discount: number } | null>(null);
+  const [adjustmentAmountInput, setAdjustmentAmountInput] = useState('');
+  const [adjustmentReasonInput, setAdjustmentReasonInput] = useState('');
+  const [appliedAdjustment, setAppliedAdjustment] = useState<{ amount: number; reason?: string } | null>(null);
 
   // Save activeTab to localStorage when it changes
   const setActiveTab = (tab: 'lines' | 'payments') => {
@@ -64,6 +90,24 @@ export function Transactions() {
   const [showInvoice, setShowInvoice] = useState(false);
 
   // Keyboard shortcuts
+  const openDiscountModal = useCallback(() => {
+    setDiscountMode(appliedDiscount?.type ?? 'amount');
+    setDiscountInput(appliedDiscount ? String(appliedDiscount.value) : '');
+    setIsDiscountModalOpen(true);
+  }, [appliedDiscount]);
+
+  const openCouponModal = useCallback(() => {
+    setCouponCodeInput(couponData?.code ?? '');
+    setCouponValueInput(couponData ? String(couponData.discount) : '');
+    setIsCouponModalOpen(true);
+  }, [couponData]);
+
+  const openAdjustmentModal = useCallback(() => {
+    setAdjustmentAmountInput(appliedAdjustment ? String(appliedAdjustment.amount) : '');
+    setAdjustmentReasonInput(appliedAdjustment?.reason ?? '');
+    setIsAdjustmentModalOpen(true);
+  }, [appliedAdjustment]);
+
   useKeyboardShortcuts({
     shortcuts: [
       {
@@ -80,6 +124,34 @@ export function Transactions() {
         action: () => navigate('/customers'),
         description: 'Navigate to customers page',
       },
+      {
+        key: 'd',
+        ctrl: true,
+        shift: true,
+        action: openDiscountModal,
+        description: 'Order discount prompt',
+      },
+      {
+        key: 'c',
+        ctrl: true,
+        shift: true,
+        action: openCouponModal,
+        description: 'Coupon code prompt',
+      },
+      {
+        key: 'j',
+        ctrl: true,
+        shift: true,
+        action: openAdjustmentModal,
+        description: 'Order adjustment prompt',
+      },
+      {
+        key: 'o',
+        ctrl: true,
+        shift: true,
+        action: () => setIsPreviewModalOpen(true),
+        description: 'Preview current order',
+      },
     ],
   });
 
@@ -87,7 +159,7 @@ export function Transactions() {
   const selectedItemData = lineItems.find(item => item.id === selectedItem);
 
   // Products data for Products tab
-  const products = useMemo<Product[]>(() => [
+  const fallbackProducts = useMemo<Product[]>(() => [
     { id: '81328', productNumber: '81328', name: 'Brown Leopardprint Sunglasses', price: '$130.00', image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
     { id: '81300', productNumber: '81300', name: 'Brown Leather Travel Bag', price: '$89.99', rating: 3.8, reviewCount: 195, image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop' },
     { id: '81302', productNumber: '81302', name: 'Brown Snakeskin Bag', price: '$95.00', rating: 3.8, reviewCount: 192, image: 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400&h=400&fit=crop' },
@@ -101,14 +173,124 @@ export function Transactions() {
     { id: '81320', productNumber: '81320', name: 'Brown Leather Gloves', price: '$38.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
     { id: '81321', productNumber: '81321', name: 'Black Cotton Gloves', price: '$32.00', image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
   ], []);
+  const [productList, setProductList] = useState<Product[]>(fallbackProducts);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!productRepository) {
+      setProductList(fallbackProducts);
+      return;
+    }
+
+    const loadProducts = async () => {
+      try {
+        const result = await productRepository.getAllProducts({ page: 1, limit: 12 });
+        if (!isMounted) return;
+        const mapped = (result.products ?? []).map((product: StoreProduct): Product => ({
+          id: product.id,
+          productNumber: product.productNumber,
+          name: product.name,
+          price: product.price,
+          image: product.image,
+          rating: product.rating,
+          reviewCount: product.reviewCount,
+        }));
+        if (mapped.length > 0) {
+          setProductList(mapped);
+        } else {
+          setProductList(fallbackProducts);
+        }
+      } catch (error) {
+        console.error('[Transactions] Failed to load products:', error);
+        if (isMounted) {
+          show('Unable to load products. Showing defaults.', 'error');
+          setProductList(fallbackProducts);
+        }
+      }
+    };
+
+    void loadProducts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [productRepository, fallbackProducts, show]);
 
   const handleProductClick = (product: Product) => {
     navigate(`/products/${product.id}`);
   };
   const handleAddProduct = (product: Product) => {
     const price = product.price ? Number(product.price.replace(/[^0-9.]/g, '')) : 0;
-    addItem({ name: product.name, price, quantity: 1 });
+    addItem({
+      id: product.id,
+      name: product.name,
+      price,
+      quantity: 1,
+      productId: product.id,
+    });
     setActiveTab('lines');
+  };
+
+  const orderTotals = useMemo(() => {
+    const subtotal = lineItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const discountValue =
+      appliedDiscount && appliedDiscount.value > 0
+        ? appliedDiscount.type === 'percent'
+          ? (subtotal * appliedDiscount.value) / 100
+          : appliedDiscount.value
+        : 0;
+    const couponValue = couponData?.discount ?? 0;
+    const adjustmentValue = appliedAdjustment?.amount ?? 0;
+    const total = Math.max(0, subtotal - discountValue - couponValue + adjustmentValue);
+    return {
+      subtotal,
+      discountValue,
+      couponValue,
+      adjustmentValue,
+      total,
+    };
+  }, [lineItems, appliedDiscount, couponData, appliedAdjustment]);
+
+  const handleApplyDiscount = () => {
+    const parsed = parseFloat(discountInput);
+    if (Number.isNaN(parsed) || parsed < 0) {
+      show('Enter a valid discount value', 'error');
+      return;
+    }
+    setAppliedDiscount({ type: discountMode, value: parsed });
+    setIsDiscountModalOpen(false);
+    show('Discount applied', 'success');
+  };
+
+  const handleApplyCoupon = () => {
+    if (!couponCodeInput.trim()) {
+      show('Enter a coupon code', 'error');
+      return;
+    }
+    const parsed = couponValueInput ? parseFloat(couponValueInput) : 0;
+    if (Number.isNaN(parsed) || parsed < 0) {
+      show('Enter a valid coupon value', 'error');
+      return;
+    }
+    setCouponData({ code: couponCodeInput.trim(), discount: parsed });
+    setIsCouponModalOpen(false);
+    show('Coupon applied', 'success');
+  };
+
+  const handleApplyAdjustment = () => {
+    if (!adjustmentAmountInput.trim()) {
+      show('Enter an adjustment amount', 'error');
+      return;
+    }
+    const parsed = parseFloat(adjustmentAmountInput);
+    if (Number.isNaN(parsed)) {
+      show('Enter a valid number', 'error');
+      return;
+    }
+    setAppliedAdjustment({ amount: parsed, reason: adjustmentReasonInput.trim() || undefined });
+    setIsAdjustmentModalOpen(false);
+    show('Order adjustment saved', 'success');
   };
 
   const actionButtons: ActionButton[] = [
@@ -200,6 +382,30 @@ export function Transactions() {
       square: true,
       rectangular: true,
       onClick: () => console.log('Tax overrides'),
+    },
+    {
+      id: 'order-discount',
+      icon: <Percent className="w-5 h-5" />,
+      label: 'Order discount',
+      color: 'bg-gray-700',
+      square: true,
+      onClick: openDiscountModal,
+    },
+    {
+      id: 'coupon-code',
+      icon: <TicketPercent className="w-5 h-5" />,
+      label: 'Apply coupon',
+      color: 'bg-gray-700',
+      square: true,
+      onClick: openCouponModal,
+    },
+    {
+      id: 'order-adjustment',
+      icon: <SlidersHorizontal className="w-5 h-5" />,
+      label: 'Order adjustment',
+      color: 'bg-gray-700',
+      square: true,
+      onClick: openAdjustmentModal,
     },
     // Green Section - Small square buttons
     {
@@ -299,7 +505,7 @@ export function Transactions() {
             setActiveSection(section);
             console.log('Section:', section);
           }}
-          products={products}
+          products={productList}
           onProductClick={handleProductClick}
           onAddProduct={handleAddProduct}
         />
@@ -375,6 +581,48 @@ export function Transactions() {
           </div>
         </div>
       )}
+
+      <DiscountPrompt
+        isOpen={isDiscountModalOpen}
+        mode={discountMode}
+        value={discountInput}
+        current={appliedDiscount}
+        onModeChange={setDiscountMode}
+        onValueChange={setDiscountInput}
+        onApply={handleApplyDiscount}
+        onClose={() => setIsDiscountModalOpen(false)}
+      />
+
+      <CouponPrompt
+        isOpen={isCouponModalOpen}
+        code={couponCodeInput}
+        value={couponValueInput}
+        current={couponData}
+        onCodeChange={setCouponCodeInput}
+        onValueChange={setCouponValueInput}
+        onApply={handleApplyCoupon}
+        onClose={() => setIsCouponModalOpen(false)}
+      />
+
+      <AdjustmentPrompt
+        isOpen={isAdjustmentModalOpen}
+        amount={adjustmentAmountInput}
+        reason={adjustmentReasonInput}
+        current={appliedAdjustment}
+        onAmountChange={setAdjustmentAmountInput}
+        onReasonChange={setAdjustmentReasonInput}
+        onApply={handleApplyAdjustment}
+        onClose={() => setIsAdjustmentModalOpen(false)}
+      />
+
+      <PreviewPrompt
+        isOpen={isPreviewModalOpen}
+        lineItems={lineItems}
+        totals={orderTotals}
+        coupon={couponData}
+        adjustment={appliedAdjustment}
+        onClose={() => setIsPreviewModalOpen(false)}
+      />
     </div>
   );
 }

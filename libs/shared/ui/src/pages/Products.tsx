@@ -401,7 +401,13 @@ export function Products({ repository }: ProductsProps) {
             viewMode={viewMode}
             onAddProduct={(product) => {
               const numericPrice = parseFloat((product.price || '0').replace(/[^0-9.]/g, '')) || 0;
-              addItem({ name: product.name, price: numericPrice, quantity: 1 });
+              addItem({
+                id: product.id,
+                name: product.name,
+                price: numericPrice,
+                quantity: 1,
+                productId: product.id,
+              });
               show('Added to cart', 'success');
             }}
             className="h-full"

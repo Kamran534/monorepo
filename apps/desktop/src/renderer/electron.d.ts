@@ -75,6 +75,15 @@ interface GetProductsResult {
   };
 }
 
+interface LookupProduct {
+  productId: string;
+  variantId?: string;
+  name: string;
+  price: number;
+  availableQuantity: number;
+  barcode?: string;
+}
+
 interface Customer {
   id: string;
   name: string;
@@ -116,6 +125,12 @@ interface ElectronAPI {
   };
   product: {
     getAll: (options?: { page?: number; limit?: number }) => Promise<GetProductsResult>;
+    getById: (productId: string) => Promise<GetProductsResult & { product?: any }>;
+    lookupByBarcode: (barcode: string) => Promise<{
+      success: boolean;
+      product?: LookupProduct;
+      error?: string;
+    }>;
   };
   customer: {
     getAll: () => Promise<GetCustomersResult>;

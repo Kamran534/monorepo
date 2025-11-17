@@ -107,3 +107,71 @@ export {
   selectCustomerIsCacheFresh,
   selectCustomerCacheAge,
 } from './lib/selectors/customerSelectors';
+
+// Sales Order slice
+export {
+  fetchOrders,
+  fetchOrderById,
+  createOrder,
+  updateOrderStatus,
+  validateCoupon,
+  addPayment,
+  setSalesOrderRepository,
+  setCurrentOrder,
+  setSelectedOrder,
+  clearCouponValidation,
+  clearError as clearSalesOrderError,
+  resetOrdersCache,
+} from './lib/slices/salesOrderSlice';
+export type {
+  SalesOrderState,
+  SalesOrder,
+  OrderLineItem,
+  OrderLineItemInput,
+  CreateSalesOrderInput,
+  SalesOrderRepository,
+  GetOrdersOptions,
+  GetOrdersResult,
+  CreateOrderResult,
+  CouponValidationResult,
+} from './lib/slices/salesOrderSlice';
+// Sales Order selectors
+export {
+  selectSalesOrders,
+  selectCurrentSalesOrder,
+  selectSelectedSalesOrder,
+  selectSalesOrderLoading,
+  selectSalesOrderCreating,
+  selectSalesOrderValidatingCoupon,
+  selectSalesOrderError,
+  selectSalesOrderPagination,
+  selectSalesOrderIsOffline,
+  selectSalesOrderLastFetched,
+  selectCouponValidation,
+} from './lib/selectors/salesOrderSelectors';
+
+// Promotion slice
+export {
+  fetchPromotions,
+  fetchActivePromotions,
+  fetchPromotionById,
+  fetchPromotionByCode,
+  createPromotion,
+  updatePromotion,
+  deletePromotion,
+  fetchPromotionStats,
+  setPromotionRepository,
+  setSelectedPromotion,
+  clearError as clearPromotionError,
+  resetPromotionsCache,
+} from './lib/slices/promotionSlice';
+export type {
+  PromotionState,
+  Promotion,
+  CreatePromotionInput,
+  PromotionRepository,
+  GetPromotionsOptions,
+  GetPromotionsResult,
+  CreatePromotionResult,
+  PromotionStats,
+} from './lib/slices/promotionSlice';

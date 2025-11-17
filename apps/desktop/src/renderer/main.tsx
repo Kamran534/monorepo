@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HashRouter, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Layout, SidebarItem, useTheme, CartProvider, TransactionCustomerProvider, ToastProvider, SplashScreen, useCart } from '@monorepo/shared-ui';
+import { Layout, SidebarItem, useTheme, CartProvider, TransactionCustomerProvider, ToastProvider, SplashScreen, useCart, useToast } from '@monorepo/shared-ui';
 import { DesktopAuthProvider, useDesktopAuth } from '@monorepo/shared-ui';
 import { StoreProvider, setCustomerRepository } from '@monorepo/shared-store';
 import {
@@ -17,6 +17,8 @@ import { AppRoutes } from './routes.js';
 import { Login } from '../pages/Login.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { getDesktopCustomerRepository } from './repositories/DesktopCustomerRepository.js';
+import { useBarcodeScanner } from '@monorepo/shared-hooks-scanner';
+import { lookupProductByBarcode } from './services/barcodeLookup.js';
 
 // Import styles
 import '@monorepo/shared-ui/styles/globals.css';
@@ -50,8 +52,83 @@ function AppContent() {
   const productIdRef = useRef<string | null>(null);
   const [showBackButton, setShowBackButton] = useState(false);
   // Transaction line count for badges
-  const { items } = useCart();
+  const { items, addItem, setItemQuantity } = useCart();
+  const { show } = useToast();
+  const scanLockRef = useRef(false);
   const lineCount = items.length;
+
+  const isLoginRoute = location.pathname === '/login';
+  const scannerEnabled = isAuthenticated && !isLoginRoute;
+
+  const handleScannedBarcode = useCallback(
+    async (barcode: string) => {
+      if (!barcode || !isAuthenticated) {
+        return;
+      }
+
+      if (scanLockRef.current) {
+        return;
+      }
+
+      scanLockRef.current = true;
+      const trimmed = barcode.trim();
+
+      try {
+        const result = await lookupProductByBarcode(trimmed);
+
+        if (!result) {
+          show(`No product found for barcode ${trimmed}`, 'error');
+          return;
+        }
+
+        if (result.availableQuantity <= 0) {
+          show(`${result.name} is out of stock`, 'error');
+          return;
+        }
+
+        const targetId = result.variantId || result.productId || trimmed;
+
+        const existingLine = items.find((item) => {
+          if (result.variantId && item.productVariantId) {
+            return item.productVariantId === result.variantId;
+          }
+          if (!result.variantId && result.productId && item.productId) {
+            return item.productId === result.productId;
+          }
+          return false;
+        });
+
+        if (existingLine) {
+          setItemQuantity(existingLine.id, existingLine.quantity + 1);
+          show(`${result.name} quantity updated`, 'success');
+          return;
+        }
+
+        addItem({
+          id: targetId,
+          name: result.name,
+          price: result.price,
+          quantity: 1,
+          availableQuantity: result.availableQuantity,
+          productId: result.productId,
+          productVariantId: result.variantId,
+        });
+        show(`${result.name} added to cart`, 'success');
+      } catch (error) {
+        console.error('[Desktop] Failed to handle scanned barcode', error);
+        show('Unable to add scanned product to cart', 'error');
+      } finally {
+        scanLockRef.current = false;
+      }
+    },
+    [addItem, isAuthenticated, items, setItemQuantity, show]
+  );
+
+  useBarcodeScanner({
+    onScan: handleScannedBarcode,
+    onError: (message) => show(message, 'error'),
+    enabled: scannerEnabled,
+  });
 
   // Track navigation using stack
   useEffect(() => {
@@ -170,6 +247,9 @@ function AppContent() {
   const getCurrentPageName = () => {
     if (location.pathname === '/category') {
       return 'All Categories';
+    }
+    if (location.pathname === '/sales') {
+      return 'Sales & Order';
     }
     // Category detail page - show category name
     if (isCategoryDetailPage && categoryNameRef.current) {

@@ -28,6 +28,7 @@
         "libs/shared/hooks/printer/src/index.ts"
       ],
       "@monorepo/shared-data-access": ["libs/shared/data-access/src/index.ts"],
+      "@monorepo/shared-data-access/*": ["libs/shared/data-access/src/*"],
       "@monorepo/shared-store": ["libs/shared/store/src/index.ts"]
     }
   },

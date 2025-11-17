@@ -146,7 +146,7 @@ function setupIpcHandlers(): void {
       }
 
       // Use shared UserRepository for login (handles online/offline automatically)
-      const { UserRepository } = await import('@monorepo/shared-data-access');
+      const { UserRepository } = (await import('@monorepo/shared-data-access')) as any;
       const localDb = dataAccessService.getLocalDb();
       const apiClient = dataAccessService.getApiClient();
       const userRepository = new UserRepository(localDb, apiClient);
@@ -275,7 +275,7 @@ function setupIpcHandlers(): void {
       console.log('[IPC] Category fetch - Using:', useServer ? 'server' : 'local');
       
       // Use shared CategoryRepository for both online and offline modes
-      const { CategoryRepository } = await import('@monorepo/shared-data-access');
+      const { CategoryRepository } = (await import('@monorepo/shared-data-access')) as any;
       const categoryRepository = new CategoryRepository(localDb, apiClient);
       
       const result = await categoryRepository.getCategories({
@@ -316,7 +316,7 @@ function setupIpcHandlers(): void {
       const useServer = connectionState.dataSource === 'server';
       
       // Use shared CategoryRepository for both online and offline modes
-      const { CategoryRepository } = await import('@monorepo/shared-data-access');
+      const { CategoryRepository } = (await import('@monorepo/shared-data-access')) as any;
       const categoryRepository = new CategoryRepository(localDb, apiClient);
       
       const category = await categoryRepository.getCategoryById(categoryId, {
@@ -991,6 +991,89 @@ function setupIpcHandlers(): void {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch product',
         isOffline: true,
+      };
+    }
+  });
+
+  ipcMain.handle('product:lookup-barcode', async (_event, barcode: string) => {
+    console.log('[IPC] product:lookup-barcode called:', barcode);
+    if (!barcode) {
+      return { success: false, error: 'Barcode is required' };
+    }
+
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const localDb = dataAccessService.getLocalDb();
+
+      const baseQuery = `
+        SELECT 
+          pv.id AS variantId,
+          pv.productId AS productId,
+          pv.barcode AS variantBarcode,
+          pv.variantName AS variantName,
+          pv.retailPrice AS retailPrice,
+          pv.price AS variantPrice,
+          p.name AS productName,
+          COALESCE(MAX(ii.quantityAvailable), MAX(ii.quantityOnHand), 0) AS availableQuantity
+        FROM ProductVariant pv
+        LEFT JOIN Product p ON p.id = pv.productId
+        LEFT JOIN InventoryItem ii ON ii.variantId = pv.id
+        WHERE pv.barcode = ?
+        GROUP BY pv.id, pv.productId, pv.barcode, pv.variantName, pv.retailPrice, pv.price, p.name
+        LIMIT 1`;
+
+      let rows = await localDb.query<any>(baseQuery, [barcode]);
+
+      if (!rows.length) {
+        const fallbackQuery = `
+          SELECT 
+            pv.id AS variantId,
+            pv.productId AS productId,
+            pv.barcode AS variantBarcode,
+            pv.variantName AS variantName,
+            pv.retailPrice AS retailPrice,
+            pv.price AS variantPrice,
+            p.name AS productName,
+            COALESCE(MAX(ii.quantityAvailable), MAX(ii.quantityOnHand), 0) AS availableQuantity
+          FROM Barcode b
+          INNER JOIN ProductVariant pv ON pv.id = b.variantId
+          LEFT JOIN Product p ON p.id = pv.productId
+          LEFT JOIN InventoryItem ii ON ii.variantId = pv.id
+          WHERE b.barcodeValue = ?
+          GROUP BY pv.id, pv.productId, pv.barcode, pv.variantName, pv.retailPrice, pv.price, p.name
+          LIMIT 1`;
+
+        rows = await localDb.query<any>(fallbackQuery, [barcode]);
+      }
+
+      if (!rows.length) {
+        return { success: false, error: 'Product not found' };
+      }
+
+      const row = rows[0];
+      const price =
+        Number(row.retailPrice ?? row.variantPrice ?? row.price ?? 0) || 0;
+      const availableQuantity = Number(row.availableQuantity ?? 0) || 0;
+
+      return {
+        success: true,
+        product: {
+          productId: row.productId,
+          variantId: row.variantId,
+          name: row.productName || row.variantName || 'Scanned item',
+          price,
+          availableQuantity,
+          barcode: row.variantBarcode || barcode,
+        },
+      };
+    } catch (error) {
+      console.error('[IPC] product:lookup-barcode failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Lookup failed',
       };
     }
   });

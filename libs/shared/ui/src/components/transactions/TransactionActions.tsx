@@ -413,6 +413,8 @@ export function TransactionActions({
   };
 
   // Render content based on active section
+  const limitedProducts = products.slice(0, 12);
+
   const renderTabContent = () => {
     switch (activeSection) {
       case 'actions':
@@ -445,12 +447,12 @@ export function TransactionActions({
       case 'discounts':
         return renderEmptyState(<Tag className="w-8 h-8" />, 'Discounts');
       case 'products':
-        if (products.length === 0) {
+        if (limitedProducts.length === 0) {
           return renderEmptyState(<Boxes className="w-8 h-8" />, 'Products');
         }
         return (
         <div className="grid grid-cols-2 gap-1 overflow-hidden">
-          {products.map((product) => (
+          {limitedProducts.map((product) => (
             <ProductGridCard
               key={product.id}
               product={product}
