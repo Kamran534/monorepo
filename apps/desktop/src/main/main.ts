@@ -844,6 +844,157 @@ function setupIpcHandlers(): void {
     }
   });
 
+  // Product: get by ID handler
+  ipcMain.handle('product:get-by-id', async (_event, productId: string) => {
+    console.log('[IPC] ========== PRODUCT:GET-BY-ID CALLED ==========');
+    console.log('[IPC] Product ID:', productId);
+    
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+      const connectionState = dataAccessService.getConnectionState();
+      const useServer = connectionState.dataSource === 'server';
+
+      if (useServer) {
+        // Fetch from API with variants and inventory
+        console.log('[IPC] Fetching product from API:', productId);
+        try {
+          const response = await apiClient.get<{ success: boolean; data?: any }>(
+            `/api/products/${productId}?includeVariants=true&includeInventory=true`
+          );
+
+          if (response.success && response.data) {
+            const apiProduct = response.data;
+            
+            // Map API product to ProductWithVariants format
+            const product = {
+              id: apiProduct.id,
+              sku: apiProduct.productCode || apiProduct.sku || apiProduct.id,
+              productCode: apiProduct.productCode,
+              barcode: apiProduct.barcode,
+              name: apiProduct.name,
+              description: apiProduct.description,
+              categoryId: apiProduct.categoryId,
+              brandId: apiProduct.brandId,
+              supplierId: apiProduct.supplierId,
+              basePrice: parseFloat(apiProduct.basePrice || apiProduct.retailPrice || 0),
+              costPrice: parseFloat(apiProduct.costPrice || apiProduct.cost || 0),
+              taxCategoryId: apiProduct.taxCategoryId,
+              productType: apiProduct.hasVariants ? 'Variable' : 'Simple',
+              isActive: apiProduct.isActive ? 1 : 0,
+              imageUrl: apiProduct.images?.[0] || apiProduct.image,
+              tags: Array.isArray(apiProduct.tags) ? apiProduct.tags.join(',') : apiProduct.tags,
+              createdAt: apiProduct.createdAt || new Date().toISOString(),
+              updatedAt: apiProduct.updatedAt || new Date().toISOString(),
+              variants: apiProduct.variants?.map((v: any) => ({
+                id: v.id,
+                productId: v.productId || productId,
+                sku: v.sku || v.variantSku,
+                name: v.variantName || v.name,
+                attributes: v.options ? JSON.stringify(v.options) : undefined,
+                price: parseFloat(v.retailPrice || v.price || 0),
+                compareAtPrice: v.compareAtPrice ? parseFloat(v.compareAtPrice) : undefined,
+                costPrice: parseFloat(v.cost || v.costPrice || 0),
+                isActive: v.isActive ? 1 : 0,
+                imageUrl: v.image,
+                createdAt: v.createdAt || new Date().toISOString(),
+                updatedAt: v.updatedAt || new Date().toISOString(),
+              })) || [],
+              inventory: apiProduct.variants?.flatMap((v: any) => 
+                (v.inventoryItems || []).map((inv: any) => ({
+                  id: inv.id,
+                  productVariantId: inv.productVariantId || v.id,
+                  locationId: inv.locationId || inv.location?.id,
+                  quantityAvailable: inv.quantityAvailable || 0,
+                  quantityOnHand: inv.quantityOnHand || 0,
+                  quantityReserved: inv.quantityCommitted || inv.quantityReserved || 0,
+                  reorderPoint: inv.reorderPoint || 0,
+                  reorderQuantity: inv.reorderQuantity || 0,
+                  createdAt: inv.createdAt || new Date().toISOString(),
+                  updatedAt: inv.updatedAt || new Date().toISOString(),
+                }))
+              ) || [],
+            };
+
+            // Save to local DB for offline access (non-blocking)
+            // TODO: Implement saveProductToLocal similar to web app
+            
+            return {
+              success: true,
+              product,
+              isOffline: false,
+            };
+          }
+
+          return {
+            success: false,
+            error: 'Product not found',
+            isOffline: false,
+          };
+        } catch (apiError) {
+          console.warn('[IPC] API fetch failed, falling back to local DB:', apiError);
+          // Fall through to offline mode
+        }
+      }
+
+      // Offline mode - fetch from local SQLite
+      console.log('[IPC] Fetching product from local SQLite:', productId);
+      const products = await localDb.query<any>('SELECT * FROM Product WHERE id = ?', [productId]);
+      
+      if (products.length === 0) {
+        return {
+          success: false,
+          error: 'Product not found',
+          isOffline: true,
+        };
+      }
+
+      const product = products[0];
+      
+      // Get variants
+      const variants = await localDb.query<any>('SELECT * FROM ProductVariant WHERE productId = ?', [productId]);
+      product.variants = variants;
+
+      // Get inventory for each variant
+      if (variants.length > 0) {
+        const inventoryPromises = variants.map(async (v: any) => {
+          const inventoryItems = await localDb.query<any>('SELECT * FROM InventoryItem WHERE variantId = ?', [v.id]);
+          return inventoryItems.map((inv: any) => ({
+            id: inv.id,
+            productVariantId: inv.variantId || v.id,
+            locationId: inv.locationId,
+            quantityAvailable: inv.quantityAvailable || 0,
+            quantityOnHand: inv.quantityOnHand || 0,
+            quantityReserved: inv.quantityCommitted || inv.quantityReserved || 0,
+            reorderPoint: inv.reorderPoint || 0,
+            reorderQuantity: inv.reorderQuantity || 0,
+            createdAt: inv.createdAt || new Date().toISOString(),
+            updatedAt: inv.updatedAt || new Date().toISOString(),
+          }));
+        });
+        const inventoryResults = await Promise.all(inventoryPromises);
+        product.inventory = inventoryResults.flat();
+      }
+
+      return {
+        success: true,
+        product,
+        isOffline: true,
+      };
+    } catch (error) {
+      console.error('[IPC] product:get-by-id error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch product',
+        isOffline: true,
+      };
+    }
+  });
+
   // Print handler for silent printing
   ipcMain.handle('print-content', async (event, options) => {
     try {

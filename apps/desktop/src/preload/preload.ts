@@ -89,6 +89,10 @@ try {
         console.log('[Preload] product.getAll called with options:', options);
         return ipcRenderer.invoke('product:get-all', options);
       },
+      getById: (productId: string) => {
+        console.log('[Preload] product.getById called with productId:', productId);
+        return ipcRenderer.invoke('product:get-by-id', productId);
+      },
     },
     // Customer API
     customer: {
@@ -115,7 +119,7 @@ try {
   console.log('[Preload] Auth methods exposed: login, logout');
   console.log('[Preload] Sync methods exposed: triggerManual, getStatus');
   console.log('[Preload] Category methods exposed: getAll, getById');
-  console.log('[Preload] Product methods exposed: getAll');
+  console.log('[Preload] Product methods exposed: getAll, getById');
   console.log('[Preload] Customer methods exposed: getAll, create, update, delete');
 } catch (error) {
   console.error('[Preload] Failed to expose APIs:', error);

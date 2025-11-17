@@ -173,8 +173,11 @@ export class OrderRepository extends BaseRepository {
           reason: discount.reason,
         })) || [];
 
+      // Reduce inventory quantities for each line item (before saving order)
+      await this.reduceInventoryQuantities(lineItems);
+
       if (this.isOnline()) {
-        // Save to server
+        // Save to server (server should also handle inventory, but we update local for consistency)
         const savedOrder = await this.getApi().post<OrderWithDetails>('/api/orders', {
           order,
           lineItems,
@@ -305,6 +308,54 @@ export class OrderRepository extends BaseRepository {
       .toString()
       .padStart(4, '0');
     return `ORD-${dateStr}-${random}`;
+  }
+
+  /**
+   * Reduce inventory quantities when order is processed
+   */
+  private async reduceInventoryQuantities(lineItems: OrderLineItem[]): Promise<void> {
+    try {
+      const db = this.getDb();
+      const isIndexedDB = db.constructor.name === 'WebIndexedDbClient';
+
+      for (const item of lineItems) {
+        if (!item.productVariantId) continue;
+
+        // Get current inventory for the variant
+        let inventoryItems: Array<{ id: string; quantityOnHand: number; productVariantId?: string; variantId?: string; [key: string]: unknown }>;
+        if (isIndexedDB) {
+          inventoryItems = await db.query<{ id: string; quantityOnHand: number; productVariantId?: string; [key: string]: unknown }>(
+            'SELECT * FROM InventoryItem WHERE productVariantId = ?',
+            [item.productVariantId]
+          );
+        } else {
+          inventoryItems = await db.query<{ id: string; quantityOnHand: number; variantId?: string; [key: string]: unknown }>(
+            'SELECT * FROM InventoryItem WHERE variantId = ?',
+            [item.productVariantId]
+          );
+        }
+
+        // Reduce quantityOnHand for each inventory item
+        for (const inv of inventoryItems) {
+          const currentQty = inv.quantityOnHand || 0;
+          const newQty = Math.max(0, currentQty - item.quantity); // Ensure not less than 0
+
+          // Update inventory item - use execute with table name and object (upsert pattern)
+          const updatedInv = {
+            ...inv,
+            quantityOnHand: newQty,
+            updatedAt: new Date().toISOString(),
+          };
+
+          // Use execute with table name and object (works for both IndexedDB and SQLite)
+          await db.execute('InventoryItem', [updatedInv]);
+        }
+      }
+    } catch (error) {
+      console.error('[OrderRepository] Failed to reduce inventory quantities:', error);
+      // Don't throw - allow order to proceed even if inventory update fails
+      // This can be retried later or handled by sync
+    }
   }
 
   private async saveOrderToLocal(order: OrderWithDetails): Promise<void> {

@@ -9,6 +9,9 @@ export interface LineItem {
   quantity: number;
   price: number;
   total: number;
+  productId?: string; // Product ID for inventory tracking
+  productVariantId?: string; // Variant ID for inventory tracking
+  availableQuantity?: number; // Available stock quantity
 }
 
 export interface TransactionLinesProps extends ComponentProps {

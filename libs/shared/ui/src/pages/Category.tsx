@@ -127,7 +127,7 @@ export function Category({ repository, getConnectionState }: CategoryProps) {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center z-40" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+      <div className="h-full w-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
         <Loading
           message={isOffline ? "Loading categories from local storage..." : "Loading categories..."}
           size="lg"

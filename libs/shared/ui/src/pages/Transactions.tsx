@@ -342,7 +342,7 @@ export function Transactions() {
             if (q === 0) {
               removeItem(selectedItem);
             } else {
-              setItemQuantity(selectedItem, q);
+              setItemQuantity(selectedItem, q, show);
             }
           }
         }}

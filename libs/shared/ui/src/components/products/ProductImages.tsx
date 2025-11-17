@@ -192,71 +192,88 @@ export function ProductImages({
         Images
       </h2>
 
-      {/* Main Preview Images */}
+      {/* Main Preview Image - Single Large Frame */}
       <div className="flex flex-col gap-4">
         {showPlaceholder ? (
-          <div className="grid grid-cols-2 gap-4">
-            {[1, 2].map((index) => (
-              <div
-                key={index}
-                className="aspect-square rounded border flex items-center justify-center"
-                style={{
-                  backgroundColor: 'var(--color-bg-card)',
-                  borderColor: 'var(--color-border-light)',
-                }}
-              >
-                <Package size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5 }} />
-              </div>
-            ))}
+          <div className="aspect-square rounded border flex items-center justify-center"
+            style={{
+              backgroundColor: 'var(--color-bg-card)',
+              borderColor: 'var(--color-border-light)',
+            }}
+          >
+            <Package size={64} style={{ color: 'var(--color-text-secondary)', opacity: 0.5 }} />
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            {images.map((image, index) => {
-              const hasError = imageErrors.has(index);
-              const isSelected = index === selectedImageIndex;
-
-              return (
-                <div
-                  key={index}
-                  className={`relative aspect-square rounded border overflow-hidden cursor-pointer transition-all ${
-                    isSelected ? 'ring-2' : ''
-                  }`}
-                  style={{
-                    borderColor: isSelected ? 'var(--color-primary-500)' : 'var(--color-border-light)',
-                    ...(isSelected && {
-                      boxShadow: `0 0 0 2px var(--color-primary-500)`,
-                    }),
-                  }}
-                  onClick={() => setSelectedImageIndex(index)}
-                >
-                  {hasError ? (
-                    <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-card)' }}>
-                      <Package size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5 }} />
-                    </div>
-                  ) : (
-                    <>
-                      <img
-                        src={image}
-                        alt={productName ? `${productName} - Image ${index + 1}` : `Product image ${index + 1}`}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                        onError={() => handleImageError(index)}
-                      />
-                      <div 
-                        className="absolute bottom-2 right-2 bg-black/50 rounded p-1 cursor-pointer hover:bg-black/70 transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenModal(index);
-                        }}
-                      >
-                        <ZoomIn size={16} style={{ color: 'white' }} />
-                      </div>
-                    </>
-                  )}
+          <>
+            {/* Main Large Image */}
+            <div className="relative aspect-square rounded border overflow-hidden"
+              style={{
+                borderColor: 'var(--color-border-light)',
+              }}
+            >
+              {imageErrors.has(selectedImageIndex) ? (
+                <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-card)' }}>
+                  <Package size={64} style={{ color: 'var(--color-text-secondary)', opacity: 0.5 }} />
                 </div>
-              );
-            })}
-          </div>
+              ) : (
+                <>
+                  <img
+                    src={images[selectedImageIndex]}
+                    alt={productName ? `${productName} - Image ${selectedImageIndex + 1}` : `Product image ${selectedImageIndex + 1}`}
+                    loading="lazy"
+                    className="w-full h-full object-contain"
+                    onError={() => handleImageError(selectedImageIndex)}
+                  />
+                  <div 
+                    className="absolute bottom-2 right-2 bg-black/50 rounded p-2 cursor-pointer hover:bg-black/70 transition-colors"
+                    onClick={() => handleOpenModal(selectedImageIndex)}
+                  >
+                    <ZoomIn size={20} style={{ color: 'white' }} />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Thumbnail Navigation - Only show if more than one image */}
+            {images.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {images.map((image, index) => {
+                  const hasError = imageErrors.has(index);
+                  const isSelected = index === selectedImageIndex;
+
+                  return (
+                    <div
+                      key={index}
+                      className={`relative flex-shrink-0 w-20 h-20 rounded border overflow-hidden cursor-pointer transition-all ${
+                        isSelected ? 'ring-2' : ''
+                      }`}
+                      style={{
+                        borderColor: isSelected ? 'var(--color-primary-500)' : 'var(--color-border-light)',
+                        ...(isSelected && {
+                          boxShadow: `0 0 0 2px var(--color-primary-500)`,
+                        }),
+                      }}
+                      onClick={() => setSelectedImageIndex(index)}
+                    >
+                      {hasError ? (
+                        <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-card)' }}>
+                          <Package size={20} style={{ color: 'var(--color-text-secondary)', opacity: 0.5 }} />
+                        </div>
+                      ) : (
+                        <img
+                          src={image}
+                          alt={productName ? `${productName} - Thumbnail ${index + 1}` : `Thumbnail ${index + 1}`}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                          onError={() => handleImageError(index)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
 
         {/* Variants Section - Below Preview Images */}

@@ -263,5 +263,34 @@ export class WebProductRepository implements StoreProductRepository {
       };
     }
   }
+
+  /**
+   * Get product by ID with variants and inventory
+   * Implements ProductDetailRepository interface
+   */
+  async getProductById(productId: string) {
+    try {
+      return await this.productRepo.getProductById(productId);
+    } catch (error) {
+      console.error('[WebProductRepository] Get product by ID failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get all products (for related products)
+   * Implements ProductDetailRepository interface
+   * Note: This method name conflicts with the StoreProductRepository method
+   * but is needed for ProductDetailRepository interface
+   */
+  async getAllProductsForDetail(): Promise<Product[]> {
+    try {
+      const result = await this.getAllProducts({ page: 1, limit: 1000 });
+      return result.products || [];
+    } catch (error) {
+      console.error('[WebProductRepository] Get all products failed:', error);
+      return [];
+    }
+  }
 }
 

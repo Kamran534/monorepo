@@ -59,6 +59,45 @@ export class DesktopProductRepository implements ProductRepository {
       };
     }
   }
+
+  /**
+   * Get product by ID with variants and inventory
+   * Implements ProductDetailRepository interface
+   */
+  async getProductById(productId: string) {
+    try {
+      if (typeof window === 'undefined' || !window.electronAPI || !window.electronAPI.product) {
+        console.error('[DesktopProductRepository] Electron API not available');
+        return null;
+      }
+
+      console.log('[DesktopProductRepository] Calling electronAPI.product.getById:', productId);
+      const result = await window.electronAPI.product.getById(productId);
+
+      if (result.success && result.product) {
+        return result.product;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[DesktopProductRepository] Get product by ID failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get all products (for related products)
+   * Implements ProductDetailRepository interface
+   */
+  async getAllProductsForDetail(): Promise<Product[]> {
+    try {
+      const result = await this.getAllProducts({ page: 1, limit: 1000 });
+      return result.products || [];
+    } catch (error) {
+      console.error('[DesktopProductRepository] Get all products failed:', error);
+      return [];
+    }
+  }
 }
 
 // Singleton instance

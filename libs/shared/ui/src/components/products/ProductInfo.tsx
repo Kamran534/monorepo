@@ -62,16 +62,21 @@ export function ProductInfo({
       {onAddItem && (
         <button
           onClick={onAddItem}
-          className="px-4 py-2 rounded text-sm font-medium transition-colors"
+          disabled={currentQuantity <= 0}
+          className="px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
-            backgroundColor: 'var(--color-primary-500)',
-            color: 'var(--color-text-light)',
+            backgroundColor: currentQuantity > 0 ? 'var(--color-primary-500)' : 'var(--color-bg-secondary)',
+            color: currentQuantity > 0 ? 'var(--color-text-light)' : 'var(--color-text-secondary)',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.opacity = '0.9';
+            if (currentQuantity > 0) {
+              e.currentTarget.style.opacity = '0.9';
+            }
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.opacity = '1';
+            if (currentQuantity > 0) {
+              e.currentTarget.style.opacity = '1';
+            }
           }}
         >
           Add item
