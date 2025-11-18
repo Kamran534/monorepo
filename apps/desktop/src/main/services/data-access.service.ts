@@ -15,6 +15,7 @@ import {
   ConnectionStatus,
   DataSource,
   SyncService,
+  seedPaymentMethods,
   type ConnectionState,
   type LocalDbClient,
   type HttpApiClient,
@@ -144,6 +145,11 @@ class DataAccessService {
       });
       await this.localDb.initialize();
       console.log('[DataAccessService] Local database initialized');
+
+      // Auto-seed payment methods
+      console.log('[DataAccessService] Auto-seeding payment methods...');
+      await seedPaymentMethods(this.localDb);
+      console.log('[DataAccessService] Payment methods seeding complete');
 
       // Initialize API client
       this.apiClient = getApiClient({

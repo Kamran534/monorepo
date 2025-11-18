@@ -29,6 +29,8 @@ export function useBarcodeScanner({
   const bufferRef = useRef<string[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastKeypressTimeRef = useRef<number>(0);
+  const lastProcessedRef = useRef<{ code: string; timestamp: number } | null>(null);
+  const isProcessingRef = useRef<boolean>(false);
 
   const resetBuffer = useCallback(() => {
     bufferRef.current = [];
@@ -49,7 +51,33 @@ export function useBarcodeScanner({
       return;
     }
 
-    onScan(code);
+    // Prevent concurrent processing (processing lock)
+    if (isProcessingRef.current) {
+      console.log('[useBarcodeScanner] ⚠️ Already processing a barcode, ignoring duplicate call');
+      return;
+    }
+
+    // Prevent duplicate processing of same barcode within 200ms
+    const now = Date.now();
+    if (lastProcessedRef.current &&
+        lastProcessedRef.current.code === code &&
+        now - lastProcessedRef.current.timestamp < 200) {
+      console.log('[useBarcodeScanner] Duplicate barcode processing prevented:', code);
+      return;
+    }
+
+    // Set processing lock and update timestamp
+    isProcessingRef.current = true;
+    lastProcessedRef.current = { code, timestamp: now };
+
+    try {
+      onScan(code);
+    } finally {
+      // Reset processing lock after a small delay to prevent rapid re-triggering
+      setTimeout(() => {
+        isProcessingRef.current = false;
+      }, 50);
+    }
   }, [onScan, onError, minLength, maxLength]);
 
   useEffect(() => {
@@ -59,6 +87,17 @@ export function useBarcodeScanner({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      const target = (event.target || document.activeElement) as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
       const currentTime = Date.now();
       const timeSinceLastKeypress = currentTime - lastKeypressTimeRef.current;
       lastKeypressTimeRef.current = currentTime;
@@ -72,6 +111,12 @@ export function useBarcodeScanner({
       if (endCharacters.includes(event.key)) {
         if (preventDefault) {
           event.preventDefault();
+        }
+
+        // Clear the timeout first to prevent double-firing
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
         }
 
         const scannedCode = bufferRef.current.join('');

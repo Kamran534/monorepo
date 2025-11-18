@@ -58,7 +58,9 @@ function AppContent() {
   const lineCount = items.length;
 
   const isLoginRoute = location.pathname === '/login';
-  const scannerEnabled = isAuthenticated && !isLoginRoute;
+  const isTransactionsRoute = location.pathname === '/transactions';
+  // Disable global scanner on Transactions page since it has its own scanner
+  const scannerEnabled = isAuthenticated && !isLoginRoute && !isTransactionsRoute;
 
   const handleScannedBarcode = useCallback(
     async (barcode: string) => {

@@ -555,6 +555,12 @@ CREATE TABLE IF NOT EXISTS SaleOrder (
     shiftId TEXT,
     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
     updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- Sync fields
+    sync_status TEXT DEFAULT 'pending',
+    last_synced_at TEXT,
+    is_deleted INTEGER DEFAULT 0,
+
     FOREIGN KEY (locationId) REFERENCES Location(id),
     FOREIGN KEY (customerId) REFERENCES Customer(id),
     FOREIGN KEY (cashierId) REFERENCES User(id),
@@ -597,6 +603,12 @@ CREATE TABLE IF NOT EXISTS OrderLineItem (
     customizations TEXT, -- JSON
     serialNumbers TEXT, -- JSON array
     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- Sync fields
+    sync_status TEXT DEFAULT 'pending',
+    last_synced_at TEXT,
+    is_deleted INTEGER DEFAULT 0,
+
     FOREIGN KEY (orderId) REFERENCES SaleOrder(id) ON DELETE CASCADE,
     FOREIGN KEY (variantId) REFERENCES ProductVariant(id),
     FOREIGN KEY (salesPersonId) REFERENCES User(id)
@@ -624,6 +636,12 @@ CREATE TABLE IF NOT EXISTS OrderPayment (
     processedAt TEXT NOT NULL DEFAULT (datetime('now')),
     refundedAmount REAL DEFAULT 0,
     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- Sync fields
+    sync_status TEXT DEFAULT 'pending',
+    last_synced_at TEXT,
+    is_deleted INTEGER DEFAULT 0,
+
     FOREIGN KEY (orderId) REFERENCES SaleOrder(id) ON DELETE CASCADE,
     FOREIGN KEY (paymentMethodId) REFERENCES PaymentMethod(id)
 );
@@ -773,6 +791,12 @@ CREATE TABLE IF NOT EXISTS OrderDiscount (
     discountAmount REAL NOT NULL,
     appliedBy TEXT NOT NULL,
     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- Sync fields
+    sync_status TEXT DEFAULT 'pending',
+    last_synced_at TEXT,
+    is_deleted INTEGER DEFAULT 0,
+
     FOREIGN KEY (orderId) REFERENCES SaleOrder(id) ON DELETE CASCADE,
     FOREIGN KEY (discountId) REFERENCES Promotion(id),
     FOREIGN KEY (appliedBy) REFERENCES User(id)
@@ -938,6 +962,12 @@ CREATE TABLE IF NOT EXISTS ParkedOrder (
     expiryDate TEXT,
     notes TEXT,
     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- Sync fields
+    sync_status TEXT DEFAULT 'pending',
+    last_synced_at TEXT,
+    is_deleted INTEGER DEFAULT 0,
+
     FOREIGN KEY (customerId) REFERENCES Customer(id),
     FOREIGN KEY (orderId) REFERENCES SaleOrder(id),
     FOREIGN KEY (parkedBy) REFERENCES User(id)

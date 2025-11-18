@@ -547,6 +547,14 @@ export class WebIndexedDbClient implements LocalDbClient {
       return Promise.resolve();
     }
 
+    // Handle transaction control statements (SQLite-specific, ignore for IndexedDB)
+    const upperSQL = sql.trim().toUpperCase();
+    if (upperSQL === 'BEGIN TRANSACTION' || upperSQL === 'COMMIT' || upperSQL === 'ROLLBACK' ||
+        upperSQL === 'BEGIN' || upperSQL === 'END TRANSACTION') {
+      console.log('[WebIndexedDbClient] Ignoring transaction control statement:', sql);
+      return Promise.resolve();
+    }
+
     console.log('[WebIndexedDbClient] execute() called with:', {
       sql: sql.substring(0, 150) + (sql.length > 150 ? '...' : ''),
       paramsCount: params?.length || 0,

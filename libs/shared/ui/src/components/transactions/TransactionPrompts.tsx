@@ -358,15 +358,6 @@ export const PreviewPrompt = ({
     title="Order Preview"
     onClose={onClose}
     widthClass="w-full max-w-3xl"
-    footer={
-      <button
-        onClick={onClose}
-        className="px-4 py-2 rounded border text-sm"
-        style={{ borderColor: 'var(--color-border-light)' }}
-      >
-        Close
-      </button>
-    }
   >
     <div className="space-y-4">
       <div className="max-h-60 overflow-auto border rounded" style={{ borderColor: 'var(--color-border-light)' }}>

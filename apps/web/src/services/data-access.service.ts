@@ -15,6 +15,7 @@ import {
   type LocalDbClient,
   type HttpApiClient,
   SyncService,
+  seedPaymentMethods,
   CPOS_INDEXEDDB_SCHEMA,
   CPOS_DB_VERSION,
   CPOS_DB_NAME,
@@ -118,6 +119,11 @@ class WebDataAccessService {
       });
       await this.localDb.initialize();
       console.log('[WebDataAccessService] Local database initialized with schema');
+
+      // Auto-seed payment methods
+      console.log('[WebDataAccessService] Auto-seeding payment methods...');
+      await seedPaymentMethods(this.localDb);
+      console.log('[WebDataAccessService] Payment methods seeding complete');
 
       // Initialize API client
       this.apiClient = getApiClient({

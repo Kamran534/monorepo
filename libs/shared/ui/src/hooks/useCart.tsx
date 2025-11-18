@@ -20,9 +20,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const qtyToAdd = Number(item.quantity) || 1;
       const availableQty = item.availableQuantity ?? Infinity; // Default to unlimited if not provided
       
-      // Prefer id match, otherwise fallback to name match
+      // Prefer id match, otherwise fallback to productVariantId, productId, or name match
       const index = prev.findIndex(li =>
-        (item.id && li.id === item.id) || (!item.id && (li.productId === item.productId || li.name === item.name))
+        (item.id && li.id === item.id) ||
+        (!item.id && item.productVariantId && li.productVariantId === item.productVariantId) ||
+        (!item.id && !item.productVariantId && li.productId === item.productId) ||
+        (!item.id && !item.productVariantId && !item.productId && li.name === item.name)
       );
 
       if (index >= 0) {

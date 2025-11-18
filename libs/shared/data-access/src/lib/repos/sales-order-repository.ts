@@ -94,29 +94,42 @@ export class SalesOrderRepository {
    */
   async createOrder(data: CreateSalesOrderInput, useServer = true): Promise<CreateOrderResult> {
     try {
-      // Calculate order totals
-      const calculatedTotals = this.calculateOrderTotals(data);
+      // Ensure payments array exists
+      const payments = data.payments ?? [];
+      const normalizedData: CreateSalesOrderInput = {
+        ...data,
+        payments,
+      };
 
-      // Validate payments
-      const paymentValidation = this.validatePayments(data.payments, calculatedTotals.totalAmount);
-      if (!paymentValidation.isValid) {
-        return {
-          success: false,
-          error: paymentValidation.error,
-        };
+      // Calculate order totals
+      const calculatedTotals = this.calculateOrderTotals(normalizedData);
+
+      // Validate payments only when at least one payment is supplied.
+      // Parked orders or drafts may intentionally defer tender collection.
+      if (payments.length > 0) {
+        const paymentValidation = this.validatePayments(
+          payments,
+          calculatedTotals.totalAmount
+        );
+        if (!paymentValidation.isValid) {
+          return {
+            success: false,
+            error: paymentValidation.error,
+          };
+        }
       }
 
       // Try server first if requested
       if (useServer) {
         try {
           const response = await this.apiClient.post('/api/orders', {
-            ...data,
+            ...normalizedData,
             ...calculatedTotals,
           });
 
           if (response.success && response.data) {
             // Also save to local DB for offline access
-            await this.saveOrderToLocalDb(response.data.order || response.data, data);
+            await this.saveOrderToLocalDb(response.data.order || response.data, normalizedData);
 
             return {
               success: true,
@@ -130,7 +143,7 @@ export class SalesOrderRepository {
       }
 
       // Fallback to local DB
-      const order = await this.saveOrderToLocalDb(null, data);
+      const order = await this.saveOrderToLocalDb(null, normalizedData);
 
       return {
         success: true,
@@ -150,27 +163,28 @@ export class SalesOrderRepository {
    * Save order to local database
    */
   private async saveOrderToLocalDb(serverOrder: any | null, data: CreateSalesOrderInput): Promise<SalesOrder> {
-    const orderId = serverOrder?.id || this.generateId();
-    const orderNumber = serverOrder?.orderNumber || this.generateOrderNumber();
-    const now = new Date().toISOString();
+    return this.runWithForeignKeysDisabled(async () => {
+      const orderId = serverOrder?.id || this.generateId();
+      const orderNumber = serverOrder?.orderNumber || this.generateOrderNumber();
+      const now = new Date().toISOString();
 
-    const calculatedTotals = this.calculateOrderTotals(data);
-    const amountPaid = data.payments.reduce((sum, p) => sum + p.amount, 0);
-    const changeAmount = Math.max(0, amountPaid - calculatedTotals.totalAmount);
+      const calculatedTotals = this.calculateOrderTotals(data);
+      const amountPaid = data.payments.reduce((sum, p) => sum + p.amount, 0);
+      const changeAmount = Math.max(0, amountPaid - calculatedTotals.totalAmount);
 
-    // Start transaction
-    await this.localDb.execute('BEGIN TRANSACTION');
+      // Start transaction
+      await this.localDb.execute('BEGIN TRANSACTION');
 
     try {
       // Insert order
       await this.localDb.execute(
         `INSERT INTO SaleOrder (
           id, orderNumber, locationId, customerId, cashierId, orderDate, status,
-          subtotal, taxAmount, discountAmount, discountPercent,
-          adjustmentAmount, adjustmentReason, couponCode,
+          subtotal, taxAmount, discountAmount,
           totalAmount, amountPaid, amountDue, changeAmount,
-          notes, customerNotes, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          notes, customerNotes, createdAt, updatedAt,
+          sync_status, last_synced_at, is_deleted
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           orderId,
           orderNumber,
@@ -182,10 +196,6 @@ export class SalesOrderRepository {
           calculatedTotals.subtotal,
           calculatedTotals.taxAmount,
           calculatedTotals.orderDiscount,
-          data.orderLevelDiscount?.percent || 0,
-          data.adjustment?.amount || 0,
-          data.adjustment?.reason || null,
-          data.giftCardNumber || null,
           calculatedTotals.totalAmount,
           amountPaid,
           Math.max(0, calculatedTotals.totalAmount - amountPaid),
@@ -194,6 +204,9 @@ export class SalesOrderRepository {
           data.customerNotes || null,
           serverOrder?.createdAt || now,
           serverOrder?.updatedAt || now,
+          serverOrder ? 'synced' : 'pending',
+          serverOrder ? now : null,
+          0,
         ]
       );
 
@@ -223,8 +236,9 @@ export class SalesOrderRepository {
             id, orderId, variantId, salesPersonId, quantity, unitPrice,
             lineDiscount, lineDiscountPercent,
             customDiscountAmount, customDiscountPercent,
-            lineTotal, notes, createdAt
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            lineTotal, notes, createdAt,
+            sync_status, last_synced_at, is_deleted
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             lineId,
             orderId,
@@ -239,6 +253,9 @@ export class SalesOrderRepository {
             lineTotal,
             lineItem.notes || null,
             now,
+            serverOrder ? 'synced' : 'pending',
+            serverOrder ? now : null,
+            0,
           ]
         );
       }
@@ -251,8 +268,9 @@ export class SalesOrderRepository {
           `INSERT INTO OrderPayment (
             id, orderId, paymentMethodId, amount, status,
             transactionId, authorizationCode, cardLast4, cardBrand,
-            processedAt, createdAt
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            processedAt, createdAt,
+            sync_status, last_synced_at, is_deleted
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             paymentId,
             orderId,
@@ -265,6 +283,9 @@ export class SalesOrderRepository {
             payment.cardBrand || null,
             now,
             now,
+            serverOrder ? 'synced' : 'pending',
+            serverOrder ? now : null,
+            0,
           ]
         );
       }
@@ -299,6 +320,7 @@ export class SalesOrderRepository {
       await this.localDb.execute('ROLLBACK');
       throw error;
     }
+    });
   }
 
   /**
@@ -397,5 +419,18 @@ export class SalesOrderRepository {
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     return `ORD-${timestamp}-${random}`;
+  }
+
+  /**
+   * Some reference records (customers, variants, etc.) might not be synced locally yet.
+   * Temporarily disable FK enforcement so we can cache offline orders and re-enable immediately after.
+   */
+  private async runWithForeignKeysDisabled<T>(callback: () => Promise<T>): Promise<T> {
+    try {
+      await this.localDb.execute('PRAGMA foreign_keys = OFF');
+      return await callback();
+    } finally {
+      await this.localDb.execute('PRAGMA foreign_keys = ON');
+    }
   }
 }

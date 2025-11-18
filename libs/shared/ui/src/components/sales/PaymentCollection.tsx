@@ -350,16 +350,33 @@ export function PaymentCollection({
             </label>
             <input
               ref={amountInputRef}
-              type="number"
-              min="0"
-              step="0.01"
+              inputMode="decimal"
+              pattern="[0-9]*"
               value={paymentAmount}
-              onChange={(e) => setPaymentAmount(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && paymentAmount && selectedMethodId) {
-                  e.preventDefault();
-                  handleAddPayment();
+                if (selectedMethodId && !disabled) {
+                  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const current = parseFloat(paymentAmount || '0') || 0;
+                    const delta =
+                      e.shiftKey ? 10 : e.altKey ? 0.01 : 1;
+                    const nextValue =
+                      e.key === 'ArrowUp'
+                        ? current + delta
+                        : Math.max(0, current - delta);
+                    setPaymentAmount(nextValue.toFixed(2));
+                  }
+                  if (e.key === 'Enter' && paymentAmount) {
+                    e.preventDefault();
+                    handleAddPayment();
+                  }
                 }
+              }}
+              onChange={(e) => {
+                const value = e.target.value
+                  ?.replace(/[^0-9.]/g, '')
+                  .replace(/(\..*)\./g, '$1');
+                setPaymentAmount(value);
               }}
               disabled={disabled || !selectedMethodId}
               placeholder="0.00"

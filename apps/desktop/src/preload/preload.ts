@@ -95,7 +95,10 @@ try {
       },
       lookupByBarcode: (barcode: string) => {
         console.log('[Preload] product.lookupByBarcode called with barcode:', barcode);
-        return ipcRenderer.invoke('product:lookup-barcode', barcode);
+        console.log('[Preload] Call stack:', new Error().stack);
+        const result = ipcRenderer.invoke('product:lookup-barcode', barcode);
+        console.log('[Preload] ipcRenderer.invoke returned, result is Promise:', result instanceof Promise);
+        return result;
       },
     },
     // Customer API
@@ -117,8 +120,38 @@ try {
         return ipcRenderer.invoke('customer:delete', id);
       },
     },
+    // Order API
+    order: {
+      create: (orderData: any) => {
+        console.log('[Preload] order.create called');
+        return ipcRenderer.invoke('order:create', orderData);
+      },
+      park: (orderData: any) => {
+        console.log('[Preload] order.park called');
+        return ipcRenderer.invoke('order:park', orderData);
+      },
+      searchParked: (searchParams?: any) => {
+        console.log('[Preload] order.searchParked called');
+        return ipcRenderer.invoke('order:search-parked', searchParams);
+      },
+      loadParked: (parkNumber: string) => {
+        console.log('[Preload] order.loadParked called');
+        return ipcRenderer.invoke('order:load-parked', parkNumber);
+      },
+      completeParked: (data: any) => {
+        console.log('[Preload] order.completeParked called');
+        return ipcRenderer.invoke('order:complete-parked', data);
+      },
+    },
+    // PaymentMethod API
+    paymentMethod: {
+      getAll: (params?: { isActive?: boolean }) => {
+        console.log('[Preload] paymentMethod.getAll called');
+        return ipcRenderer.invoke('payment-method:get-all', params);
+      },
+    },
   });
-  console.log('[Preload] Exposed electronAPI with connection, auth, sync, category, product, and customer API');
+  console.log('[Preload] Exposed electronAPI with connection, auth, sync, category, product, customer, order, and paymentMethod API');
   console.log('[Preload] Connection methods exposed: getState, setManual, getManualOverride, check, onStateChange');
   console.log('[Preload] Auth methods exposed: login, logout');
   console.log('[Preload] Sync methods exposed: triggerManual, getStatus');

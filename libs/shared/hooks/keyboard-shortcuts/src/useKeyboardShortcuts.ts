@@ -9,6 +9,7 @@ export interface KeyboardShortcut {
   action: () => void;
   description: string;
   preventDefault?: boolean;
+  allowInInputs?: boolean;
 }
 
 export interface UseKeyboardShortcutsOptions {
@@ -36,6 +37,18 @@ export function useKeyboardShortcuts({
     if (!enabled) return;
 
     for (const shortcut of shortcutsRef.current) {
+      const activeElement = (event.target || document.activeElement) as HTMLElement | null;
+      const isTypingElement =
+        activeElement &&
+        (activeElement.tagName === 'INPUT' ||
+          activeElement.tagName === 'TEXTAREA' ||
+          activeElement.tagName === 'SELECT' ||
+          activeElement.isContentEditable);
+
+      if (isTypingElement && shortcut.allowInInputs !== true) {
+        continue;
+      }
+
       const keyMatch = event.key.toLowerCase() === shortcut.key.toLowerCase();
       const ctrlMatch = shortcut.ctrl ? event.ctrlKey : !event.ctrlKey;
       const shiftMatch = shortcut.shift ? event.shiftKey : !event.shiftKey;

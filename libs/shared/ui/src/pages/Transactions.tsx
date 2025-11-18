@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TransactionLines,
@@ -22,8 +22,11 @@ import {
   useToast,
   useKeyboardShortcuts,
 } from '@monorepo/shared-ui';
+import { useBarcodeScanner } from '@monorepo/shared-hooks-scanner';
 import type { Customer as TransactionCustomer } from '../components/customer/CustomerCard';
 import {
+  Archive,
+  FolderOpen,
   Gift,
   ShoppingBag,
   X,
@@ -34,7 +37,6 @@ import {
   Heart,
   CreditCard,
   Banknote,
-  Ruler,
   Trash2,
   Percent,
   TicketPercent,
@@ -58,6 +60,7 @@ import {
   SalesOrderRepository as SalesOrderRepositoryClass,
   ParkedOrderRepository as ParkedOrderRepositoryClass,
   PaymentMethodRepository as PaymentMethodRepositoryClass,
+  seedPaymentMethods,
   type IndexedDBSchema,
 } from '@monorepo/shared-data-access';
 
@@ -182,6 +185,9 @@ export function Transactions({
   const [parkedOrders, setParkedOrders] = useState<ParkedOrderListItem[]>([]);
   const [loadingParkedOrders, setLoadingParkedOrders] = useState(false);
   const [currentParkedOrderId, setCurrentParkedOrderId] = useState<string | null>(null);
+  const [pendingResumeOrder, setPendingResumeOrder] = useState<ParkedOrderListItem | null>(null);
+  const [pendingResumeIds, setPendingResumeIds] = useState<{ parkedOrderId: string; orderId: string } | null>(null);
+  const [isResumeConfirmOpen, setIsResumeConfirmOpen] = useState(false);
 
   // Save activeTab to localStorage when it changes
   const setActiveTab = (tab: 'lines' | 'payments') => {
@@ -237,6 +243,11 @@ export function Transactions({
           AUTO_IDB_SCHEMA
         );
         await dbClient.initialize();
+
+        // Auto-seed payment methods after database initialization
+        console.log('[Transactions] Auto-seeding payment methods...');
+        await seedPaymentMethods(dbClient);
+        console.log('[Transactions] Payment methods seeding complete');
 
         const apiClient = new HttpApiClient();
         await apiClient.initialize().catch((err) => {
@@ -297,13 +308,7 @@ export function Transactions({
 
   // ============ Parked Order Handlers ============
 
-  const openParkedOrdersModal = useCallback(() => {
-    setIsParkedOrdersModalOpen(true);
-    // Trigger initial search
-    handleSearchParkedOrders('');
-  }, []);
-
-  const handleSearchParkedOrders = async (searchTerm: string) => {
+  const handleSearchParkedOrders = useCallback(async (searchTerm: string) => {
     if (!effectiveParkedOrderRepo) {
       console.warn('[Transactions] ParkedOrderRepository not available');
       return;
@@ -328,9 +333,25 @@ export function Transactions({
     } finally {
       setLoadingParkedOrders(false);
     }
+  }, [effectiveParkedOrderRepo]);
+
+  const openParkedOrdersModal = useCallback(() => {
+    setIsParkedOrdersModalOpen(true);
+    void handleSearchParkedOrders('');
+  }, [handleSearchParkedOrders]);
+
+  const closeResumeModal = () => {
+    setIsResumeConfirmOpen(false);
+    setPendingResumeOrder(null);
+    setPendingResumeIds(null);
   };
 
-  const handleLoadParkedOrder = async (parkedOrderId: string, orderId: string) => {
+  const handleCloseParkedOrdersModal = () => {
+    closeResumeModal();
+    setIsParkedOrdersModalOpen(false);
+  };
+
+  const loadParkedOrderData = async (parkedOrderId: string, orderId: string) => {
     if (!effectiveParkedOrderRepo) {
       show('Parked orders not available', 'error');
       return;
@@ -399,8 +420,11 @@ export function Transactions({
         setCurrentParkedOrderId(parkedOrderId);
 
         // Close modal and show success
-        setIsParkedOrdersModalOpen(false);
-        show('Parked order loaded successfully', 'success');
+        handleCloseParkedOrdersModal();
+        show(
+          `Resumed ${order.orderNumber} for ${normalizedCustomer.name}`,
+          'success'
+        );
       } else {
         show(result.error || 'Failed to load parked order', 'error');
       }
@@ -409,6 +433,132 @@ export function Transactions({
       show(err.message || 'Failed to load parked order', 'error');
     }
   };
+
+  const handleResumeParkedOrder = (
+    parkedOrderId: string,
+    orderId: string,
+    order?: ParkedOrderListItem
+  ) => {
+    setPendingResumeIds({ parkedOrderId, orderId });
+    setPendingResumeOrder(order ?? null);
+    setIsResumeConfirmOpen(true);
+  };
+
+  const confirmResumeParkedOrder = () => {
+    if (!pendingResumeIds) return;
+    void loadParkedOrderData(pendingResumeIds.parkedOrderId, pendingResumeIds.orderId);
+    closeResumeModal();
+  };
+
+  const handleParkTransaction = useCallback(async () => {
+    if (!effectiveSalesOrderRepo || !effectiveParkedOrderRepo) {
+      show('Parking is not available yet. Please wait for repositories to initialize.', 'error');
+      return;
+    }
+
+    if (lineItems.length === 0) {
+      show('Add at least one product before parking the transaction.', 'error');
+      return;
+    }
+
+    const missingVariant = lineItems.find(
+      (item) => !(item.productVariantId || item.productId)
+    );
+    if (missingVariant) {
+      show('One or more items are missing product references and cannot be parked.', 'error');
+      return;
+    }
+
+    try {
+      const orderInput: CreateSalesOrderInput = {
+        locationId: currentLocationId,
+        cashierId: currentUserId,
+        customerId: customer?.id,
+        lineItems: lineItems.map((item) => ({
+          variantId: item.productVariantId || item.productId || item.id,
+          quantity: item.quantity,
+          unitPrice: item.price,
+        })),
+        payments: paymentEntries.map((payment) => ({
+          paymentMethodId: payment.paymentMethodId,
+          amount: payment.amount,
+          transactionId: payment.transactionId,
+          authorizationCode: payment.authorizationCode,
+          cardLast4: payment.cardLast4,
+          cardBrand: payment.cardBrand,
+        })),
+        orderLevelDiscount: appliedDiscount
+          ? appliedDiscount.type === 'percent'
+            ? { percent: appliedDiscount.value }
+            : { amount: appliedDiscount.value }
+          : undefined,
+        adjustment: appliedAdjustment
+          ? { amount: appliedAdjustment.amount, reason: appliedAdjustment.reason }
+          : undefined,
+        giftCardNumber: giftCardData?.cardNumber,
+        notes: undefined,
+        customerNotes: undefined,
+      };
+
+      const orderResult = await effectiveSalesOrderRepo.createOrder(orderInput, false);
+
+      if (!orderResult.success || !orderResult.order) {
+        show(orderResult.error || 'Failed to create order for parking.', 'error');
+        return;
+      }
+
+      const parkResult = await effectiveParkedOrderRepo.parkOrder({
+        orderId: orderResult.order.id,
+        parkedBy: currentUserId,
+        customerId: customer?.id,
+        notes: orderResult.order.notes,
+      });
+
+      if (!parkResult.success || !parkResult.parkedOrder) {
+        show(parkResult.error || 'Failed to park order.', 'error');
+        return;
+      }
+
+      lineItems.forEach((item) => removeItem(item.id));
+      setPaymentEntries([]);
+      setAppliedDiscount(null);
+      setGiftCardData(null);
+      setAppliedAdjustment(null);
+      clearCustomer();
+      setSelectedItem('');
+      setCurrentParkedOrderId(parkResult.parkedOrder.id);
+      setIsParkedOrdersModalOpen(true);
+      await handleSearchParkedOrders('');
+      show(
+        `Order parked successfully${parkResult.parkedOrder.parkNumber ? ` (Park #${parkResult.parkedOrder.parkNumber})` : ''}.`,
+        'success'
+      );
+    } catch (error: any) {
+      console.error('[Transactions] Failed to park transaction:', error);
+      show(error.message || 'Failed to park order.', 'error');
+    }
+  }, [
+    effectiveSalesOrderRepo,
+    effectiveParkedOrderRepo,
+    lineItems,
+    customer,
+    paymentEntries,
+    appliedDiscount,
+    appliedAdjustment,
+    giftCardData,
+    currentLocationId,
+    currentUserId,
+    removeItem,
+    setPaymentEntries,
+    setAppliedDiscount,
+    setGiftCardData,
+    setAppliedAdjustment,
+    clearCustomer,
+    setSelectedItem,
+    handleSearchParkedOrders,
+    setCurrentParkedOrderId,
+    show,
+  ]);
 
   const handleDeleteParkedOrder = async (parkedOrderId: string) => {
     if (!effectiveParkedOrderRepo) {
@@ -636,6 +786,117 @@ export function Transactions({
     });
     setActiveTab('lines');
   };
+
+  // Track last scanned barcode to prevent duplicates
+  const lastScanRef = useRef<{ barcode: string; timestamp: number } | null>(null);
+  const isProcessingRef = useRef(false); // Prevent concurrent processing
+
+  // Barcode scanner handler - lookup product and add to cart
+  const handleBarcodeScan = useCallback(async (barcode: string) => {
+    console.log('[Transactions] 🔍 Handler called, isProcessing:', isProcessingRef.current);
+
+    // Prevent concurrent calls (React Strict Mode can cause double renders)
+    if (isProcessingRef.current) {
+      console.log('[Transactions] ⚠️ Already processing a scan, ignoring duplicate call');
+      return;
+    }
+    isProcessingRef.current = true;
+    console.log('[Transactions] 🔒 Processing lock SET');
+
+    try {
+    const scanTimestamp = Date.now();
+    console.log('[Transactions] ========== BARCODE SCAN START ==========');
+    console.log('[Transactions] Barcode scanned:', barcode);
+    console.log('[Transactions] Scan timestamp:', scanTimestamp);
+    console.log('[Transactions] Last scan:', lastScanRef.current);
+    console.log('[Transactions] Stack trace:', new Error().stack);
+
+    // Debounce: Ignore if same barcode scanned within 500ms
+    const now = Date.now();
+    if (lastScanRef.current &&
+        lastScanRef.current.barcode === barcode &&
+        now - lastScanRef.current.timestamp < 500) {
+      console.log('[Transactions] ❌ Duplicate scan ignored (debounced) - time diff:', now - lastScanRef.current.timestamp, 'ms');
+      return;
+    }
+    lastScanRef.current = { barcode, timestamp: now };
+    console.log('[Transactions] ✅ Scan accepted, updated lastScanRef');
+
+    // If we have electronAPI (desktop), use barcode lookup first (most accurate)
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.product?.lookupByBarcode) {
+      try {
+        console.log('[Transactions] 📞 About to call lookupByBarcode');
+        const result = await (window as any).electronAPI.product.lookupByBarcode(barcode);
+        console.log('[Transactions] 📥 Received barcode lookup result:', result);
+
+        if (result.success && result.product) {
+          const product = result.product;
+          console.log('[Transactions] ✅ Product found:', product);
+          console.log('[Transactions] Adding to cart with:', {
+            productId: product.productId,
+            productVariantId: product.variantId,
+            name: product.name,
+            price: product.price,
+          });
+          // Add to cart using the looked up product
+          // Use productId as the item id for proper duplicate detection
+          addItem({
+            productId: product.productId,
+            name: product.name,
+            price: product.price,
+            quantity: 1,
+            productVariantId: product.variantId,
+            availableQuantity: product.availableQuantity,
+          }, show);
+          console.log('[Transactions] ✅ addItem called');
+          setActiveTab('lines');
+          show(`Added ${product.name} to cart`, 'success');
+          console.log('[Transactions] ========== BARCODE SCAN END ==========');
+          return;
+        }
+        // If desktop lookup failed, log the error but continue to fallback search
+        console.log('[Transactions] Desktop barcode lookup returned no results, trying fallback search');
+      } catch (error) {
+        console.error('[Transactions] Barcode lookup error:', error);
+        // Continue to fallback search
+      }
+    }
+
+    // Fallback: try to find in current product list (for web or if desktop lookup failed)
+    const localProduct = productList.find(p =>
+      p.id === barcode ||
+      (p as any).productNumber === barcode ||
+      (p as any).productCode === barcode ||
+      (p as any).sku === barcode
+    );
+
+    if (localProduct) {
+      handleAddProduct(localProduct);
+      show(`Added ${localProduct.name} to cart`, 'success');
+      return;
+    }
+
+    // No product found
+    show(`Product not found for barcode: ${barcode}`, 'error');
+    } finally {
+      // Always reset processing flag
+      isProcessingRef.current = false;
+      console.log('[Transactions] Processing flag reset');
+    }
+  }, [productList, addItem, show, handleAddProduct, setActiveTab]);
+
+  // Initialize barcode scanner
+  useBarcodeScanner({
+    onScan: handleBarcodeScan,
+    onError: (error: string) => {
+      console.error('[Transactions] Barcode scanner error:', error);
+    },
+    minLength: 3,
+    maxLength: 200,
+    scanTimeout: 100,
+    enabled: !isPaymentModalOpen, // Disable during payment input
+    preventDefault: true,
+  });
 
   const orderTotals = useMemo(() => {
     const subtotal = lineItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -973,7 +1234,16 @@ export function Transactions({
             setSelectedItem('');
           },
         },
-        right: { icon: <Ruler className="w-5 h-5" />, onClick: () => console.log('Change unit') },
+        right: {
+          icon: <Archive className="w-5 h-5" />,
+          onClick: () => {
+            if (lineItems.length === 0) {
+              show('Add items before parking the transaction.', 'error');
+              return;
+            }
+            void handleParkTransaction();
+          },
+        },
       },
     },
     {
@@ -1006,6 +1276,15 @@ export function Transactions({
       square: true,
       rectangular: true,
       onClick: () => console.log('Transaction options'),
+    },
+    {
+      id: 'parked-orders',
+      icon: <FolderOpen className="w-5 h-5" />,
+      label: 'Parked orders',
+      color: 'bg-gray-700',
+      square: true,
+      rectangular: true,
+      onClick: openParkedOrdersModal,
     },
     {
       id: 'voids',
@@ -1374,12 +1653,26 @@ export function Transactions({
       {/* Parked Orders Search Modal - Opens with Ctrl+Shift+Z */}
       <ParkedOrderSearch
         isOpen={isParkedOrdersModalOpen}
-        onClose={() => setIsParkedOrdersModalOpen(false)}
-        onLoadOrder={handleLoadParkedOrder}
-        onDeleteOrder={handleDeleteParkedOrder}
+        onClose={handleCloseParkedOrdersModal}
+        onLoadOrder={handleResumeParkedOrder}
         parkedOrders={parkedOrders}
         onSearch={handleSearchParkedOrders}
         isLoading={loadingParkedOrders}
+      />
+
+      <ConfirmationModal
+        isOpen={isResumeConfirmOpen}
+        onClose={closeResumeModal}
+        onConfirm={confirmResumeParkedOrder}
+        title="Resume Parked Order"
+        message={
+          pendingResumeOrder
+            ? `Resume ${pendingResumeOrder.orderNumber} for ${pendingResumeOrder.customerName ?? 'Walk-in Customer'}?`
+            : 'Resume this parked order?'
+        }
+        confirmText="Resume Order"
+        cancelText="Cancel"
+        variant="info"
       />
 
       {/* Void Confirmation Modal */}

@@ -410,7 +410,7 @@ export function Sales({
     }
   };
 
-  const handleLoadParkedOrder = async (parkedOrderId: string, orderId: string) => {
+  const handleLoadParkedOrder = async (parkedOrderId: string, orderId: string, _order?: ParkedOrderListItem) => {
     if (!parkedOrderRepo) {
       show('Parked orders not available', 'error');
       return;

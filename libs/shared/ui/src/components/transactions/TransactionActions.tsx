@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ComponentProps } from '../../types.js';
 import { TransactionVerticalNav } from './TransactionVerticalNav.js';
-import { FileText, Tag, Boxes, Zap, Package, ShoppingCart, Eye } from 'lucide-react';
+import { FileText, Tag, Boxes, Zap, Package, ShoppingCart } from 'lucide-react';
 import type { Product } from '../products/ProductList.js';
 
 export interface ActionButton {
@@ -61,27 +61,27 @@ function ProductGridCard({ product, onProductClick, onAddProduct }: ProductGridC
     }
   }, [hasImage]);
 
+  const showImage = hasImage && !imageError && imageLoaded;
+  const textColor = showImage ? 'var(--color-text-light)' : 'var(--color-text-primary)';
+
   return (
     <div
       onClick={() => onProductClick?.(product)}
-      className="flex flex-col rounded border overflow-hidden cursor-pointer transition-all hover:shadow-md relative"
+      className="relative flex flex-col rounded border overflow-hidden cursor-pointer transition-all hover:shadow-md"
       style={{
         width: '149px',
-        backgroundColor: (!hasImage || imageError || !imageLoaded) ? 'var(--color-bg-card)' : 'transparent',
+        backgroundColor: showImage ? 'transparent' : 'var(--color-bg-card)',
         borderColor: 'var(--color-border-light)',
         maxWidth: '100%',
-        backgroundImage: (hasImage && !imageError && imageLoaded) ? `url(${product.image})` : 'none',
+        backgroundImage: showImage ? `url(${product.image})` : 'none',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
-        minHeight: '120px',
+        minHeight: '140px',
       }}
     >
-      
       {/* Dark overlay for better text readability on images */}
-      {(hasImage && !imageError && imageLoaded) && (
-        <div className="absolute inset-0 bg-black/30 z-0" />
-      )}
+      {showImage && <div className="absolute inset-0 bg-black/30 z-0" />}
 
       {/* Product Image - Hidden, used for loading detection */}
       {hasImage && (
@@ -101,54 +101,46 @@ function ProductGridCard({ product, onProductClick, onAddProduct }: ProductGridC
       )}
 
       {/* Placeholder icon when no image */}
-      {(!hasImage || imageError || !imageLoaded) && (
+      {!showImage && (
         <div className="absolute inset-0 flex items-center justify-center z-0">
           <Package size={20} style={{ color: 'var(--color-text-secondary)', opacity: 0.5 }} />
         </div>
       )}
 
       {/* Product Info */}
-      <div className="p-1.5 flex flex-col gap-0.5 relative z-[1]">
-        <p className="text-[9px] font-medium line-clamp-1" style={{ color: 'var(--color-text-light)' }}>
-          {product.productNumber}
-        </p>
-        <p className="text-[10px] font-semibold line-clamp-2 leading-tight" style={{ color: 'var(--color-text-light)' }}>
-          {product.name}
-        </p>
-        {product.price && (
-          <p className="text-[10px] font-bold" style={{ color: 'var(--color-text-light)' }}>
-            {product.price}
+      <div className="relative flex flex-col h-full p-2 z-[1]">
+        <div className="flex flex-col gap-1">
+          <p className="text-[9px] font-medium line-clamp-1" style={{ color: textColor }}>
+            {product.productNumber}
           </p>
-        )}
-      </div>
-
-      {/* Hover Actions Overlay */}
-      <div
-        className="absolute inset-0 z-[2] flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-        style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.45), rgba(0,0,0,0.45))' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2">
+          <p className="text-[10px] font-semibold line-clamp-2 leading-tight" style={{ color: textColor }}>
+            {product.name}
+          </p>
+        </div>
+        <div className="flex-1" />
+        <div className="flex items-center justify-between gap-2">
           <button
             type="button"
-            onClick={() => onAddProduct?.(product)}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:opacity-90"
-            style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'var(--color-text-light)', border: '1px solid rgba(255,255,255,0.25)' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddProduct?.(product);
+            }}
+            className="w-6 h-6 rounded-full flex items-center justify-center hover:opacity-90 transition-opacity"
+            style={{
+              backgroundColor: showImage ? 'rgba(255,255,255,0.2)' : 'var(--color-primary-500)',
+              color: 'var(--color-text-light)',
+              border: showImage ? '1px solid rgba(255,255,255,0.25)' : 'none',
+            }}
             title="Add to cart"
             aria-label="Add to cart"
           >
-            <ShoppingCart className="w-4 h-4" />
+            <ShoppingCart className="w-3.5 h-3.5" />
           </button>
-          <button
-            type="button"
-            onClick={() => onProductClick?.(product)}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:opacity-90"
-            style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'var(--color-text-light)', border: '1px solid rgba(255,255,255,0.25)' }}
-            title="View details"
-            aria-label="View details"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
+          {product.price && (
+            <span className="text-[11px] font-semibold" style={{ color: textColor }}>
+              {product.price}
+            </span>
+          )}
         </div>
       </div>
     </div>

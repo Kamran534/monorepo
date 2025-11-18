@@ -1,52 +1,18 @@
 import { Transactions as SharedTransactions } from '@monorepo/shared-ui';
 import { getDesktopProductRepository } from '../renderer/repositories/DesktopProductRepository.js';
-import { DesktopSqliteClient } from '../../../../libs/shared/data-access/src/lib/local-db-client.ts';
 import {
-  SalesOrderRepository,
-} from '../../../../libs/shared/data-access/src/lib/repos/sales-order-repository.ts';
-import {
-  ParkedOrderRepository,
-} from '../../../../libs/shared/data-access/src/lib/repos/parked-order-repository.ts';
-import {
-  PaymentMethodRepository,
-} from '../../../../libs/shared/data-access/src/lib/repos/payment-method-repository.ts';
-import { HttpApiClient } from '../../../../libs/shared/data-access/src/lib/remote-api-client.ts';
+  getDesktopSalesOrderRepository,
+  getDesktopParkedOrderRepository,
+  getDesktopPaymentMethodRepository,
+} from '../renderer/repositories/DesktopOrderRepositories.js';
 
 const productRepository = getDesktopProductRepository();
 
-// Initialize database client and repositories
-const isDesktopRuntime =
-  typeof process !== 'undefined' &&
-  typeof process.versions === 'object' &&
-  !!process.versions?.electron;
-
-const cwd =
-  isDesktopRuntime && typeof process.cwd === 'function'
-    ? process.cwd()
-    : '';
-const dbPath = cwd ? `${cwd}/apps/desktop/libsdb/cpos.db` : 'apps/desktop/libsdb/cpos.db';
-
-const apiClient = isDesktopRuntime ? new HttpApiClient() : undefined;
-const dbClient = isDesktopRuntime ? new DesktopSqliteClient(dbPath) : undefined;
-
-if (isDesktopRuntime && dbClient) {
-  dbClient.initialize().catch((err) => {
-    console.error('[Desktop Transactions] Failed to initialize database:', err);
-  });
-}
-
-const salesOrderRepo =
-  isDesktopRuntime && dbClient && apiClient
-    ? new SalesOrderRepository(dbClient, apiClient)
-    : undefined;
-const parkedOrderRepo =
-  isDesktopRuntime && dbClient && apiClient
-    ? new ParkedOrderRepository(dbClient, apiClient)
-    : undefined;
-const paymentMethodRepo =
-  isDesktopRuntime && dbClient && apiClient
-    ? new PaymentMethodRepository(dbClient, apiClient)
-    : undefined;
+// Use IPC-based repositories that communicate with main process
+// Main process has SQLite access and properly initialized data-access service
+const salesOrderRepo = getDesktopSalesOrderRepository();
+const parkedOrderRepo = getDesktopParkedOrderRepository();
+const paymentMethodRepo = getDesktopPaymentMethodRepository();
 
 export function Transactions() {
   // Use IDs that exist in both local SQLite and server PostgreSQL databases
@@ -58,7 +24,7 @@ export function Transactions() {
   console.log('[Desktop Transactions] Using IDs:', {
     currentUserId,
     currentLocationId,
-    isDesktopRuntime,
+    usingIPCRepositories: true,
   });
 
   return (

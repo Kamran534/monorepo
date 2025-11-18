@@ -80,8 +80,9 @@ interface LookupProduct {
   variantId?: string;
   name: string;
   price: number;
-  availableQuantity: number;
+  availableQuantity?: number; // undefined means unlimited stock
   barcode?: string;
+  trackInventory?: boolean;
 }
 
 interface Customer {
@@ -137,6 +138,16 @@ interface ElectronAPI {
     create: (data: { name: string; email?: string; phone?: string; address?: string }) => Promise<CreateCustomerResult>;
     update: (id: string, data: { name: string; email?: string; phone?: string; address?: string }) => Promise<CreateCustomerResult>;
     delete: (id: string) => Promise<{ success: boolean; error?: string }>;
+  };
+  order: {
+    create: (orderData: any) => Promise<{ success: boolean; order?: any; error?: string; isOffline?: boolean }>;
+    park: (orderData: any) => Promise<{ success: boolean; parkedOrder?: any; error?: string }>;
+    searchParked: (searchParams?: any) => Promise<{ success: boolean; orders?: any[]; error?: string }>;
+    loadParked: (parkNumber: string) => Promise<{ success: boolean; order?: any; error?: string }>;
+    completeParked: (data: any) => Promise<{ success: boolean; order?: any; error?: string }>;
+  };
+  paymentMethod: {
+    getAll: (params?: { isActive?: boolean }) => Promise<{ success: boolean; paymentMethods?: any[]; error?: string }>;
   };
 }
 

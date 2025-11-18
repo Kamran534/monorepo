@@ -6,6 +6,7 @@ import {
   ParkedOrderRepository,
   PaymentMethodRepository,
   HttpApiClient,
+  seedPaymentMethods,
   type IndexedDBSchema,
 } from '@monorepo/shared-data-access';
 
@@ -62,9 +63,16 @@ const dbClient = new WebIndexedDbClient('cpos', 1, indexedDBSchema);
 const apiClient = new HttpApiClient();
 
 // Initialize database connection
-dbClient.initialize().catch((err) => {
-  console.error('[Web Transactions] Failed to initialize database:', err);
-});
+dbClient.initialize()
+  .then(async () => {
+    // Auto-seed payment methods after database initialization
+    console.log('[Web Transactions] Auto-seeding payment methods...');
+    await seedPaymentMethods(dbClient);
+    console.log('[Web Transactions] Payment methods seeding complete');
+  })
+  .catch((err) => {
+    console.error('[Web Transactions] Failed to initialize database:', err);
+  });
 apiClient.initialize().catch((err) => {
   console.error('[Web Transactions] Failed to initialize API client:', err);
 });

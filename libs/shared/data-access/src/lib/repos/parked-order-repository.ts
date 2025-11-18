@@ -591,8 +591,8 @@ export class ParkedOrderRepository {
    */
   private async saveParkedOrderToLocalDb(data: any): Promise<void> {
     await this.localDb.execute(
-      `INSERT INTO ParkedOrder (id, parkNumber, orderId, customerId, parkedBy, parkedAt, expiryDate, notes, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ParkedOrder (id, parkNumber, orderId, customerId, parkedBy, parkedAt, expiryDate, notes, createdAt, sync_status, last_synced_at, is_deleted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.id,
         data.parkNumber,
@@ -603,6 +603,9 @@ export class ParkedOrderRepository {
         data.expiryDate,
         data.notes,
         data.createdAt,
+        'pending',
+        null,
+        0,
       ]
     );
   }

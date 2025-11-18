@@ -1007,56 +1007,75 @@ function setupIpcHandlers(): void {
       }
 
       const localDb = dataAccessService.getLocalDb();
+      const trimmedBarcode = barcode.trim();
 
+      // Try multiple search strategies
       const baseQuery = `
-        SELECT 
+        SELECT
           pv.id AS variantId,
           pv.productId AS productId,
           pv.barcode AS variantBarcode,
+          pv.sku AS variantSku,
           pv.variantName AS variantName,
           pv.retailPrice AS retailPrice,
-          pv.price AS variantPrice,
+          pv.wholesalePrice AS wholesalePrice,
+          pv.cost AS cost,
           p.name AS productName,
+          p.productCode AS productCode,
+          p.trackInventory AS trackInventory,
           COALESCE(MAX(ii.quantityAvailable), MAX(ii.quantityOnHand), 0) AS availableQuantity
         FROM ProductVariant pv
         LEFT JOIN Product p ON p.id = pv.productId
         LEFT JOIN InventoryItem ii ON ii.variantId = pv.id
-        WHERE pv.barcode = ?
-        GROUP BY pv.id, pv.productId, pv.barcode, pv.variantName, pv.retailPrice, pv.price, p.name
+        WHERE UPPER(TRIM(pv.barcode)) = UPPER(?) OR UPPER(TRIM(pv.sku)) = UPPER(?) OR UPPER(TRIM(p.productCode)) = UPPER(?)
+        GROUP BY pv.id, pv.productId, pv.barcode, pv.sku, pv.variantName, pv.retailPrice, pv.wholesalePrice, pv.cost, p.name, p.productCode, p.trackInventory
         LIMIT 1`;
 
-      let rows = await localDb.query<any>(baseQuery, [barcode]);
+      let rows = await localDb.query<any>(baseQuery, [trimmedBarcode, trimmedBarcode, trimmedBarcode]);
 
       if (!rows.length) {
         const fallbackQuery = `
-          SELECT 
+          SELECT
             pv.id AS variantId,
             pv.productId AS productId,
             pv.barcode AS variantBarcode,
+            pv.sku AS variantSku,
             pv.variantName AS variantName,
             pv.retailPrice AS retailPrice,
-            pv.price AS variantPrice,
+            pv.wholesalePrice AS wholesalePrice,
+            pv.cost AS cost,
             p.name AS productName,
+            p.productCode AS productCode,
+            p.trackInventory AS trackInventory,
             COALESCE(MAX(ii.quantityAvailable), MAX(ii.quantityOnHand), 0) AS availableQuantity
           FROM Barcode b
           INNER JOIN ProductVariant pv ON pv.id = b.variantId
           LEFT JOIN Product p ON p.id = pv.productId
           LEFT JOIN InventoryItem ii ON ii.variantId = pv.id
-          WHERE b.barcodeValue = ?
-          GROUP BY pv.id, pv.productId, pv.barcode, pv.variantName, pv.retailPrice, pv.price, p.name
+          WHERE UPPER(TRIM(b.barcodeValue)) = UPPER(?)
+          GROUP BY pv.id, pv.productId, pv.barcode, pv.sku, pv.variantName, pv.retailPrice, pv.wholesalePrice, pv.cost, p.name, p.productCode, p.trackInventory
           LIMIT 1`;
 
-        rows = await localDb.query<any>(fallbackQuery, [barcode]);
+        rows = await localDb.query<any>(fallbackQuery, [trimmedBarcode]);
       }
 
       if (!rows.length) {
+        console.log('[IPC] product:lookup-barcode - No product found for barcode:', trimmedBarcode);
         return { success: false, error: 'Product not found' };
       }
 
+      console.log('[IPC] product:lookup-barcode - Found product:', rows[0]);
+
       const row = rows[0];
       const price =
-        Number(row.retailPrice ?? row.variantPrice ?? row.price ?? 0) || 0;
-      const availableQuantity = Number(row.availableQuantity ?? 0) || 0;
+        Number(row.retailPrice ?? row.wholesalePrice ?? row.cost ?? 0) || 0;
+
+      // If product doesn't track inventory, return undefined for availableQuantity (unlimited)
+      // Otherwise return the actual quantity from inventory
+      const trackInventory = row.trackInventory === 1 || row.trackInventory === true;
+      const availableQuantity = trackInventory
+        ? Number(row.availableQuantity ?? 0) || 0
+        : undefined; // undefined means unlimited stock
 
       return {
         success: true,
@@ -1067,6 +1086,7 @@ function setupIpcHandlers(): void {
           price,
           availableQuantity,
           barcode: row.variantBarcode || barcode,
+          trackInventory,
         },
       };
     } catch (error) {
@@ -1074,6 +1094,160 @@ function setupIpcHandlers(): void {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Lookup failed',
+      };
+    }
+  });
+
+  // === Order Handlers ===
+
+  ipcMain.handle('order:create', async (_event, orderData) => {
+    console.log('[IPC] order:create called');
+    try {
+      const { SalesOrderRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+
+      if (!localDb || !apiClient) {
+        throw new Error('Database or API client not initialized');
+      }
+
+      const salesOrderRepo = new SalesOrderRepository(localDb, apiClient);
+      const result = await salesOrderRepo.createOrder(orderData);
+
+      console.log('[IPC] order:create result:', { success: result.success, orderId: result.order?.id });
+      return result;
+    } catch (error) {
+      console.error('[IPC] order:create error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create order',
+      };
+    }
+  });
+
+  ipcMain.handle('order:park', async (_event, orderData) => {
+    console.log('[IPC] order:park called');
+    try {
+      const { ParkedOrderRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+
+      if (!localDb || !apiClient) {
+        throw new Error('Database or API client not initialized');
+      }
+
+      const parkedOrderRepo = new ParkedOrderRepository(localDb, apiClient);
+      const result = await parkedOrderRepo.parkOrder(orderData);
+
+      console.log('[IPC] order:park result:', { success: result.success });
+      return result;
+    } catch (error) {
+      console.error('[IPC] order:park error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to park order',
+      };
+    }
+  });
+
+  ipcMain.handle('order:search-parked', async (_event, searchParams) => {
+    console.log('[IPC] order:search-parked called');
+    try {
+      const { ParkedOrderRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+
+      if (!localDb || !apiClient) {
+        throw new Error('Database or API client not initialized');
+      }
+
+      const parkedOrderRepo = new ParkedOrderRepository(localDb, apiClient);
+      const result = await parkedOrderRepo.searchParkedOrders(searchParams);
+
+      console.log('[IPC] order:search-parked result:', { success: result.success, count: result.orders?.length });
+      return result;
+    } catch (error) {
+      console.error('[IPC] order:search-parked error:', error);
+      return {
+        success: false,
+        orders: [],
+        error: error instanceof Error ? error.message : 'Failed to search parked orders',
+      };
+    }
+  });
+
+  ipcMain.handle('order:load-parked', async (_event, parkNumber: string) => {
+    console.log('[IPC] order:load-parked called:', parkNumber);
+    try {
+      const { ParkedOrderRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+
+      if (!localDb || !apiClient) {
+        throw new Error('Database or API client not initialized');
+      }
+
+      const parkedOrderRepo = new ParkedOrderRepository(localDb, apiClient);
+      const result = await parkedOrderRepo.loadParkedOrder(parkNumber);
+
+      console.log('[IPC] order:load-parked result:', { success: result.success });
+      return result;
+    } catch (error) {
+      console.error('[IPC] order:load-parked error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to load parked order',
+      };
+    }
+  });
+
+  ipcMain.handle('order:complete-parked', async (_event, data) => {
+    console.log('[IPC] order:complete-parked called');
+    try {
+      const { ParkedOrderRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+
+      if (!localDb || !apiClient) {
+        throw new Error('Database or API client not initialized');
+      }
+
+      const parkedOrderRepo = new ParkedOrderRepository(localDb, apiClient);
+      const result = await parkedOrderRepo.completeParkedOrder(data);
+
+      console.log('[IPC] order:complete-parked result:', { success: result.success });
+      return result;
+    } catch (error) {
+      console.error('[IPC] order:complete-parked error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to complete parked order',
+      };
+    }
+  });
+
+  ipcMain.handle('payment-method:get-all', async (_event, params) => {
+    console.log('[IPC] payment-method:get-all called');
+    try {
+      const { PaymentMethodRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+
+      if (!localDb || !apiClient) {
+        throw new Error('Database or API client not initialized');
+      }
+
+      const paymentMethodRepo = new PaymentMethodRepository(localDb, apiClient);
+      const result = await paymentMethodRepo.getPaymentMethods(params);
+
+      console.log('[IPC] payment-method:get-all result:', { success: result.success, count: result.paymentMethods?.length });
+      return result;
+    } catch (error) {
+      console.error('[IPC] payment-method:get-all error:', error);
+      return {
+        success: false,
+        paymentMethods: [],
+        error: error instanceof Error ? error.message : 'Failed to get payment methods',
       };
     }
   });

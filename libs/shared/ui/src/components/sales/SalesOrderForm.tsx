@@ -9,6 +9,7 @@ import { AdjustmentPanel, OrderAdjustment } from './AdjustmentPanel.js';
 import { OrderSummary, OrderTotals } from './OrderSummary.js';
 import { PaymentCollection, PaymentMethod, Payment } from './PaymentCollection.js';
 import { ParkedOrderSearch } from './ParkedOrderSearch.js';
+import { ConfirmationModal } from '@monorepo/shared-ui';
 import type { ParkedOrderListItem } from '@monorepo/shared-data-access';
 
 export interface CreateSalesOrderInput {
@@ -49,7 +50,7 @@ export interface SalesOrderFormProps extends ComponentProps {
   // Parked order callbacks
   onParkOrder?: (data: CreateSalesOrderInput) => void;
   onSearchParkedOrders?: (searchTerm: string) => void;
-  onLoadParkedOrder?: (parkedOrderId: string, orderId: string) => void;
+  onLoadParkedOrder?: (parkedOrderId: string, orderId: string, order?: ParkedOrderListItem) => void;
   onDeleteParkedOrder?: (parkedOrderId: string) => void;
 
   // Optional props
@@ -103,6 +104,7 @@ export function SalesOrderForm({
   // Parked order state
   const [showParkedOrderModal, setShowParkedOrderModal] = useState(false);
   const [currentParkedOrderId, setCurrentParkedOrderId] = useState<string | null>(null);
+  const [showParkConfirm, setShowParkConfirm] = useState(false);
 
   // Calculate order totals
   const orderTotals = useMemo<OrderTotals>(() => {
@@ -307,10 +309,10 @@ export function SalesOrderForm({
     handleReset();
   };
 
-  const handleLoadParkedOrder = (parkedOrderId: string, orderId: string) => {
+  const handleLoadParkedOrder = (parkedOrderId: string, orderId: string, order?: ParkedOrderListItem) => {
     if (onLoadParkedOrder) {
       setCurrentParkedOrderId(parkedOrderId);
-      onLoadParkedOrder(parkedOrderId, orderId);
+      onLoadParkedOrder(parkedOrderId, orderId, order);
       setShowParkedOrderModal(false);
     }
   };
@@ -582,12 +584,25 @@ export function SalesOrderForm({
             {onParkOrder && (
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={handleParkOrder}
-                  disabled={isFormDisabled || lineItems.length === 0}
+                  onClick={() => {
+                    if (lineItems.length === 0) {
+                      showToast?.('Add at least one line item before parking.', 'warning');
+                      return;
+                    }
+                    setShowParkConfirm(true);
+                  }}
+                  disabled={isFormDisabled}
                   className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{
-                    backgroundColor: 'var(--color-warning)',
+                    backgroundColor:
+                      showParkConfirm || (!isFormDisabled && lineItems.length > 0)
+                        ? 'var(--color-warning)'
+                        : 'var(--color-warning-light, rgba(255, 186, 8, 0.6))',
                     color: 'white',
+                    boxShadow:
+                      !isFormDisabled && lineItems.length > 0
+                        ? '0 0 0 2px rgba(255, 186, 8, 0.25)'
+                        : 'none',
                   }}
                 >
                   <Archive className="w-4 h-4" />

@@ -118,6 +118,59 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
       },
     },
 
+    // Order Management (must match SQLite table names exactly!)
+    SaleOrder: {
+      keyPath: 'id',
+      indexes: {
+        orderNumber: { keyPath: 'orderNumber', unique: true },
+        customerId: { keyPath: 'customerId' },
+        locationId: { keyPath: 'locationId' },
+        cashierId: { keyPath: 'cashierId' },
+        status: { keyPath: 'status' },
+        createdAt: { keyPath: 'createdAt' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    OrderLineItem: {
+      keyPath: 'id',
+      indexes: {
+        orderId: { keyPath: 'orderId' },
+        productId: { keyPath: 'productId' },
+        variantId: { keyPath: 'variantId' },
+      },
+    },
+
+    OrderPayment: {
+      keyPath: 'id',
+      indexes: {
+        orderId: { keyPath: 'orderId' },
+        paymentMethodId: { keyPath: 'paymentMethodId' },
+        createdAt: { keyPath: 'createdAt' },
+      },
+    },
+
+    OrderDiscount: {
+      keyPath: 'id',
+      indexes: {
+        orderId: { keyPath: 'orderId' },
+        discountId: { keyPath: 'discountId' },
+      },
+    },
+
+    // Parked Orders
+    ParkedOrder: {
+      keyPath: 'id',
+      indexes: {
+        parkNumber: { keyPath: 'parkNumber', unique: true },
+        orderId: { keyPath: 'orderId', unique: true },
+        customerId: { keyPath: 'customerId' },
+        parkedBy: { keyPath: 'parkedBy' },
+        parkedAt: { keyPath: 'parkedAt' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
     // Payment Methods
     payment_methods: {
       keyPath: 'id',
@@ -347,7 +400,7 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
  * Database version
  * Increment this when schema changes
  */
-export const CPOS_DB_VERSION = 1;
+export const CPOS_DB_VERSION = 3;
 
 /**
  * Database name

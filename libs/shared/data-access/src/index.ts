@@ -65,3 +65,6 @@ export * from './lib/sync';
 
 // Repositories
 export * from './lib/repos';
+
+// Seed Functions
+export { seedPaymentMethods, verifyPaymentMethods } from './lib/seed/seed-payment-methods';
