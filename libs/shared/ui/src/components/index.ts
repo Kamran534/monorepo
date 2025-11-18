@@ -48,5 +48,44 @@ export type { PaginationProps } from './Pagination.js';
 // Customer components
 export * from './customer/index.js';
 
-// Sales components
-export * from './sales/index.js';
+// Sales components - explicit exports to avoid type conflicts
+export {
+  CustomerSelector,
+  LineItemEditor,
+  DiscountPanel,
+  CouponCodeInput,
+  AdjustmentPanel,
+  OrderSummary,
+  PaymentCollection,
+  ParkedOrderSearch,
+  SalesOrderForm,
+} from './sales/index.js';
+export type {
+  CustomerSelectorProps,
+  SalesCustomer,
+  LineItemEditorProps,
+  SalesPerson,
+  SalesLineItem,
+  SalesProductVariant,
+  DiscountPanelProps,
+  CouponCodeInputProps,
+  AdjustmentPanelProps,
+  OrderSummaryProps,
+  PaymentCollectionProps,
+  ParkedOrderSearchProps,
+  SalesOrderFormProps,
+} from './sales/index.js';
+// Export remaining types from sales components that don't conflict
+export type {
+  OrderDiscount,
+  CouponValidation,
+  OrderAdjustment,
+  OrderTotals,
+  Payment,
+  PaymentMethod,
+  CreateSalesOrderInput,
+} from './sales/index.js';
+
+// Confirmation Modal component
+export { ConfirmationModal } from './ConfirmationModal.js';
+export type { ConfirmationModalProps } from './ConfirmationModal.js';

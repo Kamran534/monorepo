@@ -156,6 +156,8 @@ export type CouponPromptProps = {
   onValueChange: (val: string) => void;
   onApply: () => void;
   onClose: () => void;
+  title?: string;
+  codeLabel?: string;
 };
 
 export const CouponPrompt = ({
@@ -167,10 +169,12 @@ export const CouponPrompt = ({
   onValueChange,
   onApply,
   onClose,
+  title = "Apply Coupon",
+  codeLabel = "Coupon code",
 }: CouponPromptProps) => (
   <PromptModal
     isOpen={isOpen}
-    title="Apply Coupon"
+    title={title}
     onClose={onClose}
     footer={
       <>
@@ -186,20 +190,20 @@ export const CouponPrompt = ({
           className="px-4 py-2 rounded text-sm font-semibold"
           style={{ backgroundColor: 'var(--color-primary-500)', color: 'var(--color-text-light)' }}
         >
-          Apply Coupon
+          Apply {title.includes("Gift") ? "Gift Card" : "Coupon"}
         </button>
       </>
     }
   >
     <div>
       <label className="text-sm font-medium block mb-1" style={{ color: 'var(--color-text-primary)' }}>
-        Coupon code
+        {codeLabel}
       </label>
       <input
         type="text"
         value={code}
         onChange={(e) => onCodeChange(e.target.value)}
-        placeholder="Enter coupon code"
+        placeholder={`Enter ${codeLabel.toLowerCase()}`}
         className="w-full px-3 py-2 rounded border text-sm"
         style={{
           backgroundColor: 'var(--color-bg-secondary)',
@@ -210,7 +214,7 @@ export const CouponPrompt = ({
     </div>
     <div>
       <label className="text-sm font-medium block mb-1" style={{ color: 'var(--color-text-primary)' }}>
-        Coupon discount amount (optional)
+        Discount amount (optional)
       </label>
       <input
         type="number"
@@ -227,7 +231,7 @@ export const CouponPrompt = ({
     </div>
     {current && (
       <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-        Coupon “{current.code}” currently applies {formatCurrency(current.discount)}.
+        {codeLabel} "{current.code}" currently applies {formatCurrency(current.discount)}.
       </p>
     )}
   </PromptModal>
@@ -332,11 +336,11 @@ export type PreviewPromptProps = {
   totals: {
     subtotal: number;
     discountValue: number;
-    couponValue: number;
+    giftCardValue: number;
     adjustmentValue: number;
     total: number;
   };
-  coupon?: { code: string; discount: number } | null;
+  giftCard?: { cardNumber: string; discount: number } | null;
   adjustment?: { amount: number; reason?: string } | null;
   onClose: () => void;
 };
@@ -345,7 +349,7 @@ export const PreviewPrompt = ({
   isOpen,
   lineItems,
   totals,
-  coupon,
+  giftCard,
   adjustment,
   onClose,
 }: PreviewPromptProps) => (
@@ -405,8 +409,8 @@ export const PreviewPrompt = ({
           <span>-{formatCurrency(totals.discountValue)}</span>
         </div>
         <div className="flex justify-between">
-          <span style={{ color: 'var(--color-text-secondary)' }}>Coupon</span>
-          <span>-{formatCurrency(totals.couponValue)}</span>
+          <span style={{ color: 'var(--color-text-secondary)' }}>Gift Card</span>
+          <span>-{formatCurrency(totals.giftCardValue)}</span>
         </div>
         <div className="flex justify-between">
           <span style={{ color: 'var(--color-text-secondary)' }}>Adjustment</span>
@@ -419,9 +423,9 @@ export const PreviewPrompt = ({
           <p className="text-xs uppercase tracking-wide" style={{ color: 'var(--color-text-secondary)' }}>
             Total due
           </p>
-          {coupon && (
+          {giftCard && (
             <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-              Coupon: {coupon.code}
+              Gift Card: {giftCard.cardNumber}
             </p>
           )}
           {adjustment?.reason && (

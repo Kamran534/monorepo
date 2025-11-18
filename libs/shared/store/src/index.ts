@@ -134,6 +134,10 @@ export type {
   GetOrdersResult,
   CreateOrderResult,
   CouponValidationResult,
+  PaymentMethod,
+  PaymentMethodType,
+  OrderPayment,
+  OrderPaymentInput,
 } from './lib/slices/salesOrderSlice';
 // Sales Order selectors
 export {

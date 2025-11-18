@@ -14,6 +14,16 @@ export interface LineItem {
   availableQuantity?: number; // Available stock quantity
 }
 
+export interface BillingSummary {
+  subtotal: number;
+  discount?: number;
+  giftCardValue?: number;
+  adjustment?: number;
+  tax?: number;
+  total: number;
+  paid?: number;
+}
+
 export interface TransactionLinesProps extends ComponentProps {
   lineItems: LineItem[];
   selectedItem?: string;
@@ -23,6 +33,7 @@ export interface TransactionLinesProps extends ComponentProps {
   onRemoveCustomer?: () => void;
   activeTab?: 'lines' | 'payments';
   onTabChange?: (tab: 'lines' | 'payments') => void;
+  billingSummary?: BillingSummary;
 }
 
 /**
@@ -40,11 +51,30 @@ export function TransactionLines({
   onRemoveCustomer,
   activeTab = 'lines',
   onTabChange,
+  billingSummary,
   className = '',
 }: TransactionLinesProps) {
-  const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
-  const tax = subtotal * 0.08;
-  const total = subtotal + tax;
+  const formatCurrency = (amount: number): string =>
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(amount);
+
+  const fallbackSubtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
+  const fallbackTax = fallbackSubtotal * 0.1;
+  const fallbackTotal = fallbackSubtotal + fallbackTax;
+
+  const summary: BillingSummary = billingSummary ?? {
+    subtotal: fallbackSubtotal,
+    tax: fallbackTax,
+    total: fallbackTotal,
+  };
+
+  const discountTotal = (summary.discount ?? 0) + (summary.giftCardValue ?? 0);
+  const adjustmentValue = summary.adjustment ?? 0;
+  const taxValue = summary.tax ?? 0;
+  const amountPaid = summary.paid ?? 0;
+  const amountDue = Math.max(0, summary.total - amountPaid);
 
   return (
     <div
@@ -224,36 +254,47 @@ export function TransactionLines({
           <span>Lines</span>
           <span>{lineItems.length}</span>
         </div>
-        <div
-          className="flex justify-between text-xs md:text-sm"
-          style={{ color: 'var(--color-text-primary)' }}
-        >
-          <span>Subtotal</span>
-          <span>${subtotal.toFixed(2)}</span>
+        <div className="space-y-1 md:space-y-1.5 text-xs md:text-sm" style={{ color: 'var(--color-text-primary)' }}>
+          <div className="flex justify-between">
+            <span>Subtotal</span>
+            <span>{formatCurrency(summary.subtotal)}</span>
+          </div>
+
+          {discountTotal > 0 && (
+            <div className="flex justify-between">
+              <span>Discounts</span>
+              <span>-{formatCurrency(discountTotal)}</span>
+            </div>
+          )}
+
+          {adjustmentValue !== 0 && (
+            <div className="flex justify-between">
+              <span>Adjustments</span>
+              <span>{formatCurrency(adjustmentValue)}</span>
+            </div>
+          )}
+
+          <div className="flex justify-between">
+            <span>Tax</span>
+            <span>{formatCurrency(taxValue)}</span>
+          </div>
+
+          <div className="flex justify-between">
+            <span>Paid</span>
+            <span>{formatCurrency(amountPaid)}</span>
+          </div>
         </div>
         <div
-          className="flex justify-between text-xs md:text-sm"
-          style={{ color: 'var(--color-text-primary)' }}
-        >
-          <span>Tax</span>
-          <span>${tax.toFixed(2)}</span>
-        </div>
-        <div
-          className="flex justify-between text-xs md:text-sm"
-          style={{ color: 'var(--color-text-primary)' }}
-        >
-          <span>Payment</span>
-          <span>$0.00</span>
-        </div>
-        <div
-          className="flex justify-between text-base md:text-lg font-bold pt-1 md:pt-2"
+          className="flex justify-between text-base md:text-lg font-bold pt-2"
           style={{
             borderTop: '1px solid var(--color-border-light)',
             color: 'var(--color-text-primary)',
           }}
         >
           <span>Amount due</span>
-          <span style={{ color: 'var(--color-accent-blue)' }}>${total.toFixed(2)}</span>
+          <span style={{ color: amountDue > 0 ? 'var(--color-accent-blue)' : 'var(--color-success)' }}>
+            {formatCurrency(amountDue)}
+          </span>
         </div>
       </div>
     </div>

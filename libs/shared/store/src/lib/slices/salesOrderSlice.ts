@@ -52,6 +52,39 @@ export interface OrderLineItem extends OrderLineItemInput {
   };
 }
 
+// Payment Types
+export type PaymentMethodType = 'Cash' | 'Card' | 'BankTransfer' | 'Check' | 'GiftCard' | 'StoreCredit' | 'OnAccount';
+
+export interface PaymentMethod {
+  id: string;
+  code: string;
+  name: string;
+  type: PaymentMethodType;
+  isActive: boolean;
+  requiresAuthorization: boolean;
+  icon?: string;
+  sortOrder: number;
+}
+
+export interface OrderPaymentInput {
+  paymentMethodId: string;
+  amount: number;
+  transactionId?: string;
+  authorizationCode?: string;
+  cardLast4?: string;
+  cardBrand?: string;
+}
+
+export interface OrderPayment extends OrderPaymentInput {
+  id: string;
+  orderId: string;
+  status: 'Pending' | 'Completed' | 'Failed' | 'Refunded';
+  processedAt: string;
+  refundedAmount: number;
+  createdAt: string;
+  paymentMethod?: PaymentMethod;
+}
+
 export interface SalesOrder {
   id: string;
   orderNumber: string;
@@ -88,7 +121,7 @@ export interface SalesOrder {
     lastName: string;
   };
   lineItems?: OrderLineItem[];
-  payments?: any[];
+  payments?: OrderPayment[];
 
   notes?: string;
   customerNotes?: string;
@@ -99,6 +132,7 @@ export interface CreateSalesOrderInput {
   cashierId: string;
   customerId?: string;
   lineItems: OrderLineItemInput[];
+  payments: OrderPaymentInput[];
   orderLevelDiscount?: {
     amount?: number;
     percent?: number;

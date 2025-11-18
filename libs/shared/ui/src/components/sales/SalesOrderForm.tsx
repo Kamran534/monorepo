@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, X, Plus, Search } from 'lucide-react';
+import { Save, X, Plus, Search, Archive, FolderOpen } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
 import { CustomerSelector, Customer } from './CustomerSelector.js';
 import { LineItemEditor, LineItem, SalesPerson, ProductVariant } from './LineItemEditor.js';
@@ -7,10 +7,14 @@ import { DiscountPanel, OrderDiscount } from './DiscountPanel.js';
 import { CouponCodeInput, CouponValidation } from './CouponCodeInput.js';
 import { AdjustmentPanel, OrderAdjustment } from './AdjustmentPanel.js';
 import { OrderSummary, OrderTotals } from './OrderSummary.js';
+import { PaymentCollection, PaymentMethod, Payment } from './PaymentCollection.js';
+import { ParkedOrderSearch } from './ParkedOrderSearch.js';
+import type { ParkedOrderListItem } from '@monorepo/shared-data-access';
 
 export interface CreateSalesOrderInput {
   customerId?: string;
   lineItems: LineItem[];
+  payments: Payment[];
   orderLevelDiscount?: OrderDiscount;
   couponCode?: string;
   adjustment?: OrderAdjustment;
@@ -22,12 +26,17 @@ export interface SalesOrderFormProps extends ComponentProps {
   customers: Customer[];
   salesPersons: SalesPerson[];
   products: ProductVariant[];
+  paymentMethods: PaymentMethod[];
 
   // State
   loading?: boolean;
   creating?: boolean;
   validatingCoupon?: boolean;
   couponValidation: CouponValidation | null;
+
+  // Parked orders
+  parkedOrders?: ParkedOrderListItem[];
+  loadingParkedOrders?: boolean;
 
   // Callbacks
   onCreateOrder: (data: CreateSalesOrderInput) => void;
@@ -36,6 +45,12 @@ export interface SalesOrderFormProps extends ComponentProps {
   onValidateCoupon: (code: string, customerId?: string) => void;
   onClearCoupon: () => void;
   onAddProduct: () => void;
+
+  // Parked order callbacks
+  onParkOrder?: (data: CreateSalesOrderInput) => void;
+  onSearchParkedOrders?: (searchTerm: string) => void;
+  onLoadParkedOrder?: (parkedOrderId: string, orderId: string) => void;
+  onDeleteParkedOrder?: (parkedOrderId: string) => void;
 
   // Optional props
   taxRate?: number;
@@ -52,16 +67,23 @@ export function SalesOrderForm({
   customers,
   salesPersons,
   products,
+  paymentMethods,
   loading = false,
   creating = false,
   validatingCoupon = false,
   couponValidation,
+  parkedOrders = [],
+  loadingParkedOrders = false,
   onCreateOrder,
   onCancel,
   onCreateCustomer,
   onValidateCoupon,
   onClearCoupon,
   onAddProduct,
+  onParkOrder,
+  onSearchParkedOrders,
+  onLoadParkedOrder,
+  onDeleteParkedOrder,
   taxRate = 0,
   disabled = false,
   className = '',
@@ -69,6 +91,7 @@ export function SalesOrderForm({
   // Form state
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [orderDiscount, setOrderDiscount] = useState<OrderDiscount>({});
   const [couponCode, setCouponCode] = useState('');
   const [adjustment, setAdjustment] = useState<OrderAdjustment>({
@@ -76,6 +99,10 @@ export function SalesOrderForm({
     reason: undefined,
   });
   const [notes, setNotes] = useState('');
+
+  // Parked order state
+  const [showParkedOrderModal, setShowParkedOrderModal] = useState(false);
+  const [currentParkedOrderId, setCurrentParkedOrderId] = useState<string | null>(null);
 
   // Calculate order totals
   const orderTotals = useMemo<OrderTotals>(() => {
@@ -171,6 +198,28 @@ export function SalesOrderForm({
     setLineItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  // Payment handlers
+  const handleAddPayment = (payment: Omit<Payment, 'id'>) => {
+    const newPayment: Payment = {
+      ...payment,
+      id: Math.random().toString(36).slice(2, 9),
+    };
+    setPayments((prev) => [...prev, newPayment]);
+  };
+
+  const handleRemovePayment = (id: string) => {
+    setPayments((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // Calculate payment totals
+  const amountPaid = useMemo(() => {
+    return payments.reduce((sum, payment) => sum + payment.amount, 0);
+  }, [payments]);
+
+  const amountDue = useMemo(() => {
+    return orderTotals.totalAmount - amountPaid;
+  }, [orderTotals.totalAmount, amountPaid]);
+
   const handleSubmit = () => {
     if (lineItems.length === 0) {
       alert('Please add at least one item to the order');
@@ -182,9 +231,21 @@ export function SalesOrderForm({
       return;
     }
 
+    // Validate payments
+    if (payments.length === 0) {
+      alert('Please add at least one payment');
+      return;
+    }
+
+    if (amountDue > 0) {
+      alert(`Payment incomplete. Amount due: $${amountDue.toFixed(2)}`);
+      return;
+    }
+
     const orderData: CreateSalesOrderInput = {
       customerId: selectedCustomer?.id,
       lineItems,
+      payments,
       orderLevelDiscount:
         orderDiscount.amount || orderDiscount.percent ? orderDiscount : undefined,
       couponCode: couponValidation?.isValid ? couponCode : undefined,
@@ -204,11 +265,160 @@ export function SalesOrderForm({
   const handleReset = () => {
     setSelectedCustomer(null);
     setLineItems([]);
+    setPayments([]);
     setOrderDiscount({});
     setCouponCode('');
     setAdjustment({ amount: 0, reason: undefined });
     setNotes('');
+    setCurrentParkedOrderId(null);
     onClearCoupon();
+  };
+
+  // Parked order handlers
+  const handleParkOrder = () => {
+    if (lineItems.length === 0) {
+      alert('Please add at least one item to park the order');
+      return;
+    }
+
+    if (!onParkOrder) {
+      alert('Park order functionality is not available');
+      return;
+    }
+
+    const orderData: CreateSalesOrderInput = {
+      customerId: selectedCustomer?.id,
+      lineItems,
+      payments,
+      orderLevelDiscount:
+        orderDiscount.amount || orderDiscount.percent ? orderDiscount : undefined,
+      couponCode: couponValidation?.isValid ? couponCode : undefined,
+      adjustment:
+        adjustment.amount !== 0
+          ? {
+              amount: adjustment.amount,
+              reason: adjustment.reason,
+            }
+          : undefined,
+      notes: notes.trim() || undefined,
+    };
+
+    onParkOrder(orderData);
+    handleReset();
+  };
+
+  const handleLoadParkedOrder = (parkedOrderId: string, orderId: string) => {
+    if (onLoadParkedOrder) {
+      setCurrentParkedOrderId(parkedOrderId);
+      onLoadParkedOrder(parkedOrderId, orderId);
+      setShowParkedOrderModal(false);
+    }
+  };
+
+  const handleSearchParkedOrders = (searchTerm: string) => {
+    if (onSearchParkedOrders) {
+      onSearchParkedOrders(searchTerm);
+    }
+  };
+
+  const handleDeleteParkedOrder = (parkedOrderId: string) => {
+    if (onDeleteParkedOrder) {
+      onDeleteParkedOrder(parkedOrderId);
+    }
+  };
+
+  // Method to populate form from loaded parked order data
+  const populateFormFromParkedOrder = (data: any) => {
+    if (data.order) {
+      const order = data.order;
+
+      // Set customer
+      if (order.customerId) {
+        const customer = customers.find(c => c.id === order.customerId);
+        if (customer) {
+          setSelectedCustomer(customer);
+        }
+      }
+
+      // Set line items from loaded data
+      if (data.lineItems && data.lineItems.length > 0) {
+        const loadedLineItems: LineItem[] = data.lineItems.map((item: any) => {
+          const lineSubtotal = item.quantity * item.unitPrice;
+          const saleDiscountAmount = item.lineDiscount || 0;
+          const customDiscountAmount = item.customDiscountAmount || 0;
+          const lineDiscount = saleDiscountAmount + customDiscountAmount;
+          const lineTotal = Math.max(0, lineSubtotal - lineDiscount);
+
+          return {
+            id: item.id,
+            variantId: item.variantId,
+            sku: item.sku || '',
+            productName: item.productName || '',
+            variantName: item.variantName || '',
+            image: item.image,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            saleDiscount: item.lineDiscountPercent
+              ? { percent: item.lineDiscountPercent }
+              : item.lineDiscount
+              ? { amount: item.lineDiscount }
+              : undefined,
+            customDiscount: item.customDiscountPercent
+              ? { percent: item.customDiscountPercent }
+              : item.customDiscountAmount
+              ? { amount: item.customDiscountAmount }
+              : undefined,
+            salesPersonId: item.salesPersonId,
+            notes: item.notes,
+            lineSubtotal,
+            lineDiscount,
+            lineTotal,
+          };
+        });
+        setLineItems(loadedLineItems);
+      }
+
+      // Set payments from loaded data
+      if (data.payments && data.payments.length > 0) {
+        const loadedPayments: Payment[] = data.payments.map((payment: any) => ({
+          id: payment.id,
+          paymentMethodId: payment.paymentMethodId,
+          paymentMethod: payment.paymentMethod,
+          amount: payment.amount,
+          cardLast4: payment.cardLast4,
+          cardBrand: payment.cardBrand,
+          authorizationCode: payment.authorizationCode,
+          transactionId: payment.transactionId,
+        }));
+        setPayments(loadedPayments);
+      }
+
+      // Set order-level discount
+      if (order.discountAmount || order.discountPercent) {
+        setOrderDiscount({
+          amount: order.discountAmount || undefined,
+          percent: order.discountPercent || undefined,
+        });
+      }
+
+      // Set coupon code
+      if (order.couponCode) {
+        setCouponCode(order.couponCode);
+      }
+
+      // Set adjustment
+      if (order.adjustmentAmount) {
+        setAdjustment({
+          amount: order.adjustmentAmount,
+          reason: order.adjustmentReason,
+        });
+      }
+
+      // Set notes
+      if (order.notes) {
+        setNotes(order.notes);
+      }
+    }
   };
 
   const isFormDisabled = disabled || creating || loading;
@@ -340,8 +550,21 @@ export function SalesOrderForm({
             disabled={isFormDisabled}
           />
 
+          {/* Payment Collection */}
+          <PaymentCollection
+            payments={payments}
+            paymentMethods={paymentMethods}
+            totalAmount={orderTotals.totalAmount}
+            amountPaid={amountPaid}
+            amountDue={amountDue}
+            onAddPayment={handleAddPayment}
+            onRemovePayment={handleRemovePayment}
+            disabled={isFormDisabled}
+          />
+
           {/* Action Buttons */}
           <div className="sticky bottom-0 pt-4 space-y-2">
+            {/* Primary Actions */}
             <button
               onClick={handleSubmit}
               disabled={isFormDisabled || lineItems.length === 0}
@@ -354,6 +577,42 @@ export function SalesOrderForm({
               <Save className="w-5 h-5" />
               {creating ? 'Creating Order...' : `Create Order • ${formatCurrency(orderTotals.totalAmount)}`}
             </button>
+
+            {/* Parked Order Actions */}
+            {onParkOrder && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleParkOrder}
+                  disabled={isFormDisabled || lineItems.length === 0}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    backgroundColor: 'var(--color-warning)',
+                    color: 'white',
+                  }}
+                >
+                  <Archive className="w-4 h-4" />
+                  Park Order
+                </button>
+                {onSearchParkedOrders && (
+                  <button
+                    onClick={() => setShowParkedOrderModal(true)}
+                    disabled={isFormDisabled}
+                    className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                    style={{
+                      backgroundColor: 'var(--color-bg-secondary)',
+                      color: 'var(--color-text-primary)',
+                      borderColor: 'var(--color-border-light)',
+                      border: '1px solid',
+                    }}
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                    Load Parked
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Secondary Actions */}
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={handleReset}
@@ -384,6 +643,19 @@ export function SalesOrderForm({
           </div>
         </div>
       </div>
+
+      {/* Parked Order Search Modal */}
+      {onSearchParkedOrders && onLoadParkedOrder && (
+        <ParkedOrderSearch
+          isOpen={showParkedOrderModal}
+          onClose={() => setShowParkedOrderModal(false)}
+          onLoadOrder={handleLoadParkedOrder}
+          onDeleteOrder={onDeleteParkedOrder}
+          parkedOrders={parkedOrders}
+          onSearch={handleSearchParkedOrders}
+          isLoading={loadingParkedOrders}
+        />
+      )}
     </div>
   );
 }
