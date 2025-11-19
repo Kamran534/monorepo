@@ -9,6 +9,7 @@
  */
 
 import { LocalDbClient } from './types';
+export type { LocalDbClient } from './types';
 
 /**
  * Desktop SQLite Client
@@ -116,36 +117,19 @@ export class DesktopSqliteClient implements LocalDbClient {
       console.log(`[DesktopSqliteClient] Initializing schema from ${schemaPath}`);
       const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
 
-      // Split by semicolons and execute each statement
-      // Remove comments and empty statements
-      const statements = schemaSql
-        .split(';')
-        .map(stmt => stmt.trim())
-        .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
-
-      // Execute all statements in a transaction for better performance
-      this.db.transaction(() => {
-        for (const statement of statements) {
-          if (statement.trim()) {
-            try {
-              this.db.exec(statement);
-            } catch (error: any) {
-              // Some statements might fail if they're part of a multi-statement block
-              // Try executing as a prepared statement instead
-              try {
-                this.db.prepare(statement).run();
-              } catch (err: any) {
-                // Skip trigger creation errors if tables don't exist yet (order dependency)
-                if (!err.message.includes('no such table') && !err.message.includes('already exists')) {
-                  console.warn(`[DesktopSqliteClient] Schema statement warning: ${err.message}`);
-                }
-              }
-            }
-          }
+      // Execute entire schema at once using exec (supports multiple statements)
+      try {
+        this.db.exec(schemaSql);
+        console.log('[DesktopSqliteClient] Schema initialized successfully');
+      } catch (error: any) {
+        // Log the error but don't throw - some statements might fail due to existing objects
+        if (error.message.includes('already exists')) {
+          console.log('[DesktopSqliteClient] Schema already exists, skipping initialization');
+        } else {
+          console.error('[DesktopSqliteClient] Schema initialization error:', error.message);
+          throw error;
         }
-      })();
-
-      console.log('[DesktopSqliteClient] Schema initialized successfully');
+      }
     } catch (error) {
       console.error('[DesktopSqliteClient] Failed to initialize schema:', error);
       // Don't throw - allow database to continue without schema if file is missing

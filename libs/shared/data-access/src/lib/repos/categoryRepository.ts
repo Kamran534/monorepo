@@ -194,7 +194,11 @@ export class CategoryRepository {
         
         // Filter by isActive if needed
         if (!includeInactive) {
-          categories = categories.filter(cat => cat.isActive === true || cat.isActive === 1);
+          categories = categories.filter((cat) => {
+            const isActiveValue =
+              typeof cat.isActive === 'number' ? cat.isActive === 1 : !!cat.isActive;
+            return isActiveValue;
+          });
           console.log('[CategoryRepository] After filtering active:', categories.length);
         }
         
@@ -275,7 +279,7 @@ export class CategoryRepository {
         // Get product count for this category
         try {
           const countResult = await this.localDb.query<{ count: number }>(
-            `SELECT COUNT(*) as count FROM products WHERE category_id = ?`,
+            `SELECT COUNT(*) as count FROM Product WHERE categoryId = ?`,
             [category.id]
           );
           category._count = {
@@ -462,16 +466,21 @@ export class CategoryRepository {
       }
 
       // Get child categories
-      const children = await this.localDb.query<{ id: string; name: string; isActive: boolean }>(
-        `SELECT id, name, isActive FROM Category WHERE parentCategoryId = ?`,
+      const children = await this.localDb.query<{ id: string; name: string; isActive: boolean | number; image: string | null }>(
+        `SELECT id, name, isActive, image FROM Category WHERE parentCategoryId = ?`,
         [category.id]
       );
-      category.childCategories = children;
+      category.childCategories = children.map((child) => ({
+        id: child.id,
+        name: child.name,
+        image: child.image,
+        isActive: typeof child.isActive === 'number' ? child.isActive === 1 : !!child.isActive,
+      }));
 
       // Get product count
       try {
         const countResult = await this.localDb.query<{ count: number }>(
-          `SELECT COUNT(*) as count FROM products WHERE category_id = ?`,
+          `SELECT COUNT(*) as count FROM Product WHERE categoryId = ?`,
           [category.id]
         );
         category._count = {

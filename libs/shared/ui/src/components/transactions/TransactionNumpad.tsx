@@ -4,13 +4,20 @@ import {
   Plus,
   RotateCcw,
   CornerDownLeft,
+  Mail,
+  Phone,
+  MapPin,
+  X,
 } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
+import type { Customer } from '../customer/CustomerCard.js';
 
 export interface TransactionNumpadProps extends ComponentProps {
   value: string;
   onValueChange: (value: string) => void;
   onAddCustomer?: () => void;
+  customer?: Customer | null;
+  onRemoveCustomer?: () => void;
 }
 
 /**
@@ -23,6 +30,8 @@ export function TransactionNumpad({
   value,
   onValueChange,
   onAddCustomer,
+  customer,
+  onRemoveCustomer,
   className = '',
 }: TransactionNumpadProps) {
   // Ensure the display never overflows the box: show the last 12 chars with leading ellipsis
@@ -44,6 +53,18 @@ export function TransactionNumpad({
     }
   };
 
+  const customerInitials = customer?.name
+    ? customer.name
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join('')
+    : 'CU';
+
+  const detailTextStyle = { color: 'var(--color-text-secondary)' };
+  const detailIconStyle = { color: 'var(--color-text-secondary)', opacity: 0.8 };
+
   return (
     <div
       className={`flex flex-col h-full w-full md:w-80 lg:w-96 min-h-0 overflow-y-auto md:overflow-visible ${className}`}
@@ -53,40 +74,122 @@ export function TransactionNumpad({
       }}
     >
       {/* Customer Section - Top */}
-      <div className="p-3 md:p-4 pt-3 md:pt-3 lg:pt-3 xl:pt-4 2xl:pt-8 pb-2 md:pb-2 flex-shrink-0 min-h-40 md:min-h-48 lg:min-h-56 flex items-center justify-center">
-        <div className="flex flex-col items-center justify-center gap-1.5 md:gap-2 w-full">
-          {/* User Icon with Plus */}
-          <div className="relative">
-            <User className="w-8 md:w-12 h-8 md:h-12" style={{ color: 'var(--color-text-secondary)' }} />
-            <Plus
-              className="absolute -bottom-1 -right-1 w-4 md:w-5 h-4 md:h-5 rounded-full p-0.5"
-              style={{
-                backgroundColor: 'var(--color-text-secondary)',
-                color: 'var(--color-text-light)',
-              }}
-            />
-          </div>
-
-          {/* Text */}
+      <div className="p-3 md:p-4 pt-3 md:pt-4 pb-2 md:pb-3 flex-shrink-0 min-h-40 md:min-h-48 lg:min-h-56 flex items-center justify-center">
+        {customer ? (
           <div
-            className="text-center text-xs md:text-sm"
-            style={{ color: 'var(--color-text-secondary)' }}
-          >
-            Add customer to this transaction
-          </div>
-
-          {/* Add Customer Button */}
-          <button
-            onClick={onAddCustomer}
-            className="w-full py-2 md:py-2.5 rounded-md text-sm md:text-md font-medium hover:opacity-90"
+            className="w-full rounded-2xl border px-4 py-4 space-y-3"
             style={{
-              backgroundColor: 'var(--color-accent-blue)',
-              color: 'var(--color-text-light)',
+              borderColor: 'var(--color-border-light)',
+              backgroundColor: 'var(--color-bg-card)',
+              boxShadow: '0 12px 30px rgba(15, 23, 42, 0.12)',
             }}
           >
-            Add customer
-          </button>
-        </div>
+            <div className="flex items-start gap-3">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-semibold flex-shrink-0"
+                style={{
+                  background: 'linear-gradient(135deg, var(--color-accent-blue), #7c3aed)',
+                  color: 'var(--color-text-light)',
+                }}
+              >
+                {customerInitials}
+              </div>
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p
+                    className="text-base font-semibold truncate"
+                    style={{ color: 'var(--color-text-primary)' }}
+                  >
+                    {customer.name}
+                  </p>
+                  {onRemoveCustomer && (
+                    <button
+                      onClick={onRemoveCustomer}
+                      className="p-1 rounded-full transition-colors"
+                      style={{
+                        color: 'var(--color-text-secondary)',
+                      }}
+                      title="Remove customer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {customer.email && (
+                  <p className="text-xs flex items-center gap-1 truncate" style={detailTextStyle}>
+                    <Mail className="w-3 h-3" style={detailIconStyle} />
+                    {customer.email}
+                  </p>
+                )}
+                {customer.phone && (
+                  <p className="text-xs flex items-center gap-1 truncate" style={detailTextStyle}>
+                    <Phone className="w-3 h-3" style={detailIconStyle} />
+                    {customer.phone}
+                  </p>
+                )}
+              </div>
+            </div>
+            {customer.address && (
+              <div
+                className="text-xs flex items-start gap-2 rounded-lg px-3 py-2"
+                style={{
+                  backgroundColor: 'var(--color-bg-secondary)',
+                  color: 'var(--color-text-secondary)',
+                }}
+              >
+                <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span className="leading-snug">{customer.address}</span>
+              </div>
+            )}
+            {onAddCustomer && (
+              <button
+                onClick={onAddCustomer}
+                className="w-full py-2 rounded-lg text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: 'var(--color-accent-blue)',
+                  color: 'var(--color-text-light)',
+                }}
+              >
+                Change customer
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-1.5 md:gap-2 w-full">
+            {/* User Icon with Plus */}
+            <div className="relative">
+              <User className="w-8 md:w-12 h-8 md:h-12" style={{ color: 'var(--color-text-secondary)' }} />
+              <Plus
+                className="absolute -bottom-1 -right-1 w-4 md:w-5 h-4 md:h-5 rounded-full p-0.5"
+                style={{
+                  backgroundColor: 'var(--color-text-secondary)',
+                  color: 'var(--color-text-light)',
+                }}
+              />
+            </div>
+
+            {/* Text */}
+            <div
+              className="text-center text-xs md:text-sm"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              Add customer to this transaction
+            </div>
+
+            {/* Add Customer Button */}
+            <button
+              onClick={onAddCustomer}
+              className="w-full py-2 md:py-2.5 rounded-md text-sm md:text-md font-medium hover:opacity-90"
+              style={{
+                backgroundColor: 'var(--color-accent-blue)',
+                color: 'var(--color-text-light)',
+              }}
+              disabled={!onAddCustomer}
+            >
+              Add customer
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Flexible spacer to push calculator to the bottom (align bottom with siblings) */}

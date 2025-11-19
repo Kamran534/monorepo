@@ -513,7 +513,34 @@ CREATE INDEX idx_storeCredit_customerId ON StoreCredit(customerId);
 CREATE INDEX idx_storeCredit_issuedBy ON StoreCredit(issuedBy);
 
 -- ============================================
--- 8. SALES & ORDERS
+-- 8. SALES PERSON MANAGEMENT
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS SalesPerson (
+    id TEXT PRIMARY KEY NOT NULL,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    commission REAL DEFAULT 0 CHECK(commission >= 0 AND commission <= 100),
+    isActive INTEGER DEFAULT 1,
+    notes TEXT,
+    hireDate TEXT,
+    terminationDate TEXT,
+    createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+    updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- Sync fields
+    sync_status TEXT DEFAULT 'pending',
+    last_synced_at TEXT,
+    is_deleted INTEGER DEFAULT 0
+);
+
+CREATE INDEX idx_salesPerson_code ON SalesPerson(code);
+CREATE INDEX idx_salesPerson_isActive ON SalesPerson(isActive);
+
+-- ============================================
+-- 9. SALES & ORDERS
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS SaleOrder (
@@ -523,6 +550,7 @@ CREATE TABLE IF NOT EXISTS SaleOrder (
     locationId TEXT NOT NULL,
     customerId TEXT,
     cashierId TEXT NOT NULL,
+    salesPersonId TEXT,
     orderDate TEXT NOT NULL DEFAULT (datetime('now')),
     completedAt TEXT,
     status TEXT DEFAULT 'Open' CHECK(status IN ('Open', 'Completed', 'Voided', 'Parked', 'OnHold')),
@@ -564,6 +592,7 @@ CREATE TABLE IF NOT EXISTS SaleOrder (
     FOREIGN KEY (locationId) REFERENCES Location(id),
     FOREIGN KEY (customerId) REFERENCES Customer(id),
     FOREIGN KEY (cashierId) REFERENCES User(id),
+    FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(id),
     FOREIGN KEY (shiftId) REFERENCES Shift(id)
 );
 
@@ -571,6 +600,7 @@ CREATE INDEX idx_saleOrder_orderNumber ON SaleOrder(orderNumber);
 CREATE INDEX idx_saleOrder_customerId ON SaleOrder(customerId);
 CREATE INDEX idx_saleOrder_locationId ON SaleOrder(locationId);
 CREATE INDEX idx_saleOrder_cashierId ON SaleOrder(cashierId);
+CREATE INDEX idx_saleOrder_salesPersonId ON SaleOrder(salesPersonId);
 CREATE INDEX idx_saleOrder_orderDate ON SaleOrder(orderDate);
 CREATE INDEX idx_saleOrder_status ON SaleOrder(status);
 CREATE INDEX idx_saleOrder_shiftId ON SaleOrder(shiftId);
@@ -611,7 +641,7 @@ CREATE TABLE IF NOT EXISTS OrderLineItem (
 
     FOREIGN KEY (orderId) REFERENCES SaleOrder(id) ON DELETE CASCADE,
     FOREIGN KEY (variantId) REFERENCES ProductVariant(id),
-    FOREIGN KEY (salesPersonId) REFERENCES User(id)
+    FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(id)
 );
 
 CREATE INDEX idx_orderLineItem_orderId ON OrderLineItem(orderId);

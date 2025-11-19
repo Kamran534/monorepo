@@ -5,6 +5,7 @@ import {
   getDesktopParkedOrderRepository,
   getDesktopPaymentMethodRepository,
 } from '../renderer/repositories/DesktopOrderRepositories.js';
+import { getDesktopSalesPersonRepository } from '../renderer/repositories/DesktopSalesPersonRepository.js';
 
 const productRepository = getDesktopProductRepository();
 
@@ -13,6 +14,7 @@ const productRepository = getDesktopProductRepository();
 const salesOrderRepo = getDesktopSalesOrderRepository();
 const parkedOrderRepo = getDesktopParkedOrderRepository();
 const paymentMethodRepo = getDesktopPaymentMethodRepository();
+const salesPersonRepo = getDesktopSalesPersonRepository();
 
 export function Transactions() {
   // Use IDs that exist in both local SQLite and server PostgreSQL databases
@@ -33,6 +35,7 @@ export function Transactions() {
       salesOrderRepo={salesOrderRepo}
       parkedOrderRepo={parkedOrderRepo}
       paymentMethodRepo={paymentMethodRepo}
+      salesPersonRepo={salesPersonRepo}
       currentUserId={currentUserId}
       currentLocationId={currentLocationId}
     />

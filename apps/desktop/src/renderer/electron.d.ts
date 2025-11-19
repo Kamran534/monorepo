@@ -106,6 +106,25 @@ interface CreateCustomerResult {
   error?: string;
 }
 
+interface SalesPerson {
+  id: string;
+  code: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  commission?: number | null;
+  isActive?: boolean;
+}
+
+interface GetSalesPersonsResult {
+  success: boolean;
+  salesPersons?: SalesPerson[];
+  total?: number;
+  hasMore?: boolean;
+  error?: string;
+  isOffline?: boolean;
+}
+
 interface ElectronAPI {
   print: (options: {
     silent?: boolean;
@@ -148,6 +167,9 @@ interface ElectronAPI {
   };
   paymentMethod: {
     getAll: (params?: { isActive?: boolean }) => Promise<{ success: boolean; paymentMethods?: any[]; error?: string }>;
+  };
+  salesPerson: {
+    getAll: (params?: { search?: string; isActive?: boolean; limit?: number; offset?: number }) => Promise<GetSalesPersonsResult>;
   };
 }
 

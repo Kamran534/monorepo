@@ -126,6 +126,7 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
         customerId: { keyPath: 'customerId' },
         locationId: { keyPath: 'locationId' },
         cashierId: { keyPath: 'cashierId' },
+        salesPersonId: { keyPath: 'salesPersonId' },
         status: { keyPath: 'status' },
         createdAt: { keyPath: 'createdAt' },
         sync_status: { keyPath: 'sync_status' },
@@ -138,6 +139,7 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
         orderId: { keyPath: 'orderId' },
         productId: { keyPath: 'productId' },
         variantId: { keyPath: 'variantId' },
+        salesPersonId: { keyPath: 'salesPersonId' },
       },
     },
 
@@ -167,6 +169,16 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
         customerId: { keyPath: 'customerId' },
         parkedBy: { keyPath: 'parkedBy' },
         parkedAt: { keyPath: 'parkedAt' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    // Sales Person Management
+    SalesPerson: {
+      keyPath: 'id',
+      indexes: {
+        code: { keyPath: 'code', unique: true },
+        isActive: { keyPath: 'isActive' },
         sync_status: { keyPath: 'sync_status' },
       },
     },
@@ -400,7 +412,7 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
  * Database version
  * Increment this when schema changes
  */
-export const CPOS_DB_VERSION = 3;
+export const CPOS_DB_VERSION = 4;
 
 /**
  * Database name

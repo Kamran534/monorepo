@@ -40,3 +40,11 @@ export type {
   LoadParkedOrderResult,
 } from './parked-order-repository';
 
+export * from './sales-person-repository';
+export { SalesPersonRepository } from './sales-person-repository';
+export type {
+  SalesPerson,
+  GetSalesPersonsOptions,
+  GetSalesPersonsResult,
+} from './sales-person-repository';
+

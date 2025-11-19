@@ -34,7 +34,8 @@ const SYNC_TABLES = [
   'TaxRate',
   'ExpenseAccount',
   'CashRegister',
-  
+  'SalesPerson',
+
   // Dependent tables
   'Customer',
   'CustomerAddress',

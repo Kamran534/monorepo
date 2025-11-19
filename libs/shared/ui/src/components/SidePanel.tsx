@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { X } from 'lucide-react';
 import { ComponentProps } from '../types.js';
 
@@ -66,6 +66,7 @@ export function SidePanel({
   className = '',
 }: SidePanelProps) {
   const [isClosing, setIsClosing] = useState(false);
+  const prevIsOpenRef = useRef(isOpen);
 
   const handleClose = React.useCallback(() => {
     setIsClosing(true);
@@ -112,6 +113,22 @@ export function SidePanel({
       document.removeEventListener('keydown', handleEscape);
     };
   }, [isOpen, handleClose]);
+
+  // Support external toggles (parent setting isOpen=false) with slide-out animation
+  useEffect(() => {
+    const wasOpen = prevIsOpenRef.current;
+    if (!isOpen && wasOpen && !isClosing) {
+      setIsClosing(true);
+      const timer = setTimeout(() => {
+        setIsClosing(false);
+      }, 300);
+
+      prevIsOpenRef.current = isOpen;
+      return () => clearTimeout(timer);
+    }
+
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, isClosing]);
 
   if (!isOpen && !isClosing) return null;
 

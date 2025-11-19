@@ -1,7 +1,6 @@
 import React from 'react';
-import { Package, Plus, X, User } from 'lucide-react';
+import { Package } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
-import type { Customer } from '../customer/CustomerCard.js';
 
 export interface LineItem {
   id: string;
@@ -28,9 +27,6 @@ export interface TransactionLinesProps extends ComponentProps {
   lineItems: LineItem[];
   selectedItem?: string;
   onItemSelect?: (itemId: string) => void;
-  onAddCustomer?: () => void;
-  customer?: Customer | null;
-  onRemoveCustomer?: () => void;
   activeTab?: 'lines' | 'payments';
   onTabChange?: (tab: 'lines' | 'payments') => void;
   billingSummary?: BillingSummary;
@@ -46,9 +42,6 @@ export function TransactionLines({
   lineItems,
   selectedItem,
   onItemSelect,
-  onAddCustomer,
-  customer,
-  onRemoveCustomer,
   activeTab = 'lines',
   onTabChange,
   billingSummary,
@@ -168,7 +161,15 @@ export function TransactionLines({
         </div>
       </div>
 
-      {/* Bottom Footer: Add Customer + Summary (not fixed) */}
+      <div
+        className="mx-4"
+        style={{
+          height: '1px',
+          backgroundColor: 'var(--color-border-light)',
+        }}
+      />
+
+      {/* Bottom Footer: Summary (not fixed) */}
       <div
         className="p-2 md:p-4 space-y-2 md:space-y-3"
         style={{
@@ -176,77 +177,6 @@ export function TransactionLines({
           backgroundColor: 'var(--color-bg-card)',
         }}
       >
-        {/* Customer Section (fixed above billing) */}
-        <div style={{
-            borderBottom: '1px solid var(--color-border-light)',
-            color: 'var(--color-text-primary)',
-            paddingBottom: '10px',
-          }}> 
-          {customer ? (
-            <div
-              className="w-full py-3 px-4 rounded border-2 flex items-center justify-between"
-              style={{
-                borderColor: 'var(--color-border-medium)',
-                backgroundColor: 'var(--color-bg-secondary)',
-              }}
-            >
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: 'var(--color-accent-blue)' }}
-                >
-                  <User
-                    className="w-4 h-4"
-                    style={{ color: 'var(--color-text-light)' }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div
-                    className="font-medium text-sm truncate"
-                    style={{ color: 'var(--color-text-primary)' }}
-                  >
-                    {customer.name}
-                  </div>
-                  <div
-                    className="text-xs truncate"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                  >
-                    {customer.email}
-                  </div>
-                </div>
-              </div>
-              {onRemoveCustomer && (
-                <button
-                  onClick={onRemoveCustomer}
-                  className="p-1 rounded transition-colors flex-shrink-0 ml-2"
-                  style={{
-                    color: 'var(--color-text-secondary)',
-                    backgroundColor: 'transparent',
-                  }}
-                  title="Remove customer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={onAddCustomer}
-              className="w-full py-3 rounded border-2 border-dashed hover:opacity-70"
-              style={{
-                borderColor: 'var(--color-border-medium)',
-                color: 'var(--color-text-secondary)',
-                backgroundColor: 'transparent',
-              }}
-            >
-              <div className="flex flex-col items-center gap-2">
-                <Plus className="w-5 h-5" />
-                <span className="text-sm">Add customer to transaction</span>
-              </div>
-            </button>
-          )}
-        </div>
-
         <div
           className="flex justify-between text-xs md:text-sm"
           style={{ color: 'var(--color-text-primary)' }}

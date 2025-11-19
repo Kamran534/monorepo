@@ -150,8 +150,15 @@ try {
         return ipcRenderer.invoke('payment-method:get-all', params);
       },
     },
+    // Sales Person API
+    salesPerson: {
+      getAll: (params?: { search?: string; isActive?: boolean; limit?: number; offset?: number }) => {
+        console.log('[Preload] salesPerson.getAll called');
+        return ipcRenderer.invoke('sales-person:get-all', params);
+      },
+    },
   });
-  console.log('[Preload] Exposed electronAPI with connection, auth, sync, category, product, customer, order, and paymentMethod API');
+  console.log('[Preload] Exposed electronAPI with connection, auth, sync, category, product, customer, order, paymentMethod, and salesPerson APIs');
   console.log('[Preload] Connection methods exposed: getState, setManual, getManualOverride, check, onStateChange');
   console.log('[Preload] Auth methods exposed: login, logout');
   console.log('[Preload] Sync methods exposed: triggerManual, getStatus');

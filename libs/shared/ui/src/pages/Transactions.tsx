@@ -13,6 +13,8 @@ import {
   ParkedOrderSearch,
   PaymentCollection,
   ConfirmationModal,
+  SalesPersonModal,
+  type SalesPersonData,
   type Payment as PaymentCollectionEntry,
   type PaymentMethod as PaymentCollectionMethod,
   type ActionButton,
@@ -21,6 +23,7 @@ import {
   useTransactionCustomer,
   useToast,
   useKeyboardShortcuts,
+  useSalesPersonModal,
 } from '@monorepo/shared-ui';
 import { useBarcodeScanner } from '@monorepo/shared-hooks-scanner';
 import type { Customer as TransactionCustomer } from '../components/customer/CustomerCard';
@@ -53,6 +56,8 @@ import type {
   SalesOrderRepository,
   ParkedOrderRepository,
   PaymentMethodRepository,
+  SalesPersonRepository,
+  SalesPerson as RepoSalesPerson,
 } from '@monorepo/shared-data-access';
 import {
   WebIndexedDbClient,
@@ -60,6 +65,7 @@ import {
   SalesOrderRepository as SalesOrderRepositoryClass,
   ParkedOrderRepository as ParkedOrderRepositoryClass,
   PaymentMethodRepository as PaymentMethodRepositoryClass,
+  SalesPersonRepository as SalesPersonRepositoryClass,
   seedPaymentMethods,
   type IndexedDBSchema,
 } from '@monorepo/shared-data-access';
@@ -128,6 +134,7 @@ export interface TransactionsProps {
   salesOrderRepo?: SalesOrderRepository;
   parkedOrderRepo?: ParkedOrderRepository;
   paymentMethodRepo?: PaymentMethodRepository;
+  salesPersonRepo?: SalesPersonRepository;
   // Current user/location - injected by app
   currentUserId?: string;
   currentLocationId?: string;
@@ -138,6 +145,7 @@ export function Transactions({
   salesOrderRepo,
   parkedOrderRepo,
   paymentMethodRepo,
+  salesPersonRepo,
   currentUserId = '1',
   currentLocationId = '1',
 }: TransactionsProps = {}) {
@@ -189,6 +197,18 @@ export function Transactions({
   const [pendingResumeIds, setPendingResumeIds] = useState<{ parkedOrderId: string; orderId: string } | null>(null);
   const [isResumeConfirmOpen, setIsResumeConfirmOpen] = useState(false);
 
+  // Sales person state
+  const [salesPersons, setSalesPersons] = useState<SalesPersonData[]>([]);
+  const [salesPersonsLoading, setSalesPersonsLoading] = useState(false);
+  const [assignedSalesPerson, setAssignedSalesPerson] = useState<SalesPersonData | null>(null);
+  const salesPersonModal = useSalesPersonModal({
+    onSelect: (person) => {
+      setAssignedSalesPerson(person);
+      show(`Sales rep set to ${person.name}`, 'success');
+    },
+    enabled: true,
+  });
+
   // Save activeTab to localStorage when it changes
   const setActiveTab = (tab: 'lines' | 'payments') => {
     setActiveTabState(tab);
@@ -215,6 +235,7 @@ export function Transactions({
     salesOrderRepo?: SalesOrderRepository;
     parkedOrderRepo?: ParkedOrderRepository;
     paymentMethodRepo?: PaymentMethodRepository;
+    salesPersonRepo?: SalesPersonRepository;
   }>({});
   const formatCurrency = useCallback(
     (amount: number) =>
@@ -260,6 +281,7 @@ export function Transactions({
           salesOrderRepo: new SalesOrderRepositoryClass(dbClient, apiClient),
           parkedOrderRepo: new ParkedOrderRepositoryClass(dbClient, apiClient),
           paymentMethodRepo: new PaymentMethodRepositoryClass(dbClient, apiClient),
+          salesPersonRepo: new SalesPersonRepositoryClass(dbClient, apiClient),
         });
       } catch (err) {
         if (!isActive) return;
@@ -286,6 +308,79 @@ export function Transactions({
     () => paymentMethodRepo ?? autoRepos.paymentMethodRepo,
     [paymentMethodRepo, autoRepos.paymentMethodRepo]
   );
+  const effectiveSalesPersonRepo = useMemo(
+    () => salesPersonRepo ?? autoRepos.salesPersonRepo,
+    [salesPersonRepo, autoRepos.salesPersonRepo]
+  );
+
+  const loadSalesPersons = useCallback(async () => {
+    if (!effectiveSalesPersonRepo) {
+      return;
+    }
+    setSalesPersonsLoading(true);
+    try {
+      const result = await effectiveSalesPersonRepo.getSalesPersons({ isActive: true, limit: 200 });
+      if (result.success && result.salesPersons) {
+        setSalesPersons(
+          result.salesPersons.map((person: RepoSalesPerson) => ({
+            id: person.id,
+            code: person.code,
+            name: person.name,
+            email: person.email ?? undefined,
+            phone: person.phone ?? undefined,
+            commission: person.commission ?? undefined,
+            isActive: person.isActive,
+          }))
+        );
+      } else if (result.error) {
+        show(result.error, 'error');
+      }
+    } catch (error: any) {
+      console.error('[Transactions] Failed to load sales persons:', error);
+      show(error?.message || 'Failed to load sales reps', 'error');
+    } finally {
+      setSalesPersonsLoading(false);
+    }
+  }, [effectiveSalesPersonRepo, show]);
+
+  useEffect(() => {
+    if (!effectiveSalesPersonRepo) {
+      return;
+    }
+    void loadSalesPersons();
+  }, [effectiveSalesPersonRepo, loadSalesPersons]);
+
+  useEffect(() => {
+    if (
+      !salesPersonModal.isOpen ||
+      salesPersonsLoading ||
+      salesPersons.length > 0
+    ) {
+      return;
+    }
+    void loadSalesPersons();
+  }, [salesPersonModal.isOpen, salesPersons.length, salesPersonsLoading, loadSalesPersons]);
+
+  useEffect(() => {
+    if (!assignedSalesPerson && salesPersons.length > 0) {
+      setAssignedSalesPerson(salesPersons[0]);
+      return;
+    }
+
+    if (assignedSalesPerson && salesPersons.length > 0) {
+      const match = salesPersons.find((sp) => sp.id === assignedSalesPerson.id);
+      if (match && (match.name !== assignedSalesPerson.name || match.code !== assignedSalesPerson.code)) {
+        setAssignedSalesPerson(match);
+      }
+    }
+  }, [assignedSalesPerson, salesPersons]);
+
+  useEffect(() => {
+    if (assignedSalesPerson) {
+      salesPersonModal.setSelectedPerson(assignedSalesPerson);
+    }
+  }, [assignedSalesPerson, salesPersonModal]);
+
 
   // Keyboard shortcuts
   const openDiscountModal = useCallback(() => {
@@ -408,6 +503,19 @@ export function Transactions({
           return;
         }
 
+        if (order.salesPersonId) {
+          const matchedPerson = salesPersons.find((person) => person.id === order.salesPersonId);
+          if (matchedPerson) {
+            setAssignedSalesPerson(matchedPerson);
+          } else {
+            setAssignedSalesPerson({
+              id: order.salesPersonId,
+              code: (order as any).salesPersonCode || order.salesPersonId.slice(0, 6),
+              name: (order as any).salesPersonName || 'Assigned rep',
+            });
+          }
+        }
+
         // Set discounts and adjustments
         if (order.discountAmount && order.discountAmount > 0) {
           setAppliedDiscount({ type: 'amount', value: order.discountAmount });
@@ -470,12 +578,15 @@ export function Transactions({
     }
 
     try {
+      const salesPersonId = assignedSalesPerson?.id ?? currentUserId;
       const orderInput: CreateSalesOrderInput = {
         locationId: currentLocationId,
         cashierId: currentUserId,
+        salesPersonId,
         customerId: customer?.id,
         lineItems: lineItems.map((item) => ({
           variantId: item.productVariantId || item.productId || item.id,
+          salesPersonId,
           quantity: item.quantity,
           unitPrice: item.price,
         })),
@@ -538,6 +649,7 @@ export function Transactions({
       show(error.message || 'Failed to park order.', 'error');
     }
   }, [
+    assignedSalesPerson?.id,
     effectiveSalesOrderRepo,
     effectiveParkedOrderRepo,
     lineItems,
@@ -594,15 +706,17 @@ export function Transactions({
     }
 
     try {
+      const salesPersonId = assignedSalesPerson?.id ?? currentUserId;
       // Create the order with status 'Open' (will be changed to 'Parked')
       const orderResult = await effectiveSalesOrderRepo.createOrder(
         {
           locationId: currentLocationId,
           cashierId: currentUserId,
+          salesPersonId,
           customerId: customer?.id,
           lineItems: lineItems.map((item) => ({
             variantId: item.productId || item.id,
-            salesPersonId: currentUserId, // Default to cashier
+            salesPersonId,
             quantity: item.quantity,
             unitPrice: item.price,
           })),
@@ -954,28 +1068,33 @@ export function Transactions({
   }, [effectivePaymentMethodRepo]);
 
   const buildOrderInput = useCallback(
-    (payments: OrderPaymentInput[]): CreateSalesOrderInput => ({
+    (payments: OrderPaymentInput[]): CreateSalesOrderInput => {
+      const salesPersonId = assignedSalesPerson?.id ?? currentUserId;
+      return {
         locationId: currentLocationId,
         cashierId: currentUserId,
+        salesPersonId,
         customerId: customer?.id,
         lineItems: lineItems.map((item) => ({
           variantId: item.productId || item.id,
-          salesPersonId: currentUserId,
+          salesPersonId,
           quantity: item.quantity,
           unitPrice: item.price,
-      })),
-      payments,
-      orderLevelDiscount: appliedDiscount
-        ? appliedDiscount.type === 'percent'
-          ? { percent: appliedDiscount.value }
-          : { amount: appliedDiscount.value }
-        : undefined,
-      adjustment: appliedAdjustment
-        ? { amount: appliedAdjustment.amount, reason: appliedAdjustment.reason }
-        : undefined,
-      giftCardNumber: giftCardData?.cardNumber,
-    }),
+        })),
+        payments,
+        orderLevelDiscount: appliedDiscount
+          ? appliedDiscount.type === 'percent'
+            ? { percent: appliedDiscount.value }
+            : { amount: appliedDiscount.value }
+          : undefined,
+        adjustment: appliedAdjustment
+          ? { amount: appliedAdjustment.amount, reason: appliedAdjustment.reason }
+          : undefined,
+        giftCardNumber: giftCardData?.cardNumber,
+      };
+    },
     [
+      assignedSalesPerson?.id,
       appliedAdjustment,
       appliedDiscount,
       giftCardData,
@@ -1349,7 +1468,7 @@ export function Transactions({
       label: '',
       color: 'bg-green-700',
       square: true,
-      onClick: () => console.log('Profile'),
+      onClick: () => salesPersonModal.open(),
     },
     {
       id: 'heart',
@@ -1395,9 +1514,6 @@ export function Transactions({
             onItemSelect={setSelectedItem}
             activeTab={activeTab}
             onTabChange={setActiveTab}
-            onAddCustomer={() => navigate('/customers')}
-            customer={customer}
-            onRemoveCustomer={clearCustomer}
             billingSummary={{
               subtotal: orderTotals.subtotal,
               discount: orderTotals.discountValue,
@@ -1415,6 +1531,8 @@ export function Transactions({
             value={numpadValue}
             onValueChange={setNumpadValue}
             onAddCustomer={() => navigate('/customers')}
+            customer={customer}
+            onRemoveCustomer={clearCustomer}
           />
         </div>
       </div>
@@ -1685,6 +1803,17 @@ export function Transactions({
         confirmText="Void Transaction"
         cancelText="Cancel"
         variant="warning"
+      />
+
+      {/* Sales Person Modal - Ctrl+Shift+I to open */}
+      <SalesPersonModal
+        isOpen={salesPersonModal.isOpen}
+        onClose={salesPersonModal.close}
+        onSelect={salesPersonModal.handleSelect}
+        salesPersons={salesPersons}
+        selectedId={salesPersonModal.selectedPerson?.id}
+        isLoading={salesPersonsLoading}
+        subtitle="On transaction"
       />
     </div>
   );

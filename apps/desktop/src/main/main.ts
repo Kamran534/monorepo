@@ -1252,6 +1252,57 @@ function setupIpcHandlers(): void {
     }
   });
 
+  ipcMain.handle('sales-person:get-all', async (_event, params?: { search?: string; isActive?: boolean; limit?: number; offset?: number }) => {
+    console.log('[IPC] sales-person:get-all called');
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+
+      const { SalesPersonRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+
+      const connectionState = dataAccessService.getConnectionState();
+      const useServer = String(connectionState.dataSource).toLowerCase() === 'server';
+
+      const repository = new SalesPersonRepository(localDb, apiClient);
+      const result = await repository.getSalesPersons({
+        ...(params || {}),
+        useServer: useServer ? true : false,
+      });
+
+      return result;
+    } catch (error) {
+      console.error('[IPC] sales-person:get-all error:', error);
+      return {
+        success: false,
+        salesPersons: [],
+        error: error instanceof Error ? error.message : 'Failed to get sales persons',
+        isOffline: true,
+      };
+    }
+  });
+
+  // Database query handler for direct SQLite queries
+  ipcMain.handle('db:query', async (_event, sql: string, params?: any[]) => {
+    console.log('[IPC] db:query called');
+    try {
+      const localDb = dataAccessService.getLocalDb();
+
+      if (!localDb) {
+        throw new Error('Database not initialized');
+      }
+
+      const result = await localDb.query(sql, params);
+      console.log('[IPC] db:query result:', { count: Array.isArray(result) ? result.length : 0 });
+      return result;
+    } catch (error) {
+      console.error('[IPC] db:query error:', error);
+      throw error;
+    }
+  });
+
   // Print handler for silent printing
   ipcMain.handle('print-content', async (event, options) => {
     try {

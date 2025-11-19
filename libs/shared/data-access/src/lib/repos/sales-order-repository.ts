@@ -36,6 +36,7 @@ export interface OrderPaymentInput {
 export interface CreateSalesOrderInput {
   locationId: string;
   cashierId: string;
+  salesPersonId?: string;
   customerId?: string;
   lineItems: OrderLineItemInput[];
   payments: OrderPaymentInput[];
@@ -58,6 +59,7 @@ export interface SalesOrder {
   locationId: string;
   customerId?: string;
   cashierId: string;
+  salesPersonId?: string;
   orderDate: string;
   completedAt?: string;
   status: 'Open' | 'Completed' | 'Voided' | 'Parked' | 'OnHold';
@@ -121,21 +123,36 @@ export class SalesOrderRepository {
 
       // Try server first if requested
       if (useServer) {
+        type CreateOrderApiResponse =
+          | {
+              success: true;
+              order?: SalesOrder;
+              data?: SalesOrder | { order: SalesOrder };
+            }
+          | {
+              success: false;
+              error?: string;
+              data?: unknown;
+            };
         try {
-          const response = await this.apiClient.post('/api/orders', {
+          const response = await this.apiClient.post<CreateOrderApiResponse>('/api/orders', {
             ...normalizedData,
             ...calculatedTotals,
           });
 
-          if (response.success && response.data) {
-            // Also save to local DB for offline access
-            await this.saveOrderToLocalDb(response.data.order || response.data, normalizedData);
+          if (response.success) {
+            const responseData = response.data as any;
+            const serverOrder = response.order ?? responseData?.order ?? responseData;
+            if (serverOrder) {
+              // Also save to local DB for offline access
+              await this.saveOrderToLocalDb(serverOrder, normalizedData);
 
-            return {
-              success: true,
-              order: response.data.order || response.data,
-              isOffline: false,
-            };
+              return {
+                success: true,
+                order: serverOrder,
+                isOffline: false,
+              };
+            }
           }
         } catch (serverError) {
           console.warn('[SalesOrderRepository] Server create failed, falling back to local DB:', serverError);
@@ -179,18 +196,19 @@ export class SalesOrderRepository {
       // Insert order
       await this.localDb.execute(
         `INSERT INTO SaleOrder (
-          id, orderNumber, locationId, customerId, cashierId, orderDate, status,
+          id, orderNumber, locationId, customerId, cashierId, salesPersonId, orderDate, status,
           subtotal, taxAmount, discountAmount,
           totalAmount, amountPaid, amountDue, changeAmount,
           notes, customerNotes, createdAt, updatedAt,
           sync_status, last_synced_at, is_deleted
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           orderId,
           orderNumber,
           data.locationId,
           data.customerId || null,
           data.cashierId,
+          data.salesPersonId || null,
           serverOrder?.orderDate || now,
           serverOrder?.status || 'Completed',
           calculatedTotals.subtotal,
@@ -299,6 +317,7 @@ export class SalesOrderRepository {
         locationId: data.locationId,
         customerId: data.customerId,
         cashierId: data.cashierId,
+        salesPersonId: data.salesPersonId,
         orderDate: serverOrder?.orderDate || now,
         status: serverOrder?.status || 'Completed',
         subtotal: calculatedTotals.subtotal,

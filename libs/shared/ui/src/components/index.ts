@@ -89,3 +89,7 @@ export type {
 // Confirmation Modal component
 export { ConfirmationModal } from './ConfirmationModal.js';
 export type { ConfirmationModalProps } from './ConfirmationModal.js';
+
+// Sales Person Modal component
+export { SalesPersonModal } from './SalesPersonModal.js';
+export type { SalesPersonModalProps, SalesPerson as SalesPersonData } from './SalesPersonModal.js';

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Customer } from '../components/customer/CustomerCard.js';
 import { CustomerForm, CustomerList } from '../components/customer/index.js';
 import { useTransactionCustomer } from '../hooks/useTransactionCustomer.js';
@@ -28,6 +29,7 @@ import {
 export function Customers() {
   const { show } = useToast();
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const { customer: currentTransactionCustomer, setCustomer: setTransactionCustomer } = useTransactionCustomer();
   const [searchQuery, setSearchQuery] = useState('');
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -143,6 +145,7 @@ export function Customers() {
 
     setTransactionCustomer(customer);
     show(`Customer "${customer.name}" added to transaction!`, 'success');
+    navigate('/transactions');
   };
 
   const handleEditCustomer = (customer: Customer) => {
