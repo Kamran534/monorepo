@@ -338,6 +338,7 @@ export type PreviewPromptProps = {
     discountValue: number;
     giftCardValue: number;
     adjustmentValue: number;
+    taxValue: number;
     total: number;
   };
   giftCard?: { cardNumber: string; discount: number } | null;
@@ -395,18 +396,30 @@ export const PreviewPrompt = ({
           <span style={{ color: 'var(--color-text-secondary)' }}>Subtotal</span>
           <span>{formatCurrency(totals.subtotal)}</span>
         </div>
-        <div className="flex justify-between">
-          <span style={{ color: 'var(--color-text-secondary)' }}>Discount</span>
-          <span>-{formatCurrency(totals.discountValue)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span style={{ color: 'var(--color-text-secondary)' }}>Gift Card</span>
-          <span>-{formatCurrency(totals.giftCardValue)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span style={{ color: 'var(--color-text-secondary)' }}>Adjustment</span>
-          <span>{formatCurrency(totals.adjustmentValue)}</span>
-        </div>
+        {totals.discountValue > 0 && (
+          <div className="flex justify-between">
+            <span style={{ color: 'var(--color-text-secondary)' }}>Discount</span>
+            <span>-{formatCurrency(totals.discountValue)}</span>
+          </div>
+        )}
+        {totals.giftCardValue > 0 && (
+          <div className="flex justify-between">
+            <span style={{ color: 'var(--color-text-secondary)' }}>Gift Card</span>
+            <span>-{formatCurrency(totals.giftCardValue)}</span>
+          </div>
+        )}
+        {totals.adjustmentValue !== 0 && (
+          <div className="flex justify-between">
+            <span style={{ color: 'var(--color-text-secondary)' }}>Adjustment</span>
+            <span>{formatCurrency(totals.adjustmentValue)}</span>
+          </div>
+        )}
+        {totals.taxValue > 0 && (
+          <div className="flex justify-between">
+            <span style={{ color: 'var(--color-text-secondary)' }}>Tax</span>
+            <span>{formatCurrency(totals.taxValue)}</span>
+          </div>
+        )}
       </div>
 
       <div className="border-t pt-3 flex justify-between items-center" style={{ borderColor: 'var(--color-border-light)' }}>

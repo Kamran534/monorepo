@@ -32,6 +32,24 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
   // Restore session on mount
   useEffect(() => {
     const restoreSession = async () => {
+      // Wait for data access service to be initialized
+      console.log('[WebAuthProvider] Waiting for data access service...');
+      let retries = 0;
+      while (retries < 100) { // Wait up to 10 seconds
+        if (dataAccessService.isReady()) {
+          console.log('[WebAuthProvider] Data access service is ready');
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
+      }
+
+      if (retries >= 100) {
+        console.error('[WebAuthProvider] Data access service initialization timeout');
+        setIsReady(true);
+        return;
+      }
+
       try {
         // Try sessionStorage first
         let raw = sessionStorage.getItem(STORAGE_KEY);
@@ -82,8 +100,16 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string, remember = false) => {
+    console.log('[WebAuthProvider] Login attempt started for:', email);
     try {
       const result: LoginResult = await userRepository.login(email, password);
+      console.log('[WebAuthProvider] Login result received:', {
+        success: result.success,
+        hasUser: !!result.user,
+        hasToken: !!result.token,
+        isOffline: result.isOffline,
+        error: result.error
+      });
 
       if (result.success && result.user) {
         setIsAuthenticated(true);

@@ -101,14 +101,16 @@ class WebDataAccessService {
    * Initialize the data access service
    */
   async initialize(): Promise<void> {
+    const initId = Math.random().toString(36).substring(7);
+
     if (this.isInitialized) {
-      console.warn('[WebDataAccessService] Already initialized');
+      console.warn(`[WebDataAccessService:${initId}] Already initialized`);
       return;
     }
 
-    console.log('[WebDataAccessService] Initializing...');
-    console.log('[WebDataAccessService] Server URL:', SERVER_URL);
-    console.log('[WebDataAccessService] Database:', CPOS_DB_NAME);
+    console.log(`[WebDataAccessService:${initId}] 🚀 Starting initialization...`);
+    console.log(`[WebDataAccessService:${initId}] Server URL:`, SERVER_URL);
+    console.log(`[WebDataAccessService:${initId}] Database:`, CPOS_DB_NAME);
 
     try {
       // Initialize local database (IndexedDB) with full schema
@@ -118,24 +120,34 @@ class WebDataAccessService {
         schema: CPOS_INDEXEDDB_SCHEMA,
       });
       await this.localDb.initialize();
-      console.log('[WebDataAccessService] Local database initialized with schema');
+      console.log(`[WebDataAccessService:${initId}] ✅ Local database initialized with schema`);
 
-      // Auto-seed payment methods
-      console.log('[WebDataAccessService] Auto-seeding payment methods...');
-      await seedPaymentMethods(this.localDb);
-      console.log('[WebDataAccessService] Payment methods seeding complete');
+      // Skip payment methods seeding - it will be done by the application if needed
+      console.log(`[WebDataAccessService:${initId}] Skipping payment methods seeding (will be done by app if needed)`);
 
-      // Initialize API client
+      // Initialize API client (non-blocking - server may not be available)
+      console.log(`[WebDataAccessService:${initId}] Initializing API client...`);
       this.apiClient = getApiClient({
         baseUrl: SERVER_URL,
-        timeout: 30000,
+        timeout: 5000, // Shorter timeout for initial check
       });
-      await this.apiClient.initialize();
-      console.log('[WebDataAccessService] API client initialized');
+      try {
+        await this.apiClient.initialize();
+        console.log(`[WebDataAccessService:${initId}] ✅ API client initialized`);
+      } catch (error) {
+        console.warn(`[WebDataAccessService:${initId}] ⚠️ API client initialization failed (server may be offline):`, error);
+        // Continue anyway - offline mode is supported
+      }
 
-      // Initialize data source manager
-      await this.dataSourceManager.initialize();
-      console.log('[WebDataAccessService] Data source manager initialized');
+      // Initialize data source manager (non-blocking - server may not be available)
+      console.log(`[WebDataAccessService:${initId}] Initializing data source manager...`);
+      try {
+        await this.dataSourceManager.initialize();
+        console.log(`[WebDataAccessService:${initId}] ✅ Data source manager initialized`);
+      } catch (error) {
+        console.warn(`[WebDataAccessService:${initId}] ⚠️ Data source manager initialization failed:`, error);
+        // Continue anyway - offline mode is supported
+      }
 
       // Apply saved manual override if exists
       if (this.manualOverride && this.preferredDataSource) {
@@ -155,9 +167,9 @@ class WebDataAccessService {
       this.logConnectionStatus(initialState);
 
       this.isInitialized = true;
-      console.log('[WebDataAccessService] Initialization complete');
+      console.log(`[WebDataAccessService:${initId}] ✅✅✅ Initialization COMPLETE - Service is ready!`);
     } catch (error) {
-      console.error('[WebDataAccessService] Initialization failed:', error);
+      console.error(`[WebDataAccessService:${initId}] ❌ Initialization FAILED:`, error);
       throw error;
     }
   }
@@ -256,6 +268,13 @@ class WebDataAccessService {
       throw new Error('Sync service not initialized');
     }
     await this.syncService.syncAll();
+  }
+
+  /**
+   * Check if data access service is initialized
+   */
+  isReady(): boolean {
+    return this.isInitialized;
   }
 
   getConnectionState(): ConnectionState {
