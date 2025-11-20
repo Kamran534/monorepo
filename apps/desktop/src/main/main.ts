@@ -498,37 +498,141 @@ function setupIpcHandlers(): void {
 
   ipcMain.handle('customer:create', async (_event, data: { name: string; email?: string; phone?: string; address?: string }) => {
     console.log('[IPC] ========== CUSTOMER:CREATE CALLED ==========');
-    
+    console.log('[IPC] Customer data:', data);
+
     try {
       if (!dataAccessService) {
         throw new Error('DataAccessService not initialized');
       }
 
+      const localDb = dataAccessService.getLocalDb();
       const apiClient = dataAccessService.getApiClient();
-      const response = await apiClient.post('/api/customers', data);
-      
-      if (response.success && response.data) {
-        const dbCustomer = response.data;
-        const customer = {
-          id: dbCustomer.id,
-          name: `${dbCustomer.firstName || ''} ${dbCustomer.lastName || ''}`.trim(),
-          email: dbCustomer.email || '',
-          phone: dbCustomer.phone || '',
-          address: dbCustomer.addresses?.[0] 
-            ? `${dbCustomer.addresses[0].street1 || ''}, ${dbCustomer.addresses[0].city || ''}, ${dbCustomer.addresses[0].state || ''} ${dbCustomer.addresses[0].postalCode || ''}`.trim()
-            : '',
-        };
+
+      // Check if we should use server
+      const connectionState = dataAccessService.getConnectionState();
+      const useServer = connectionState.dataSource === 'server';
+
+      console.log('[IPC] Customer create - Using:', useServer ? 'server' : 'local');
+
+      if (useServer) {
+        // Create via API
+        const response = await apiClient.post('/api/customers', data);
+
+        if (response.success && response.data) {
+          const dbCustomer = response.data;
+          const customer = {
+            id: dbCustomer.id,
+            name: `${dbCustomer.firstName || ''} ${dbCustomer.lastName || ''}`.trim(),
+            email: dbCustomer.email || '',
+            phone: dbCustomer.phone || '',
+            address: dbCustomer.addresses?.[0]
+              ? `${dbCustomer.addresses[0].street1 || ''}, ${dbCustomer.addresses[0].city || ''}, ${dbCustomer.addresses[0].state || ''} ${dbCustomer.addresses[0].postalCode || ''}`.trim()
+              : '',
+          };
+
+          return {
+            success: true,
+            customer,
+          };
+        }
 
         return {
-          success: true,
-          customer,
+          success: false,
+          error: response.error || 'Failed to create customer',
         };
-      }
+      } else {
+        // Create in local SQLite database
+        console.log('[IPC] Creating customer in local SQLite database');
 
-      return {
-        success: false,
-        error: response.error || 'Failed to create customer',
-      };
+        try {
+          // Parse name into first and last name
+          const nameParts = data.name.trim().split(' ');
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+
+          // Generate unique ID and customer code
+          const customerId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+          const customerCode = `CUST-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+          // Insert customer into database
+          await localDb.execute(
+            `INSERT INTO Customer (
+              id, customerCode, firstName, lastName, email, phone,
+              customerType, loyaltyPoints, lifetimeValue, totalSpent,
+              createdAt, updatedAt, sync_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?)`,
+            [
+              customerId,
+              customerCode,
+              firstName,
+              lastName,
+              data.email || null,
+              data.phone || null,
+              'Regular',
+              0,
+              0,
+              0,
+              'pending'
+            ]
+          );
+
+          console.log('[IPC] ✓ Customer created in local database:', customerId);
+
+          // Insert address if provided
+          if (data.address && data.address.trim()) {
+            const addressId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}-addr`;
+
+            // Parse address (simple parsing - in production you might want more sophisticated parsing)
+            const addressParts = data.address.split(',').map(p => p.trim());
+            const street1 = addressParts[0] || data.address;
+            const city = addressParts[1] || 'Unknown';
+            const state = addressParts[2] || 'Unknown';
+            const postalCode = addressParts[3] || '00000';
+
+            await localDb.execute(
+              `INSERT INTO CustomerAddress (
+                id, customerId, addressType, street1, city, state, postalCode, country,
+                isDefault, createdAt, updatedAt, sync_status
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?)`,
+              [
+                addressId,
+                customerId,
+                'Both',
+                street1,
+                city,
+                state,
+                postalCode,
+                'US',
+                1,
+                'pending'
+              ]
+            );
+
+            console.log('[IPC] ✓ Customer address created in local database:', addressId);
+          }
+
+          const customer = {
+            id: customerId,
+            name: data.name,
+            email: data.email || '',
+            phone: data.phone || '',
+            address: data.address || '',
+          };
+
+          return {
+            success: true,
+            customer,
+            isOffline: true,
+          };
+        } catch (dbError) {
+          console.error('[IPC] Failed to create customer in local database:', dbError);
+          return {
+            success: false,
+            error: dbError instanceof Error ? dbError.message : 'Failed to create customer in local database',
+            isOffline: true,
+          };
+        }
+      }
     } catch (error) {
       console.error('[IPC] customer:create error:', error);
       return {
@@ -1023,7 +1127,8 @@ function setupIpcHandlers(): void {
           p.name AS productName,
           p.productCode AS productCode,
           p.trackInventory AS trackInventory,
-          COALESCE(MAX(ii.quantityAvailable), MAX(ii.quantityOnHand), 0) AS availableQuantity
+          COALESCE(MAX(ii.quantityAvailable), MAX(ii.quantityOnHand)) AS availableQuantity,
+          CASE WHEN MAX(ii.id) IS NOT NULL THEN 1 ELSE 0 END AS hasInventoryRecord
         FROM ProductVariant pv
         LEFT JOIN Product p ON p.id = pv.productId
         LEFT JOIN InventoryItem ii ON ii.variantId = pv.id
@@ -1047,7 +1152,8 @@ function setupIpcHandlers(): void {
             p.name AS productName,
             p.productCode AS productCode,
             p.trackInventory AS trackInventory,
-            COALESCE(MAX(ii.quantityAvailable), MAX(ii.quantityOnHand), 0) AS availableQuantity
+            COALESCE(MAX(ii.quantityAvailable), MAX(ii.quantityOnHand)) AS availableQuantity,
+            CASE WHEN MAX(ii.id) IS NOT NULL THEN 1 ELSE 0 END AS hasInventoryRecord
           FROM Barcode b
           INNER JOIN ProductVariant pv ON pv.id = b.variantId
           LEFT JOIN Product p ON p.id = pv.productId
@@ -1073,9 +1179,22 @@ function setupIpcHandlers(): void {
       // If product doesn't track inventory, return undefined for availableQuantity (unlimited)
       // Otherwise return the actual quantity from inventory
       const trackInventory = row.trackInventory === 1 || row.trackInventory === true;
+      const hasInventoryRecord = row.hasInventoryRecord === 1 || row.hasInventoryRecord === true;
+      
+      // If tracking inventory but no inventory record exists, treat as unlimited (undefined)
+      // Only use the actual quantity if an inventory record exists
+      // Note: If availableQuantity is explicitly 0, we still return 0 (out of stock)
+      // But if it's null/undefined (no record), we return undefined (unlimited)
       const availableQuantity = trackInventory
-        ? Number(row.availableQuantity ?? 0) || 0
+        ? (hasInventoryRecord && row.availableQuantity != null ? Number(row.availableQuantity) : undefined)
         : undefined; // undefined means unlimited stock
+      
+      console.log('[IPC] product:lookup-barcode - Inventory check:', {
+        trackInventory,
+        hasInventoryRecord,
+        rawAvailableQuantity: row.availableQuantity,
+        finalAvailableQuantity: availableQuantity,
+      });
 
       return {
         success: true,

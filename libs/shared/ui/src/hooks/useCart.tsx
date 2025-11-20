@@ -62,6 +62,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Check if quantity exceeds available stock for new item
+      // If availableQty is 0, don't add the item at all
+      if (availableQty === 0) {
+        showToast?.('Item is out of stock. Cannot add to cart.', 'error');
+        return prev;
+      }
       if (availableQty !== Infinity && qtyToAdd > availableQty) {
         showToast?.(`Only ${availableQty} item(s) available in stock. Added ${availableQty} instead.`, 'info');
         const id = item.id ?? Math.random().toString(36).slice(2, 9);

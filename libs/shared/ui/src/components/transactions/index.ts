@@ -10,6 +10,15 @@ export type { TransactionActionsProps, ActionButton } from './TransactionActions
 export { TransactionQuantityPanel } from './TransactionQuantityPanel.js';
 export type { TransactionQuantityPanelProps } from './TransactionQuantityPanel.js';
 
+export { TransactionCouponPanel } from './TransactionCouponPanel.js';
+export type { TransactionCouponPanelProps } from './TransactionCouponPanel.js';
+
+export { TransactionDiscountPanel } from './TransactionDiscountPanel.js';
+export type { TransactionDiscountPanelProps } from './TransactionDiscountPanel.js';
+
+export { TransactionAdjustmentPanel } from './TransactionAdjustmentPanel.js';
+export type { TransactionAdjustmentPanelProps } from './TransactionAdjustmentPanel.js';
+
 export { TransactionVerticalNav } from './TransactionVerticalNav.js';
 export type { TransactionVerticalNavProps } from './TransactionVerticalNav.js';
 

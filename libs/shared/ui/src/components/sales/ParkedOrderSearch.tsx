@@ -1,12 +1,13 @@
 /**
  * Parked Order Search Component
  *
- * Modal dialog for searching and loading parked orders
+ * Side panel for searching and loading parked orders
  */
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ParkedOrderListItem } from '@monorepo/shared-data-access';
 import { Search, User, Clock3, DollarSign, Archive } from 'lucide-react';
+import { SidePanel } from '@monorepo/shared-ui';
 
 export interface ComponentProps {
   className?: string;
@@ -47,10 +48,6 @@ export function ParkedOrderSearch({
     }
   }, [isOpen, onSearch]);
 
-  if (!isOpen) {
-    return null;
-  }
-
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleString();
 
@@ -66,39 +63,20 @@ export function ParkedOrderSearch({
   };
 
   return (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${className}`}
-      style={{ backgroundColor: 'rgba(0,0,0,0.5)', ...style }}
+    <SidePanel
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Parked orders"
+      width="420px"
     >
-      <div
-        className="w-full max-w-3xl max-h-[85vh] rounded-lg shadow-2xl border flex flex-col overflow-hidden"
-        style={{
-          backgroundColor: 'var(--color-bg-primary)',
-          borderColor: 'var(--color-border-light)',
-        }}
-      >
-        <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--color-border-light)' }}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--color-text-secondary)' }}>
-                Parked Orders
-              </p>
-              <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                Resume or manage held orders
-              </h2>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 rounded hover:bg-white/10 transition"
-              style={{ color: 'var(--color-text-secondary)' }}
-              aria-label="Close parked order search"
-            >
-              ✕
-            </button>
-          </div>
+      <div className={`flex flex-col h-full ${className}`} style={style}>
+        <div className="pb-3 border-b" style={{ borderColor: 'var(--color-border-light)' }}>
+          <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--color-text-secondary)' }}>
+            Resume or manage held orders
+          </p>
         </div>
 
-        <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--color-border-light)' }}>
+        <div className="py-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4" style={{ color: 'var(--color-text-secondary)' }} />
             <input
@@ -120,7 +98,7 @@ export function ParkedOrderSearch({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
           {isLoading ? (
             <div className="flex items-center justify-center py-10">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-current" />
@@ -131,64 +109,50 @@ export function ParkedOrderSearch({
             </div>
           ) : (
             parkedOrders.map((order) => (
-              <div
+              <button
                 key={order.id}
-                className="rounded-lg border px-4 py-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between transition"
+                className="w-full text-left rounded-lg border px-4 py-3 flex flex-col gap-2 transition"
                 style={{
                   borderColor:
                     highlightedId === order.id ? 'var(--color-accent-blue)' : 'var(--color-border-light)',
                   backgroundColor:
                     highlightedId === order.id ? 'var(--color-bg-secondary)' : 'var(--color-bg-primary)',
                 }}
+                onClick={() => handleResume(order)}
               >
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                      {order.orderNumber}
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)' }}>
-                      Park #{order.parkNumber}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs flex flex-wrap gap-3" style={{ color: 'var(--color-text-secondary)' }}>
-                    <span className="flex items-center gap-1">
-                      <User className="w-3.5 h-3.5" />
-                      {order.customerName || 'Walk-in Customer'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock3 className="w-3.5 h-3.5" />
-                      {formatDate(order.parkedAt)}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <DollarSign className="w-3.5 h-3.5" />
-                      {formatCurrency(order.totalAmount)}
-                    </span>
-                  </div>
-                  {order.notes && (
-                    <p className="mt-1 text-xs italic" style={{ color: 'var(--color-text-secondary)' }}>
-                      “{order.notes}”
-                    </p>
-                  )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                    {order.orderNumber}
+                  </span>
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)' }}>
+                    Park #{order.parkNumber}
+                  </span>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    className="px-3 py-1.5 rounded text-sm font-medium flex items-center gap-1"
-                    style={{
-                      backgroundColor: 'var(--color-accent-blue)',
-                      color: 'white',
-                    }}
-                    onClick={() => handleResume(order)}
-                  >
-                    <Archive className="w-4 h-4" />
-                    Resume
-                  </button>
+                <div className="text-xs flex flex-wrap gap-3" style={{ color: 'var(--color-text-secondary)' }}>
+                  <span className="flex items-center gap-1">
+                    <User className="w-3.5 h-3.5" />
+                    {order.customerName || 'Walk-in Customer'}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock3 className="w-3.5 h-3.5" />
+                    {formatDate(order.parkedAt)}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <DollarSign className="w-3.5 h-3.5" />
+                    {formatCurrency(order.totalAmount)}
+                  </span>
                 </div>
-              </div>
+                {order.notes && (
+                  <p className="text-xs italic" style={{ color: 'var(--color-text-secondary)' }}>
+                    “{order.notes}”
+                  </p>
+                )}
+              </button>
             ))
           )}
         </div>
 
-        <div className="px-5 py-3 border-t flex items-center justify-between text-sm" style={{ borderColor: 'var(--color-border-light)', color: 'var(--color-text-secondary)' }}>
+        <div className="pt-3 border-t flex items-center justify-between text-sm" style={{ borderColor: 'var(--color-border-light)', color: 'var(--color-text-secondary)' }}>
           <span>
             {parkedOrders.length} parked order{parkedOrders.length === 1 ? '' : 's'}
           </span>
@@ -204,6 +168,6 @@ export function ParkedOrderSearch({
           </button>
         </div>
       </div>
-    </div>
+    </SidePanel>
   );
 }

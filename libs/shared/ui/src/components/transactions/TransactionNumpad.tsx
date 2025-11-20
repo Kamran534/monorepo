@@ -15,6 +15,7 @@ import type { Customer } from '../customer/CustomerCard.js';
 export interface TransactionNumpadProps extends ComponentProps {
   value: string;
   onValueChange: (value: string) => void;
+  onEnter?: (value: string) => void;
   onAddCustomer?: () => void;
   customer?: Customer | null;
   onRemoveCustomer?: () => void;
@@ -29,6 +30,7 @@ export interface TransactionNumpadProps extends ComponentProps {
 export function TransactionNumpad({
   value,
   onValueChange,
+  onEnter,
   onAddCustomer,
   customer,
   onRemoveCustomer,
@@ -37,15 +39,39 @@ export function TransactionNumpad({
   // Ensure the display never overflows the box: show the last 12 chars with leading ellipsis
   const displayValue = value
     ? (value.length > 12 ? `…${value.slice(-12)}` : value)
-    : '0';
+    : '';
   const handleClick = (val: string) => {
     if (val === 'clear') {
       onValueChange('');
     } else if (val === 'back') {
       onValueChange(value.slice(0, -1));
     } else if (val === 'enter') {
-      console.log('Enter:', value);
+      if (value && onEnter) {
+        // Evaluate multiplication if * is present
+        let finalValue = value;
+        if (value.includes('*')) {
+          try {
+            const parts = value.split('*');
+            if (parts.length === 2) {
+              const num1 = parseFloat(parts[0].trim()) || 0;
+              const num2 = parseFloat(parts[1].trim()) || 0;
+              const result = Math.floor(num1 * num2); // Use floor to get integer result
+              finalValue = result.toString();
+            }
+          } catch (error) {
+            console.error('[TransactionNumpad] Multiplication error:', error);
+          }
+        }
+        onEnter(finalValue);
+      }
       onValueChange('');
+    } else if (val === '*') {
+      // Allow * only if there's already a number and no * already present
+      if (value && !value.includes('*') && value.trim().length > 0) {
+        // Prevent unbounded growth – cap length to keep display stable
+        if (value.length >= 18) return;
+        onValueChange(value + '*');
+      }
     } else {
       // Prevent unbounded growth – cap length to keep display stable
       if (value.length >= 18) return;
@@ -202,14 +228,17 @@ export function TransactionNumpad({
       >
         {/* Numpad Display */}
         <div
-          className={`h-9 md:h-12 px-3 md:px-4 flex items-center justify-end rounded text-sm md:text-lg font-mono w-full overflow-hidden whitespace-nowrap text-ellipsis text-right`}
+          className={`h-9 md:h-12 px-3 md:px-4 flex items-center rounded text-sm md:text-lg font-mono w-full overflow-hidden whitespace-nowrap text-ellipsis ${
+            displayValue ? 'justify-end text-right' : 'justify-start text-left'
+          }`}
           style={{
             backgroundColor: 'var(--color-bg-card)',
-            color: 'var(--color-text-primary)',
+            color: displayValue ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
             border: '1px solid var(--color-border-light)',
+            fontStyle: displayValue ? 'normal' : 'italic',
           }}
         >
-          {displayValue}
+          {displayValue || 'Search or enter quantity'}
         </div>
 
         {/* Numpad Grid */}

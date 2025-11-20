@@ -164,6 +164,13 @@ function AppContent() {
         }
       }
 
+      // Check if current path is payments page
+      const isPayments = currentPath === '/payments';
+      // Check if current path is customers page and previous page was transactions
+      const isCustomers = currentPath === '/customers';
+      const previousPath = stack.length > 1 ? stack[stack.length - 2] : null;
+      const isCustomersFromTransactions = isCustomers && previousPath === '/transactions';
+
       // Extract category name or product ID for navbar display
       if (isCategoryDetail) {
         const categoryNameMatch = currentPath.match(/^\/category\/(.+)$/);
@@ -180,6 +187,12 @@ function AppContent() {
         }
         // Show back button if we have a previous path in stack
         setShowBackButton(stack.length > 1);
+      } else if (isPayments) {
+        // Payments page - always show back button
+        setShowBackButton(true);
+      } else if (isCustomersFromTransactions) {
+        // Customers page opened from transactions - show back button
+        setShowBackButton(true);
       } else {
         // Not a detail page - clear refs and hide back button
         navigationSourceRef.current = null;
@@ -203,12 +216,29 @@ function AppContent() {
 
   const handleBackClick = () => {
     const stack = navigationStackRef.current;
-    
+
+    // Special handling for payments page - always go back to transactions
+    if (location.pathname === '/payments') {
+      isNavigatingBackRef.current = true;
+      navigate('/transactions');
+      return;
+    }
+
+    // Special handling for customers page opened from transactions
+    if (location.pathname === '/customers' && stack.length >= 2) {
+      const previousPath = stack[stack.length - 2];
+      if (previousPath === '/transactions') {
+        isNavigatingBackRef.current = true;
+        navigate('/transactions');
+        return;
+      }
+    }
+
     // If we have at least 2 items in stack, navigate to the previous one
     if (stack.length >= 2) {
       // Get the previous path (second to last item)
       const previousPath = stack[stack.length - 2];
-      
+
       // Mark that we're navigating back
       isNavigatingBackRef.current = true;
       // Navigate to previous path
@@ -237,21 +267,42 @@ function AppContent() {
   // Check if current path is a category detail page or product detail page
   const isCategoryDetailPage = /^\/category\//.test(location.pathname) && location.pathname !== '/category';
   const isProductDetailPage = /^\/products\//.test(location.pathname) && location.pathname !== '/products';
+  const isPaymentsPage = location.pathname === '/payments';
+
+  // Check if customers page was opened from transactions (check navigation stack)
+  const navigationStack = navigationStackRef.current;
+  const isCustomersFromTransactionsPage =
+    location.pathname === '/customers' &&
+    navigationStack.length >= 2 &&
+    navigationStack[navigationStack.length - 2] === '/transactions';
 
   // Get active item based on current path
   // If on category detail page or product detail page, don't show any sidebar item as active
   const allItems = [...sidebarItems, ...footerItems];
-  const activeItemId = (isCategoryDetailPage || isProductDetailPage)
+  const activeItemId = (isCategoryDetailPage || isProductDetailPage || isPaymentsPage || isCustomersFromTransactionsPage)
     ? undefined
     : (allItems.find(item => item.path === location.pathname)?.id || (location.pathname === '/' ? 'dashboard' : undefined));
   
   // Custom page name mapping for navbar
   const getCurrentPageName = () => {
+    if (location.pathname === '/payments') {
+      const mode = new URLSearchParams(location.search).get('mode');
+      if (mode === 'cash') {
+        return 'Cash';
+      }
+      if (mode === 'card') {
+        return 'Card';
+      }
+      return 'Payments';
+    }
     if (location.pathname === '/category') {
       return 'All Categories';
     }
     if (location.pathname === '/sales') {
       return 'Sales & Order';
+    }
+    if (location.pathname === '/payments') {
+      return 'Payments';
     }
     // Category detail page - show category name
     if (isCategoryDetailPage && categoryNameRef.current) {

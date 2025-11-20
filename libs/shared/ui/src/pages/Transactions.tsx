@@ -5,13 +5,14 @@ import {
   TransactionNumpad,
   TransactionActions,
   TransactionQuantityPanel,
+  TransactionDiscountPanel,
+  TransactionAdjustmentPanel,
+  TransactionCouponPanel,
   Invoice,
-  DiscountPrompt,
   CouponPrompt,
-  AdjustmentPrompt,
   PreviewPrompt,
   ParkedOrderSearch,
-  PaymentCollection,
+  CompactPaymentPanel,
   ConfirmationModal,
   SalesPersonModal,
   type SalesPersonData,
@@ -118,6 +119,12 @@ const AUTO_IDB_SCHEMA: IndexedDBSchema = {
   },
 };
 
+const SAMPLE_COUPONS: Record<string, { type: 'amount' | 'percent'; value: number; description: string }> = {
+  SAVE5: { type: 'amount', value: 5, description: '$5 off order' },
+  SAVE10: { type: 'amount', value: 10, description: '$10 off order' },
+  TAKE15: { type: 'percent', value: 15, description: '15% off order' },
+};
+
 const FALLBACK_PAYMENT_METHODS: PaymentCollectionMethod[] = [
   { id: '1', code: 'CASH', name: 'Cash', type: 'Cash', isActive: true },
   { id: '2', code: 'CARD', name: 'Card', type: 'Card', isActive: true },
@@ -173,14 +180,18 @@ export function Transactions({
   });
   
   const [isQuantityPanelOpen, setIsQuantityPanelOpen] = useState(false);
-  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [isCouponPanelOpen, setIsCouponPanelOpen] = useState(false);
+  const [isDiscountPanelOpen, setIsDiscountPanelOpen] = useState(false);
   const [isGiftCardModalOpen, setIsGiftCardModalOpen] = useState(false);
-  const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [isAdjustmentPanelOpen, setIsAdjustmentPanelOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isVoidConfirmationOpen, setIsVoidConfirmationOpen] = useState(false);
   const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount');
   const [discountInput, setDiscountInput] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState<{ type: 'amount' | 'percent'; value: number } | null>(null);
+  const [discountSource, setDiscountSource] = useState<'manual' | 'coupon' | null>(null);
+  const [couponCodeInput, setCouponCodeInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; type: 'amount' | 'percent'; value: number } | null>(null);
   const [giftCardNumberInput, setGiftCardNumberInput] = useState('');
   const [giftCardValueInput, setGiftCardValueInput] = useState('');
   const [giftCardData, setGiftCardData] = useState<{ cardNumber: string; discount: number } | null>(null);
@@ -223,6 +234,11 @@ export function Transactions({
   const { items: lineItems, setItemQuantity, removeItem, addItem } = useCart();
   const { customer, setCustomer, clearCustomer } = useTransactionCustomer();
   const { show } = useToast();
+  
+  // Get selected item data
+  const selectedItemData = useMemo(() => {
+    return selectedItem ? lineItems.find(item => item.id === selectedItem) : null;
+  }, [selectedItem, lineItems]);
   const [showInvoice, setShowInvoice] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentDialogMode, setPaymentDialogMode] = useState<'cash' | 'card' | null>(null);
@@ -383,10 +399,10 @@ export function Transactions({
 
 
   // Keyboard shortcuts
-  const openDiscountModal = useCallback(() => {
+  const openDiscountPanel = useCallback(() => {
     setDiscountMode(appliedDiscount?.type ?? 'amount');
     setDiscountInput(appliedDiscount ? String(appliedDiscount.value) : '');
-    setIsDiscountModalOpen(true);
+    setIsDiscountPanelOpen(true);
   }, [appliedDiscount]);
 
   const openGiftCardModal = useCallback(() => {
@@ -395,10 +411,10 @@ export function Transactions({
     setIsGiftCardModalOpen(true);
   }, [giftCardData]);
 
-  const openAdjustmentModal = useCallback(() => {
+  const openAdjustmentPanel = useCallback(() => {
     setAdjustmentAmountInput(appliedAdjustment ? String(appliedAdjustment.amount) : '');
     setAdjustmentReasonInput(appliedAdjustment?.reason ?? '');
-    setIsAdjustmentModalOpen(true);
+    setIsAdjustmentPanelOpen(true);
   }, [appliedAdjustment]);
 
   // ============ Parked Order Handlers ============
@@ -780,6 +796,13 @@ export function Transactions({
         description: 'Open quantity panel',
       },
       {
+        key: 'u',
+        ctrl: true,
+        shift: true,
+        action: () => setIsCouponPanelOpen(true),
+        description: 'Open coupon panel',
+      },
+      {
         key: 'a',
         ctrl: true,
         shift: true,
@@ -790,7 +813,7 @@ export function Transactions({
         key: 'd',
         ctrl: true,
         shift: true,
-        action: openDiscountModal,
+        action: openDiscountPanel,
         description: 'Order discount prompt',
       },
       {
@@ -804,7 +827,7 @@ export function Transactions({
         key: 'j',
         ctrl: true,
         shift: true,
-        action: openAdjustmentModal,
+        action: openAdjustmentPanel,
         description: 'Order adjustment prompt',
       },
       {
@@ -824,8 +847,6 @@ export function Transactions({
     ],
   });
 
-  // Get selected item details
-  const selectedItemData = lineItems.find(item => item.id === selectedItem);
 
   // Products data for Products tab
   const fallbackProducts = useMemo<Product[]>(() => [
@@ -891,6 +912,7 @@ export function Transactions({
   };
   const handleAddProduct = (product: Product) => {
     const price = product.price ? Number(product.price.replace(/[^0-9.]/g, '')) : 0;
+    // Add product to cart with default quantity of 1
     addItem({
       id: product.id,
       name: product.name,
@@ -952,15 +974,19 @@ export function Transactions({
             name: product.name,
             price: product.price,
           });
-          // Add to cart using the looked up product
+          // Add to cart using the looked up product with default quantity of 1
           // Use productId as the item id for proper duplicate detection
+          // Only pass availableQuantity if it's a valid positive number, otherwise undefined (unlimited)
+          const availableQty = product.availableQuantity != null && product.availableQuantity > 0 
+            ? product.availableQuantity 
+            : undefined;
           addItem({
             productId: product.productId,
             name: product.name,
             price: product.price,
             quantity: 1,
             productVariantId: product.variantId,
-            availableQuantity: product.availableQuantity,
+            availableQuantity: availableQty,
           }, show);
           console.log('[Transactions] ✅ addItem called');
           setActiveTab('lines');
@@ -1011,6 +1037,45 @@ export function Transactions({
     enabled: !isPaymentModalOpen, // Disable during payment input
     preventDefault: true,
   });
+
+  // Handle numpad enter: set quantity if product selected, or search by barcode if not
+  const handleNumpadEnter = useCallback(async (value: string) => {
+    if (!value || !value.trim()) return;
+
+    // Evaluate multiplication if * is present (should already be handled in numpad, but double-check)
+    let finalValue = value.trim();
+    if (finalValue.includes('*')) {
+      try {
+        const parts = finalValue.split('*');
+        if (parts.length === 2) {
+          const num1 = parseFloat(parts[0].trim()) || 0;
+          const num2 = parseFloat(parts[1].trim()) || 0;
+          const result = Math.floor(num1 * num2); // Use floor to get integer result
+          finalValue = result.toString();
+        }
+      } catch (error) {
+        console.error('[Transactions] Multiplication error:', error);
+      }
+    }
+
+    // If a product is selected, use the value to set quantity
+    if (selectedItem && selectedItemData) {
+      const quantity = Math.max(0, parseInt(finalValue, 10) || 0);
+      if (quantity === 0) {
+        removeItem(selectedItem);
+        show('Item removed from cart', 'success');
+      } else {
+        setItemQuantity(selectedItem, quantity, show);
+        show(`Quantity set to ${quantity}`, 'success');
+      }
+      return;
+    }
+
+    // If no product selected, use value as barcode to search and add product
+    // (multiplication result would be a number, which won't match barcodes, but that's okay)
+    const barcode = finalValue;
+    await handleBarcodeScan(barcode);
+  }, [selectedItem, selectedItemData, setItemQuantity, removeItem, show, handleBarcodeScan]);
 
   const orderTotals = useMemo(() => {
     const subtotal = lineItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -1066,6 +1131,11 @@ export function Transactions({
       setIsPaymentMethodsLoading(false);
     }
   }, [effectivePaymentMethodRepo]);
+
+  // Load payment methods on mount
+  useEffect(() => {
+    loadPaymentMethods();
+  }, [loadPaymentMethods]);
 
   const buildOrderInput = useCallback(
     (payments: OrderPaymentInput[]): CreateSalesOrderInput => {
@@ -1222,24 +1292,56 @@ export function Transactions({
   const handleClosePaymentModal = useCallback(() => {
     setIsPaymentModalOpen(false);
     setPaymentDialogMode(null);
+    setPaymentDialogError(null);
+    // Don't clear paymentEntries - keep them for split payments
+  }, []);
+
+  const handleCancelAllPayments = useCallback(() => {
+    setIsPaymentModalOpen(false);
+    setPaymentDialogMode(null);
     setPaymentEntries([]);
     setPaymentDialogError(null);
   }, []);
 
   const handleInitiatePayment = useCallback(
     (mode: 'cash' | 'card') => {
-    if (lineItems.length === 0) {
-      show('Cannot complete empty order', 'error');
-      return;
-    }
-
-      setPaymentEntries([]);
-      setPaymentDialogMode(mode);
-      setPaymentDialogError(null);
-      setIsPaymentModalOpen(true);
-      void loadPaymentMethods();
+      if (lineItems.length === 0) {
+        show('Cannot complete empty order', 'error');
+        return;
+      }
+      // Pass order data via navigation state
+      navigate(`/payments?mode=${mode}`, {
+        state: {
+          orderTotal: orderTotals.total,
+          subtotal: orderTotals.subtotal,
+          discountValue: orderTotals.discountValue,
+          giftCardValue: orderTotals.giftCardValue,
+          adjustmentValue: orderTotals.adjustmentValue,
+          taxValue: orderTotals.taxValue,
+          lineItems: lineItems,
+          discount: appliedDiscount,
+          giftCard: giftCardData,
+          adjustment: appliedAdjustment,
+          // Pass IDs for order creation (repo passed via props)
+          salesPersonId: assignedSalesPerson?.id ?? currentUserId,
+          customerId: customer?.id,
+          parkedOrderId: currentParkedOrderId, // Pass parked order ID if resuming
+        },
+      });
     },
-    [lineItems.length, loadPaymentMethods, show]
+    [
+      lineItems,
+      navigate,
+      show,
+      orderTotals,
+      appliedDiscount,
+      giftCardData,
+      appliedAdjustment,
+      currentUserId,
+      assignedSalesPerson,
+      customer,
+      currentParkedOrderId,
+    ]
   );
 
   const handleSubmitPayments = useCallback(async () => {
@@ -1267,6 +1369,8 @@ export function Transactions({
 
       const success = await completeOrder(payments);
       if (success) {
+        // Clear payment entries after successful order completion
+        setPaymentEntries([]);
         handleClosePaymentModal();
       }
     } finally {
@@ -1281,7 +1385,10 @@ export function Transactions({
       return;
     }
     setAppliedDiscount({ type: discountMode, value: parsed });
-    setIsDiscountModalOpen(false);
+    setDiscountSource('manual');
+    setAppliedCoupon(null);
+    setCouponCodeInput('');
+    setIsDiscountPanelOpen(false);
     show('Discount applied', 'success');
   };
 
@@ -1311,9 +1418,66 @@ export function Transactions({
       return;
     }
     setAppliedAdjustment({ amount: parsed, reason: adjustmentReasonInput.trim() || undefined });
-    setIsAdjustmentModalOpen(false);
+    setIsAdjustmentPanelOpen(false);
     show('Order adjustment saved', 'success');
   };
+
+  const handleApplyCouponCode = useCallback(
+    (code: string) => {
+      const normalized = code.trim().toUpperCase();
+      if (!normalized) {
+        show('Enter a coupon code first', 'error');
+        return;
+      }
+
+      const coupon = SAMPLE_COUPONS[normalized] ?? {
+        type: 'amount' as const,
+        value: 5,
+        description: 'Courtesy $5 discount',
+      };
+
+      setAppliedDiscount({ type: coupon.type, value: coupon.value });
+      setDiscountMode(coupon.type === 'percent' ? 'percent' : 'amount');
+      setDiscountInput(String(coupon.value));
+      setDiscountSource('coupon');
+      setCouponCodeInput(normalized);
+      setAppliedCoupon({ code: normalized, type: coupon.type, value: coupon.value });
+      setIsCouponPanelOpen(false);
+
+      const valueText = coupon.type === 'percent' ? `${coupon.value}%` : formatCurrency(coupon.value);
+      show(`Coupon ${normalized} applied (${valueText})`, 'success');
+    },
+    [show, formatCurrency, setDiscountMode],
+  );
+
+  const handleClearAppliedCoupon = useCallback(() => {
+    setAppliedCoupon(null);
+    setCouponCodeInput('');
+    if (discountSource === 'coupon') {
+      setAppliedDiscount(null);
+      setDiscountInput('');
+      setDiscountSource(null);
+    }
+    show('Coupon removed', 'info');
+  }, [discountSource, show]);
+
+  const handleClearDiscount = useCallback(() => {
+    if (discountSource === 'coupon' && appliedCoupon) {
+      handleClearAppliedCoupon();
+      return;
+    }
+    setAppliedDiscount(null);
+    setDiscountInput('');
+    setDiscountSource(null);
+    show('Discount removed', 'info');
+  }, [appliedCoupon, discountSource, handleClearAppliedCoupon, show]);
+
+  const handleClearAdjustment = useCallback(() => {
+    setAppliedAdjustment(null);
+    setAdjustmentAmountInput('');
+    setAdjustmentReasonInput('');
+    show('Adjustment removed', 'info');
+  }, [show]);
 
   const actionButtons: ActionButton[] = [
     // Orange/Reddish-Brown Section
@@ -1424,12 +1588,20 @@ export function Transactions({
       onClick: () => console.log('Tax overrides'),
     },
     {
+      id: 'add-coupon',
+      icon: <TicketPercent className="w-5 h-5" />,
+      label: 'Add coupon',
+      color: 'bg-gray-700',
+      square: true,
+      onClick: () => setIsCouponPanelOpen(true),
+    },
+    {
       id: 'order-discount',
       icon: <Percent className="w-5 h-5" />,
       label: 'Order discount',
       color: 'bg-gray-700',
       square: true,
-      onClick: openDiscountModal,
+      onClick: openDiscountPanel,
     },
     {
       id: 'order-adjustment',
@@ -1437,7 +1609,7 @@ export function Transactions({
       label: 'Order adjustment',
       color: 'bg-gray-700',
       square: true,
-      onClick: openAdjustmentModal,
+      onClick: openAdjustmentPanel,
     },
     // Green Section - Small square buttons
     {
@@ -1523,6 +1695,12 @@ export function Transactions({
               total: orderTotals.total,
               paid: paymentEntries.length > 0 ? paymentAmountPaid : 0,
             }}
+            salesPersonName={
+              salesPersonModal.selectedPerson?.code ||
+              salesPersonModal.selectedPerson?.name ||
+              null
+            }
+            paymentMethods={availablePaymentMethods}
           />
         </div>
 
@@ -1530,6 +1708,7 @@ export function Transactions({
           <TransactionNumpad
             value={numpadValue}
             onValueChange={setNumpadValue}
+            onEnter={handleNumpadEnter}
             onAddCustomer={() => navigate('/customers')}
             customer={customer}
             onRemoveCustomer={clearCustomer}
@@ -1592,6 +1771,39 @@ export function Transactions({
             }
           }
         }}
+      />
+
+      <TransactionDiscountPanel
+        isOpen={isDiscountPanelOpen}
+        onClose={() => setIsDiscountPanelOpen(false)}
+        mode={discountMode}
+        value={discountInput}
+        current={appliedDiscount}
+        onModeChange={setDiscountMode}
+        onValueChange={setDiscountInput}
+        onApply={handleApplyDiscount}
+        onClear={appliedDiscount ? handleClearDiscount : undefined}
+      />
+
+      <TransactionAdjustmentPanel
+        isOpen={isAdjustmentPanelOpen}
+        onClose={() => setIsAdjustmentPanelOpen(false)}
+        amount={adjustmentAmountInput}
+        reason={adjustmentReasonInput}
+        current={appliedAdjustment}
+        onAmountChange={setAdjustmentAmountInput}
+        onReasonChange={setAdjustmentReasonInput}
+        onApply={handleApplyAdjustment}
+        onClear={appliedAdjustment ? handleClearAdjustment : undefined}
+      />
+
+      <TransactionCouponPanel
+        isOpen={isCouponPanelOpen}
+        onClose={() => setIsCouponPanelOpen(false)}
+        initialCode={couponCodeInput}
+        appliedCoupon={appliedCoupon}
+        onApply={handleApplyCouponCode}
+        onClear={appliedCoupon ? handleClearAppliedCoupon : undefined}
       />
 
       {/* Test Invoice Modal */}
@@ -1662,7 +1874,7 @@ export function Transactions({
             )}
 
             <div className="p-4 overflow-y-auto">
-              <PaymentCollection
+              <CompactPaymentPanel
                 key={paymentModalKey}
                 payments={paymentEntries}
                 paymentMethods={paymentMethodsToDisplay}
@@ -1672,6 +1884,7 @@ export function Transactions({
                 onAddPayment={handleAddPaymentEntry}
                 onRemovePayment={handleRemovePaymentEntry}
                 disabled={isSubmittingPayment}
+                mode={paymentDialogMode ?? undefined}
               />
 
               {paymentDialogError && (
@@ -1698,8 +1911,22 @@ export function Transactions({
                 </div>
               </div>
               <div className="flex flex-col md:flex-row gap-2 md:items-center md:justify-end">
+                {paymentEntries.length > 0 && paymentAmountDue > 0 && (
+                  <button
+                    onClick={handleClosePaymentModal}
+                    className="px-4 py-2 rounded border text-sm font-medium"
+                    style={{
+                      borderColor: 'var(--color-border-light)',
+                      color: 'var(--color-text-primary)',
+                      backgroundColor: 'var(--color-bg-secondary)',
+                    }}
+                    disabled={isSubmittingPayment}
+                  >
+                    Add Another Payment
+                  </button>
+                )}
                 <button
-                  onClick={handleClosePaymentModal}
+                  onClick={handleCancelAllPayments}
                   className="px-4 py-2 rounded border text-sm font-medium"
                   style={{
                     borderColor: 'var(--color-border-light)',
@@ -1708,7 +1935,7 @@ export function Transactions({
                   }}
                   disabled={isSubmittingPayment}
                 >
-                  Cancel
+                  Cancel All
                 </button>
                 <button
                   onClick={handleSubmitPayments}
@@ -1724,17 +1951,6 @@ export function Transactions({
         </div>
       )}
 
-      <DiscountPrompt
-        isOpen={isDiscountModalOpen}
-        mode={discountMode}
-        value={discountInput}
-        current={appliedDiscount}
-        onModeChange={setDiscountMode}
-        onValueChange={setDiscountInput}
-        onApply={handleApplyDiscount}
-        onClose={() => setIsDiscountModalOpen(false)}
-      />
-
       <CouponPrompt
         isOpen={isGiftCardModalOpen}
         code={giftCardNumberInput}
@@ -1748,17 +1964,6 @@ export function Transactions({
         codeLabel="Card Number"
       />
 
-      <AdjustmentPrompt
-        isOpen={isAdjustmentModalOpen}
-        amount={adjustmentAmountInput}
-        reason={adjustmentReasonInput}
-        current={appliedAdjustment}
-        onAmountChange={setAdjustmentAmountInput}
-        onReasonChange={setAdjustmentReasonInput}
-        onApply={handleApplyAdjustment}
-        onClose={() => setIsAdjustmentModalOpen(false)}
-      />
-
       <PreviewPrompt
         isOpen={isPreviewModalOpen}
         lineItems={lineItems}
@@ -1768,7 +1973,7 @@ export function Transactions({
         onClose={() => setIsPreviewModalOpen(false)}
       />
 
-      {/* Parked Orders Search Modal - Opens with Ctrl+Shift+Z */}
+      {/* Parked Orders Search Panel - Opens with Ctrl+Shift+Z */}
       <ParkedOrderSearch
         isOpen={isParkedOrdersModalOpen}
         onClose={handleCloseParkedOrdersModal}

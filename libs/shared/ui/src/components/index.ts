@@ -20,8 +20,28 @@ export type { InvoiceProps, InvoiceLineItem, InvoiceBrand, InvoiceCustomer } fro
 export * from './transactions/index.js';
 
 // Home page components
-export { ImageSlider, StartSection, ProductSection, InventorySection, ShiftDrawerSection, AccountSettingsSection } from './home/index.js';
-export type { ImageSliderProps, SlideItem, StartSectionProps, NavigationTile, ProductSectionProps, ProductCategory, InventorySectionProps, InventoryTile, ShiftDrawerSectionProps, ShiftDrawerTile, AccountSettingsSectionProps, AccountSettingsTile } from './home/index.js';
+export {
+  ImageSlider,
+  StartSection,
+  ProductSection,
+  InventorySection,
+  ShiftDrawerSection,
+  AccountSettingsSection,
+} from './home/index.js';
+export type {
+  ImageSliderProps,
+  SlideItem,
+  StartSectionProps,
+  NavigationTile,
+  ProductSectionProps,
+  ProductCategory,
+  InventorySectionProps,
+  InventoryTile,
+  ShiftDrawerSectionProps,
+  ShiftDrawerTile,
+  AccountSettingsSectionProps,
+  AccountSettingsTile,
+} from './home/index.js';
 
 // Category components
 export * from './category/index.js';
@@ -56,7 +76,8 @@ export {
   CouponCodeInput,
   AdjustmentPanel,
   OrderSummary,
-  PaymentCollection,
+  PaymentPanel,
+  CompactPaymentPanel,
   ParkedOrderSearch,
   SalesOrderForm,
 } from './sales/index.js';
@@ -71,7 +92,7 @@ export type {
   CouponCodeInputProps,
   AdjustmentPanelProps,
   OrderSummaryProps,
-  PaymentCollectionProps,
+  PaymentPanelProps,
   ParkedOrderSearchProps,
   SalesOrderFormProps,
 } from './sales/index.js';

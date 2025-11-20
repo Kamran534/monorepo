@@ -6,3 +6,4 @@ export * from './Category.js';
 export * from './Products.js';
 export * from './ProductDetail.js';
 export * from './Sales.js';
+export * from './Payments.js';

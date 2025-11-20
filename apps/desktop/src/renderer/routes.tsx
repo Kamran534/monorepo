@@ -6,6 +6,7 @@ import { ProductDetail } from '../pages/ProductDetail.js';
 import { Transactions } from '../pages/Transactions.js';
 import { Customers } from '../pages/Customers.js';
 import { Sales } from '../pages/Sales.js';
+import { Payments } from '../pages/Payments.js';
 import { Login } from '../pages/Login.js';
 
 /**
@@ -22,6 +23,7 @@ export function AppRoutes() {
       <Route path="/category/:categoryName" element={<Products />} />
       <Route path="/transactions" element={<Transactions />} />
       <Route path="/sales" element={<Sales />} />
+      <Route path="/payments" element={<Payments />} />
       <Route path="/login" element={<Login />} />
       <Route path="/customers" element={<Customers />} />
       <Route path="/settings" element={null} />

@@ -232,6 +232,16 @@ function AppContent() {
   
   // Custom page name mapping for navbar
   const getCurrentPageName = () => {
+    if (location.pathname === '/payments') {
+      const mode = new URLSearchParams(location.search).get('mode');
+      if (mode === 'cash') {
+        return 'Cash';
+      }
+      if (mode === 'card') {
+        return 'Card';
+      }
+      return 'Payments';
+    }
     if (location.pathname === '/category') {
       return 'All Categories';
     }

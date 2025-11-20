@@ -174,7 +174,7 @@ export function TransactionQuantityPanel({
               }}
             >
               <div></div>
-              <div className="flex items-center gap-2 flex-1 justify-end">
+              <div className={`flex items-center gap-2 flex-1 ${quantity ? 'justify-end' : 'justify-start'}`}>
                 <input
                   ref={inputRef}
                   type="text"
@@ -182,11 +182,12 @@ export function TransactionQuantityPanel({
                   value={quantity || ''}
                   onChange={handleInput}
                   onKeyDown={handleKeyDown}
-                  className="text-xl font-mono text-right outline-none bg-transparent border-none flex-1"
+                  className={`text-xl font-mono outline-none bg-transparent border-none flex-1 ${quantity ? 'text-right' : 'text-left'}`}
                   style={{
-                    color: 'var(--color-text-primary)',
+                    color: quantity ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                    fontStyle: quantity ? 'normal' : 'italic',
                   }}
-                  placeholder="0"
+                  placeholder="Search or enter quantity"
                   aria-label="Quantity input"
                 />
                 <span className="text-xl font-mono">x</span>

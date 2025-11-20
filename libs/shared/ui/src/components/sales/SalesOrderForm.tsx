@@ -7,7 +7,7 @@ import { DiscountPanel, OrderDiscount } from './DiscountPanel.js';
 import { CouponCodeInput, CouponValidation } from './CouponCodeInput.js';
 import { AdjustmentPanel, OrderAdjustment } from './AdjustmentPanel.js';
 import { OrderSummary, OrderTotals } from './OrderSummary.js';
-import { PaymentCollection, PaymentMethod, Payment } from './PaymentCollection.js';
+import { PaymentPanel, PaymentMethod, Payment } from './PaymentPanel.js';
 import { ParkedOrderSearch } from './ParkedOrderSearch.js';
 import { ConfirmationModal } from '@monorepo/shared-ui';
 import type { ParkedOrderListItem } from '@monorepo/shared-data-access';
@@ -552,8 +552,8 @@ export function SalesOrderForm({
             disabled={isFormDisabled}
           />
 
-          {/* Payment Collection */}
-          <PaymentCollection
+          {/* Payment Panel */}
+          <PaymentPanel
             payments={payments}
             paymentMethods={paymentMethods}
             totalAmount={orderTotals.totalAmount}

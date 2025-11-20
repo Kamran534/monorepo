@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit, Trash2, User, Phone, MapPin, ShoppingCart } from 'lucide-react';
+import { User, Phone, MapPin, ShoppingCart } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
 
 export interface Customer {
@@ -31,17 +31,15 @@ export function CustomerCard({
 }: CustomerCardProps) {
   return (
     <div
-      className={`p-4 rounded-lg border hover:shadow-md transition-shadow cursor-pointer group relative ${className}`}
+      className={`p-4 rounded-lg border hover:shadow-md transition-shadow cursor-pointer relative ${className}`}
       style={{
         backgroundColor: 'var(--color-bg-card)',
         borderColor: 'var(--color-border-light)',
       }}
     >
-      {/* Action Buttons - Positioned separately */}
-      <div 
-        className="absolute top-3 right-4 flex flex-col items-center opacity-0 group-hover:opacity-100 transition-opacity z-10 gap-1.5"
-      >
-        {onAddToTransaction && (
+      {/* Cart Button - Always Visible */}
+      {onAddToTransaction && (
+        <div className="absolute top-3 right-4 z-10">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -65,58 +63,8 @@ export function CustomerCard({
           >
             <ShoppingCart className="w-4 h-4" />
           </button>
-        )}
-        {onEdit && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit(customer);
-            }}
-            className="p-1.5 rounded transition-all hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 shadow-sm"
-            style={{
-              color: 'var(--color-accent-blue)',
-              backgroundColor: 'var(--color-bg-secondary)',
-              border: '1px solid var(--color-border-light)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--color-accent-blue)';
-              e.currentTarget.style.color = 'var(--color-text-light)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)';
-              e.currentTarget.style.color = 'var(--color-accent-blue)';
-            }}
-            title="Edit customer"
-          >
-            <Edit className="w-4 h-4" />
-          </button>
-        )}
-        {onDelete && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(customer);
-            }}
-            className="p-1.5 rounded transition-all hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 shadow-sm"
-            style={{
-              color: 'var(--color-error)',
-              backgroundColor: 'var(--color-bg-secondary)',
-              border: '1px solid var(--color-border-light)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--color-error)';
-              e.currentTarget.style.color = 'var(--color-text-light)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)';
-              e.currentTarget.style.color = 'var(--color-error)';
-            }}
-            title="Delete customer"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Customer Info */}
       <div className="flex items-center gap-3 mb-3 pr-12">

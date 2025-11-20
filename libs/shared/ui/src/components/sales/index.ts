@@ -22,6 +22,7 @@ export * from './DiscountPanel.js';
 export * from './CouponCodeInput.js';
 export * from './AdjustmentPanel.js';
 export * from './OrderSummary.js';
-export * from './PaymentCollection.js';
+export * from './PaymentPanel.js';
+export * from './CompactPaymentPanel.js';
 export * from './ParkedOrderSearch.js';
 export * from './SalesOrderForm.js';
