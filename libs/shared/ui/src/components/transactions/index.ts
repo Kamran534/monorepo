@@ -37,3 +37,9 @@ export type {
   PreviewLineItem,
 } from './TransactionPrompts.js';
 
+export { ReturnableProductsTable } from './ReturnableProductsTable.js';
+export type { ReturnableProductsTableProps, ReturnableProduct } from './ReturnableProductsTable.js';
+
+export { ReturnDetailsPanel } from './ReturnDetailsPanel.js';
+export type { ReturnDetailsPanelProps } from './ReturnDetailsPanel.js';
+

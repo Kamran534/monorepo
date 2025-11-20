@@ -8,6 +8,7 @@ import { Customers } from '../pages/Customers.js';
 import { Sales } from '../pages/Sales.js';
 import { Payments } from '../pages/Payments.js';
 import { Login } from '../pages/Login.js';
+import { ReturnTransaction } from '../pages/ReturnTransaction.js';
 
 /**
  * Application Routes
@@ -22,6 +23,7 @@ export function AppRoutes() {
       <Route path="/category" element={<Category />} />
       <Route path="/category/:categoryName" element={<Products />} />
       <Route path="/transactions" element={<Transactions />} />
+      <Route path="/transactions/return" element={<ReturnTransaction />} />
       <Route path="/sales" element={<Sales />} />
       <Route path="/payments" element={<Payments />} />
       <Route path="/login" element={<Login />} />

@@ -170,6 +170,8 @@ function AppContent() {
       const isCustomers = currentPath === '/customers';
       const previousPath = stack.length > 1 ? stack[stack.length - 2] : null;
       const isCustomersFromTransactions = isCustomers && previousPath === '/transactions';
+      // Check if current path is return transaction page
+      const isReturnTransaction = currentPath === '/transactions/return';
 
       // Extract category name or product ID for navbar display
       if (isCategoryDetail) {
@@ -192,6 +194,9 @@ function AppContent() {
         setShowBackButton(true);
       } else if (isCustomersFromTransactions) {
         // Customers page opened from transactions - show back button
+        setShowBackButton(true);
+      } else if (isReturnTransaction) {
+        // Return transaction page - always show back button
         setShowBackButton(true);
       } else {
         // Not a detail page - clear refs and hide back button
@@ -219,6 +224,13 @@ function AppContent() {
 
     // Special handling for payments page - always go back to transactions
     if (location.pathname === '/payments') {
+      isNavigatingBackRef.current = true;
+      navigate('/transactions');
+      return;
+    }
+
+    // Special handling for return transaction page - always go back to transactions
+    if (location.pathname === '/transactions/return') {
       isNavigatingBackRef.current = true;
       navigate('/transactions');
       return;
@@ -301,8 +313,11 @@ function AppContent() {
     if (location.pathname === '/sales') {
       return 'Sales & Order';
     }
-    if (location.pathname === '/payments') {
-      return 'Payments';
+    if (location.pathname === '/transactions/return') {
+      return 'Return transaction';
+    }
+    if (location.pathname === '/products') {
+      return 'Products';
     }
     // Category detail page - show category name
     if (isCategoryDetailPage && categoryNameRef.current) {
@@ -311,9 +326,6 @@ function AppContent() {
     // Product detail page - show product name or "Product Details"
     if (isProductDetailPage) {
       return 'Product Details';
-    }
-    if (location.pathname === '/products') {
-      return 'Products';
     }
     return allItems.find(item => item.path === location.pathname)?.label;
   };

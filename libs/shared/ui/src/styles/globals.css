@@ -230,7 +230,7 @@ a {
   --color-accent-blue-dark: #005a9e;
 
   /* ========== Background Colors ========== */
-  --color-bg-primary: #ffffff; /* White - main content */
+  --color-bg-primary: #f5f5f5; /* Light grey - main content */
   --color-bg-secondary: #f8f8f8; /* Light grey - sidebar */
   --color-bg-tertiary: #f3f4f6; /* Very light grey */
   --color-bg-header: #1a202c; /* Dark navy - header */

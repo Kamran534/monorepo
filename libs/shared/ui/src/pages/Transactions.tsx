@@ -1489,19 +1489,12 @@ export function Transactions({
     },
     {
       id: 'return-product',
-      icon: (
-        <div className="relative">
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <rect x="3" y="3" width="14" height="14" rx="2" />
-            <path d="M8 12h8M12 8l-4 4 4 4" />
-          </svg>
-        </div>
-      ),
-      label: 'Return product',
+      icon: <RotateCcw className="w-5 h-5" />,
+      label: 'Return',
       color: 'bg-orange-600',
       square: true,
       rowSpan: 2,
-      onClick: () => console.log('Return product'),
+      onClick: () => navigate('/transactions/return'),
     },
     {
       id: 'change-unit-split',

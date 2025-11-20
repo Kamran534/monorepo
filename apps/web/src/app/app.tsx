@@ -149,6 +149,9 @@ function AppContent() {
         }
       }
 
+      // Check if current path is return transaction page
+      const isReturnTransaction = currentPath === '/transactions/return';
+
       // Extract category name or product ID for navbar display
       if (isCategoryDetail) {
         const categoryNameMatch = currentPath.match(/^\/category\/(.+)$/);
@@ -165,6 +168,9 @@ function AppContent() {
         }
         // Show back button if we have a previous path in stack
         setShowBackButton(stack.length > 1);
+      } else if (isReturnTransaction) {
+        // Return transaction page - always show back button
+        setShowBackButton(true);
       } else {
         // Not a detail page - clear refs and hide back button
         navigationSourceRef.current = null;
@@ -188,6 +194,13 @@ function AppContent() {
 
   const handleBackClick = () => {
     const stack = navigationStackRef.current;
+    
+    // Special handling for return transaction page - always go back to transactions
+    if (location.pathname === '/transactions/return') {
+      isNavigatingBackRef.current = true;
+      navigate('/transactions');
+      return;
+    }
     
     // If we have at least 2 items in stack, navigate to the previous one
     if (stack.length >= 2) {
@@ -248,6 +261,12 @@ function AppContent() {
     if (location.pathname === '/sales') {
       return 'Sales & Order';
     }
+    if (location.pathname === '/transactions/return') {
+      return 'Return transaction';
+    }
+    if (location.pathname === '/products') {
+      return 'Products';
+    }
     // Category detail page - show category name
     if (isCategoryDetailPage && categoryNameRef.current) {
       return categoryNameRef.current;
@@ -255,9 +274,6 @@ function AppContent() {
     // Product detail page - show product name or "Product Details"
     if (isProductDetailPage) {
       return 'Product Details';
-    }
-    if (location.pathname === '/products') {
-      return 'Products';
     }
     return allItems.find(item => item.path === location.pathname)?.label;
   };

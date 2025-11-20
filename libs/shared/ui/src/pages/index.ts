@@ -7,3 +7,4 @@ export * from './Products.js';
 export * from './ProductDetail.js';
 export * from './Sales.js';
 export * from './Payments.js';
+export * from './ReturnTransaction.js';
