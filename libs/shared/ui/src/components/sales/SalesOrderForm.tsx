@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Save, X, Plus, Search, Archive, FolderOpen } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
 import { CustomerSelector, Customer } from './CustomerSelector.js';
@@ -10,6 +10,7 @@ import { OrderSummary, OrderTotals } from './OrderSummary.js';
 import { PaymentPanel, PaymentMethod, Payment } from './PaymentPanel.js';
 import { ParkedOrderSearch } from './ParkedOrderSearch.js';
 import { ConfirmationModal } from '@monorepo/shared-ui';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 import type { ParkedOrderListItem } from '@monorepo/shared-data-access';
 
 export interface CreateSalesOrderInput {
@@ -105,6 +106,7 @@ export function SalesOrderForm({
   const [showParkedOrderModal, setShowParkedOrderModal] = useState(false);
   const [currentParkedOrderId, setCurrentParkedOrderId] = useState<string | null>(null);
   const [showParkConfirm, setShowParkConfirm] = useState(false);
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
 
   // Calculate order totals
   const orderTotals = useMemo<OrderTotals>(() => {
@@ -152,12 +154,7 @@ export function SalesOrderForm({
     };
   }, [lineItems, orderDiscount, couponValidation, adjustment, taxRate]);
 
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+  const formatCurrency = useCallback((amount: number) => formatAmount(amount), [formatAmount]);
 
   const handleUpdateLineItem = (id: string, updates: Partial<LineItem>) => {
     setLineItems((prev) =>

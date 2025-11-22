@@ -1,6 +1,7 @@
 import React from 'react';
 import { Receipt, Tag, DollarSign, Calculator } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface OrderTotals {
   subtotal: number;
@@ -30,12 +31,8 @@ export function OrderSummary({
   showDetails = true,
   className = '',
 }: OrderSummaryProps) {
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatCurrency = React.useCallback((amount: number) => formatAmount(amount), [formatAmount]);
 
   const totalDiscount =
     totals.lineItemDiscount + totals.orderDiscount + totals.couponDiscount;

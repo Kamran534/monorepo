@@ -319,18 +319,16 @@ export const SalesPersonModal: React.FC<SalesPersonModalProps> = ({
                 {filteredPersons.map((person) => {
                   const isSelected = selectedId === person.id;
                   return (
-                      <button
+                    <button
                       key={person.id}
                       onClick={() => handleSelect(person)}
-                      className="w-full text-left p-3 rounded transition-colors shadow-sm"
+                      className="w-full text-left p-3 rounded transition-colors shadow-sm hover:opacity-90"
                       style={{
-                        backgroundColor: isSelected
-                          ? 'var(--color-warning-strong, #d97706)'
-                          : 'var(--color-warning, #facc15)',
-                        color: 'var(--color-warning-contrast, var(--color-text-primary, #1a1a1a))',
+                        backgroundColor: isSelected ? '#1A2B3C' : '#22344B',
+                        color: '#FFFFFF',
                         border: isSelected
                           ? '1px solid rgba(255,255,255,0.35)'
-                          : '1px solid var(--color-warning-border, rgba(0,0,0,0.1))',
+                          : '1px solid rgba(255,255,255,0.15)',
                       }}
                     >
                       <div className="font-semibold text-sm">{person.name}</div>

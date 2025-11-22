@@ -51,6 +51,8 @@ export interface CreateSalesOrderInput {
   giftCardNumber?: string;
   notes?: string;
   customerNotes?: string;
+  taxAmountOverride?: number;
+  totalAmountOverride?: number;
 }
 
 export interface SalesOrder {
@@ -379,18 +381,20 @@ export class SalesOrderRepository {
       orderDiscount = ((subtotal - lineItemDiscount) * data.orderLevelDiscount.percent) / 100;
     }
 
-    // Calculate subtotal after all discounts
+    const DEFAULT_TAX_RATE = 0.03;
     const subtotalAfterDiscounts = subtotal - lineItemDiscount - orderDiscount;
-
-    // Add adjustment
     const adjustmentAmount = data.adjustment?.amount || 0;
     const subtotalAfterAdjustment = subtotalAfterDiscounts + adjustmentAmount;
 
-    // Calculate tax (assuming 10% for now - should come from settings)
-    const taxAmount = Math.max(0, subtotalAfterAdjustment * 0.1);
+    const taxAmount =
+      data.taxAmountOverride !== undefined
+        ? data.taxAmountOverride
+        : Math.max(0, subtotalAfterAdjustment * DEFAULT_TAX_RATE);
 
-    // Calculate final total
-    const totalAmount = subtotalAfterAdjustment + taxAmount;
+    const totalAmount =
+      data.totalAmountOverride !== undefined
+        ? data.totalAmountOverride
+        : subtotalAfterAdjustment + taxAmount;
 
     return {
       subtotal,

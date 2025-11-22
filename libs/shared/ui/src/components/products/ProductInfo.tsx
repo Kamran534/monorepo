@@ -1,10 +1,12 @@
 import React from 'react';
 import { ComponentProps } from '../../types.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
+import { parsePriceValue } from '../../utils/price.js';
 
 export interface ProductInfoProps extends ComponentProps {
   productName: string;
   productNumber: string;
-  price: string;
+  price?: string | number;
   currentQuantity?: number;
   unit?: string;
   onAddItem?: () => void;
@@ -37,6 +39,13 @@ export function ProductInfo({
   onOtherStoresInventory,
   className = '',
 }: ProductInfoProps) {
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formattedPrice = React.useMemo(() => {
+    const numeric = parsePriceValue(price ?? null);
+    if (numeric === null) return '';
+    return `Rs ${formatAmount(numeric, { showSymbol: false })}`;
+  }, [price, formatAmount]);
+
   return (
     <div className={`flex flex-col gap-6 ${className}`}>
       <div>
@@ -53,7 +62,7 @@ export function ProductInfo({
             </div>
           </div>
           <div className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-            {price}
+            {formattedPrice}
           </div>
         </div>
       </div>

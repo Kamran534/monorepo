@@ -8,6 +8,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ParkedOrderListItem } from '@monorepo/shared-data-access';
 import { Search, User, Clock3, DollarSign, Archive } from 'lucide-react';
 import { SidePanel } from '@monorepo/shared-ui';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface ComponentProps {
   className?: string;
@@ -38,6 +39,7 @@ export function ParkedOrderSearch({
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
 
   useEffect(() => {
     if (isOpen) {
@@ -51,11 +53,7 @@ export function ParkedOrderSearch({
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleString();
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+  const formatCurrency = React.useCallback((amount: number) => formatAmount(amount), [formatAmount]);
 
   const handleResume = (order: ParkedOrderListItem) => {
     setHighlightedId(order.id);

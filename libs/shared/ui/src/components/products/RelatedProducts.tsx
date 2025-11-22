@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ComponentProps } from '../../types.js';
 import { Product } from './ProductList.js';
 import { Package } from 'lucide-react';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
+import { parsePriceValue } from '../../utils/price.js';
 
 export interface RelatedProductsProps extends ComponentProps {
   products: Product[];
@@ -57,6 +59,12 @@ export function RelatedProducts({
           const hasImage = !!product.image;
           const [imageError, setImageError] = useState(false);
           const [imageLoaded, setImageLoaded] = useState(false);
+          const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+          const formattedPrice = useMemo(() => {
+            const numeric = parsePriceValue(product.price ?? null);
+            if (numeric === null) return null;
+            return `Rs ${formatAmount(numeric, { showSymbol: false })}`;
+          }, [product.price, formatAmount]);
 
           return (
             <button
@@ -104,9 +112,9 @@ export function RelatedProducts({
                     {formatRating(product.rating, product.reviewCount)}
                   </div>
                 )}
-                {product.price && (
+                {formattedPrice && (
                   <div className="text-sm font-semibold text-left" style={{ color: 'var(--color-text-primary)' }}>
-                    {product.price}
+                    {formattedPrice}
                   </div>
                 )}
               </div>

@@ -11,6 +11,7 @@ import {
   useToast,
 } from '@monorepo/shared-ui';
 import { useCart } from '@monorepo/shared-ui';
+import { parsePriceValue } from '../utils/price.js';
 
 export interface ProductDetailRepository {
   getProductById(productId: string): Promise<{
@@ -377,11 +378,10 @@ export function ProductDetail({ repository }: ProductDetailProps) {
                 currentQuantity={totalQuantity}
                 unit="Each"
                 onAddItem={() => {
-                  // Don't add to cart if quantity is 0
                   if (totalQuantity <= 0) {
                     return;
                   }
-                  const numericPrice = parseFloat((product.price || '0').replace(/[^0-9.]/g, '')) || 0;
+                  const numericPrice = parsePriceValue(product.price ?? null) ?? 0;
                   // Get first variant ID if available, otherwise use product ID
                   const variantId = productData?.variants?.[0]?.id || productData?.id;
                   addItem({ 

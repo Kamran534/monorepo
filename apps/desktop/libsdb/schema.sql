@@ -460,6 +460,7 @@ CREATE TABLE IF NOT EXISTS PaymentMethod (
     code TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     type TEXT NOT NULL CHECK(type IN ('Cash', 'Card', 'BankTransfer', 'Check', 'GiftCard', 'StoreCredit', 'OnAccount')),
+    currency TEXT DEFAULT 'USD' CHECK(currency IN ('USD', 'EUR', 'GBP', 'PKR', 'INR', 'CAD', 'AUD')),
     isActive INTEGER DEFAULT 1,
     requiresAuthorization INTEGER DEFAULT 0,
     accountId TEXT,
@@ -758,7 +759,10 @@ CREATE TABLE IF NOT EXISTS ExchangeOrder (
     refundAmount REAL DEFAULT 0,
     exchangeDate TEXT NOT NULL DEFAULT (datetime('now')),
     processedBy TEXT NOT NULL,
+    status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Completed', 'Cancelled')),
+    notes TEXT,
     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+    updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (originalOrderId) REFERENCES SaleOrder(id),
     FOREIGN KEY (newOrderId) REFERENCES SaleOrder(id),
     FOREIGN KEY (processedBy) REFERENCES User(id)
@@ -767,6 +771,26 @@ CREATE TABLE IF NOT EXISTS ExchangeOrder (
 CREATE INDEX idx_exchangeOrder_exchangeNumber ON ExchangeOrder(exchangeNumber);
 CREATE INDEX idx_exchangeOrder_originalOrderId ON ExchangeOrder(originalOrderId);
 CREATE INDEX idx_exchangeOrder_newOrderId ON ExchangeOrder(newOrderId);
+CREATE INDEX idx_exchangeOrder_status ON ExchangeOrder(status);
+
+CREATE TABLE IF NOT EXISTS ExchangeLineItem (
+    id TEXT PRIMARY KEY NOT NULL,
+    exchangeId TEXT NOT NULL,
+    returnedVariantId TEXT NOT NULL,
+    returnedQuantity INTEGER NOT NULL,
+    returnedUnitPrice REAL NOT NULL,
+    exchangedVariantId TEXT NOT NULL,
+    exchangedQuantity INTEGER NOT NULL,
+    exchangedUnitPrice REAL NOT NULL,
+    priceDifference REAL NOT NULL,
+    FOREIGN KEY (exchangeId) REFERENCES ExchangeOrder(id) ON DELETE CASCADE,
+    FOREIGN KEY (returnedVariantId) REFERENCES ProductVariant(id),
+    FOREIGN KEY (exchangedVariantId) REFERENCES ProductVariant(id)
+);
+
+CREATE INDEX idx_exchangeLineItem_exchangeId ON ExchangeLineItem(exchangeId);
+CREATE INDEX idx_exchangeLineItem_returnedVariantId ON ExchangeLineItem(returnedVariantId);
+CREATE INDEX idx_exchangeLineItem_exchangedVariantId ON ExchangeLineItem(exchangedVariantId);
 
 -- ============================================
 -- 10. DISCOUNTS & PROMOTIONS
@@ -1039,3 +1063,35 @@ CREATE TABLE IF NOT EXISTS SystemSetting (
 
 CREATE INDEX idx_systemSetting_key ON SystemSetting(key);
 CREATE INDEX idx_systemSetting_category ON SystemSetting(category);
+
+-- ============================================
+-- 14. STORE CONFIGURATION
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS StoreConfig (
+    id TEXT PRIMARY KEY NOT NULL,
+    organizationName TEXT NOT NULL,
+    organizationCode TEXT UNIQUE NOT NULL,
+    defaultCurrency TEXT DEFAULT 'USD' CHECK(defaultCurrency IN ('USD', 'EUR', 'GBP', 'PKR', 'INR', 'CAD', 'AUD')),
+    returnPolicy TEXT DEFAULT 'RefundAndExchange' CHECK(returnPolicy IN ('NoReturns', 'ExchangeOnly', 'RefundAndExchange')),
+    allowReturns INTEGER DEFAULT 1,
+    allowRefunds INTEGER DEFAULT 1,
+    allowExchanges INTEGER DEFAULT 1,
+    returnWindowDays INTEGER DEFAULT 30,
+    requireOriginalReceipt INTEGER DEFAULT 1,
+    allowExchangeSameAmount INTEGER DEFAULT 1,
+    allowExchangeGreaterAmount INTEGER DEFAULT 1,
+    allowExchangeLowerAmount INTEGER DEFAULT 0,
+    restockFeePercentage REAL DEFAULT 0 CHECK(restockFeePercentage >= 0 AND restockFeePercentage <= 100),
+    taxId TEXT,
+    registrationNumber TEXT,
+    contactEmail TEXT,
+    contactPhone TEXT,
+    address TEXT,
+    logo TEXT,
+    website TEXT,
+    createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+    updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_storeConfig_organizationCode ON StoreConfig(organizationCode);

@@ -429,7 +429,12 @@ function App() {
 }
 
 const container = document.getElementById('root');
-if (container) {
-  const root = createRoot(container);
-  root.render(<App />);
+if (!container) {
+  throw new Error('Root element #root not found');
 }
+
+const existingRoot = (container as any).__reactRoot ?? (container as any).__root;
+const root = existingRoot || createRoot(container);
+(container as any).__reactRoot = root;
+
+root.render(<App />);

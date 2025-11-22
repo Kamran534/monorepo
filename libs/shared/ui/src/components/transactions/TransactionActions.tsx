@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ComponentProps } from '../../types.js';
 import { TransactionVerticalNav } from './TransactionVerticalNav.js';
 import { FileText, Tag, Boxes, Zap, Package, ShoppingCart } from 'lucide-react';
 import type { Product } from '../products/ProductList.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
+import { parsePriceValue } from '../../utils/price.js';
 
 export interface ActionButton {
   id: string;
@@ -20,6 +22,7 @@ export interface ActionButton {
     left: { icon: React.ReactNode; onClick?: () => void; disabled?: boolean };
     right: { icon: React.ReactNode; onClick?: () => void; disabled?: boolean };
   };
+  section?: 'actions' | 'orders' | 'discounts' | 'products';
 }
 
 export interface TransactionActionsProps extends ComponentProps {
@@ -48,6 +51,7 @@ function ProductGridCard({ product, onProductClick, onAddProduct }: ProductGridC
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
 
   useEffect(() => {
     if (hasImage && imgRef.current) {
@@ -63,6 +67,11 @@ function ProductGridCard({ product, onProductClick, onAddProduct }: ProductGridC
 
   const showImage = hasImage && !imageError && imageLoaded;
   const textColor = showImage ? 'var(--color-text-light)' : 'var(--color-text-primary)';
+  const formattedPrice = useMemo(() => {
+    const numeric = parsePriceValue(product.price ?? null);
+    if (numeric === null) return null;
+    return `Rs ${formatAmount(numeric, { showSymbol: false })}`;
+  }, [product.price, formatAmount]);
 
   return (
     <div
@@ -136,9 +145,9 @@ function ProductGridCard({ product, onProductClick, onAddProduct }: ProductGridC
           >
             <ShoppingCart className="w-3.5 h-3.5" />
           </button>
-          {product.price && (
+          {formattedPrice && (
             <span className="text-[11px] font-semibold" style={{ color: textColor }}>
-              {product.price}
+              {formattedPrice}
             </span>
           )}
         </div>
@@ -209,10 +218,15 @@ export function TransactionActions({
     };
   }, []);
 
-  // Separate actions by color group
-  const orangeActions = actions.filter(a => a.color?.includes('orange'));
-  const grayActions = actions.filter(a => a.color?.includes('gray'));
-  const greenActions = actions.filter(a => a.color?.includes('green'));
+  const actionsBySection = {
+    actions: actions.filter(a => (a.section ?? 'actions') === 'actions'),
+    discounts: actions.filter(a => a.section === 'discounts'),
+  };
+
+  // Separate actions by color group for the main Actions tab
+  const orangeActions = actionsBySection.actions.filter(a => a.color?.includes('orange'));
+  const grayActions = actionsBySection.actions.filter(a => a.color?.includes('gray'));
+  const greenActions = actionsBySection.actions.filter(a => a.color?.includes('green'));
 
   // Empty state component for tabs
   const renderEmptyState = (icon: React.ReactNode, title: string) => {
@@ -437,7 +451,15 @@ export function TransactionActions({
       case 'orders':
         return renderEmptyState(<FileText className="w-8 h-8" />, 'Orders');
       case 'discounts':
-        return renderEmptyState(<Tag className="w-8 h-8" />, 'Discounts');
+        const discountActions = actionsBySection.discounts;
+        if (discountActions.length === 0) {
+          return renderEmptyState(<Tag className="w-8 h-8" />, 'Discounts');
+        }
+        return (
+          <div className="grid grid-cols-2 gap-1 overflow-hidden" style={{ gridAutoRows: 'minmax(80px, auto)' }}>
+            {discountActions.map(renderButton)}
+          </div>
+        );
       case 'products':
         if (limitedProducts.length === 0) {
           return renderEmptyState(<Boxes className="w-8 h-8" />, 'Products');

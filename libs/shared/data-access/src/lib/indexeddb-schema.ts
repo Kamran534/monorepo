@@ -184,6 +184,15 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
     },
 
     // Payment Methods
+    PaymentMethod: {
+      keyPath: 'id',
+      indexes: {
+        code: { keyPath: 'code', unique: true },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
     payment_methods: {
       keyPath: 'id',
       indexes: {
@@ -335,6 +344,50 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
       },
     },
 
+    // Return Management
+    ReturnOrder: {
+      keyPath: 'id',
+      indexes: {
+        returnNumber: { keyPath: 'returnNumber', unique: true },
+        originalOrderId: { keyPath: 'originalOrderId' },
+        customerId: { keyPath: 'customerId' },
+        status: { keyPath: 'status' },
+        returnDate: { keyPath: 'returnDate' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    ReturnLineItem: {
+      keyPath: 'id',
+      indexes: {
+        returnId: { keyPath: 'returnId' },
+        originalLineItemId: { keyPath: 'originalLineItemId' },
+        variantId: { keyPath: 'variantId' },
+      },
+    },
+
+    // Exchange Management
+    ExchangeOrder: {
+      keyPath: 'id',
+      indexes: {
+        exchangeNumber: { keyPath: 'exchangeNumber', unique: true },
+        originalOrderId: { keyPath: 'originalOrderId' },
+        newOrderId: { keyPath: 'newOrderId' },
+        status: { keyPath: 'status' },
+        exchangeDate: { keyPath: 'exchangeDate' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    ExchangeLineItem: {
+      keyPath: 'id',
+      indexes: {
+        exchangeId: { keyPath: 'exchangeId' },
+        returnedVariantId: { keyPath: 'returnedVariantId' },
+        exchangedVariantId: { keyPath: 'exchangedVariantId' },
+      },
+    },
+
     returns: {
       keyPath: 'id',
       indexes: {
@@ -405,6 +458,15 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
     app_settings: {
       keyPath: 'key',
     },
+
+    // Store Configuration
+    StoreConfig: {
+      keyPath: 'id',
+      indexes: {
+        organizationCode: { keyPath: 'organizationCode', unique: true },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
   },
 };
 
@@ -412,7 +474,7 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
  * Database version
  * Increment this when schema changes
  */
-export const CPOS_DB_VERSION = 4;
+export const CPOS_DB_VERSION = 5;
 
 /**
  * Database name

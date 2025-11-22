@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Tag, Check, X, Loader } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface CouponValidation {
   isValid: boolean;
@@ -44,13 +45,8 @@ export function CouponCodeInput({
   className = '',
 }: CouponCodeInputProps) {
   const [inputValue, setInputValue] = useState(couponCode);
-
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatCurrency = React.useCallback((amount: number) => formatAmount(amount), [formatAmount]);
 
   const handleApplyCoupon = () => {
     const code = inputValue.trim().toUpperCase();

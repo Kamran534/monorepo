@@ -1,6 +1,7 @@
 import React from 'react';
 import { DollarSign, FileText } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface OrderAdjustment {
   amount: number;
@@ -25,12 +26,11 @@ export function AdjustmentPanel({
   disabled = false,
   className = '',
 }: AdjustmentPanelProps) {
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(Math.abs(amount));
-  };
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatCurrency = React.useCallback(
+    (amount: number) => `Rs ${formatAmount(Math.abs(amount), { showSymbol: false })}`,
+    [formatAmount],
+  );
 
   const handleAmountChange = (value: string) => {
     const amount = parseFloat(value) || 0;

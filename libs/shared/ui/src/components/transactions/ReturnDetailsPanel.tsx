@@ -2,27 +2,28 @@ import React, { useState } from 'react';
 import { Package, ArrowRight } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
 import type { ReturnableProduct } from './ReturnableProductsTable.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface ReturnDetailsPanelProps extends ComponentProps {
   selectedProduct?: ReturnableProduct | null;
   returningQuantity: number;
   onReturningQuantityChange?: (quantity: number) => void;
+  onAddToCart?: () => void;
 }
 
 export function ReturnDetailsPanel({
   selectedProduct,
   returningQuantity,
   onReturningQuantityChange,
+  onAddToCart,
   className = '',
 }: ReturnDetailsPanelProps) {
   const [imageError, setImageError] = useState(false);
-
-  const formatCurrency = (amount: number): string =>
-    new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-    }).format(amount);
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatCurrency = React.useCallback(
+    (amount: number) => formatAmount(amount, { minimumFractionDigits: 2 }),
+    [formatAmount],
+  );
 
   const formatNumber = (num: number): string => {
     return num.toFixed(1);
@@ -159,9 +160,14 @@ export function ReturnDetailsPanel({
                     color: '#FFFFFF',
                   }}
                   onClick={() => {
-                    // Increment quantity
-                    const newQty = Math.min(returningQuantity + 1, selectedProduct.available);
-                    onReturningQuantityChange?.(newQty);
+                    if (onAddToCart) {
+                      // Add to cart with negative billing
+                      onAddToCart();
+                    } else {
+                      // Fallback: Increment quantity
+                      const newQty = Math.min(returningQuantity + 1, selectedProduct.available);
+                      onReturningQuantityChange?.(newQty);
+                    }
                   }}
                 >
                   <ArrowRight className="w-6 h-6" />

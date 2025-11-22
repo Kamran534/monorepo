@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Package, ShoppingCart } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
 import { ViewMode } from './ProductActionButtons.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
+import { parsePriceValue } from '../../utils/price.js';
 
 export interface Product {
   id: string;
   productNumber: string;
   name: string;
-  price?: string;
+  price?: string | number;
   rating?: number;
   reviewCount?: number;
   image?: string;
@@ -29,9 +31,18 @@ interface ProductGridCardProps {
   onProductClick?: (product: Product) => void;
   formatRating: (rating?: number, reviewCount?: number) => string;
   onAddProduct?: (product: Product) => void;
+  formatPrice: (price?: string | number) => string | null;
 }
 
-function ProductGridCard({ product, isSelected, hideDetails, onProductClick, formatRating, onAddProduct }: ProductGridCardProps) {
+function ProductGridCard({
+  product,
+  isSelected,
+  hideDetails,
+  onProductClick,
+  formatRating,
+  onAddProduct,
+  formatPrice,
+}: ProductGridCardProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -178,9 +189,9 @@ function ProductGridCard({ product, isSelected, hideDetails, onProductClick, for
         
         {/* Price - Bottom Right */}
         <div>
-          {!hideDetails && product.price && (
+          {!hideDetails && (
             <span className="text-sm font-semibold">
-              {product.price}
+              {formatPrice(product.price) ?? ''}
             </span>
           )}
         </div>
@@ -219,6 +230,16 @@ export function ProductList({
     const reviewText = reviewCount ? ` (${reviewCount})` : '';
     return `${rating.toFixed(1)}${reviewText}`;
   };
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatPrice = useCallback(
+    (price?: string | number) => {
+      const numeric = parsePriceValue(price);
+      if (numeric === null) return null;
+      const formatted = formatAmount(numeric, { showSymbol: false });
+      return `Rs ${formatted}`;
+    },
+    [formatAmount],
+  );
 
   if (viewMode === 'grid') {
     return (
@@ -240,6 +261,7 @@ export function ProductList({
                 onProductClick={onProductClick}
                 formatRating={formatRating}
                 onAddProduct={onAddProduct}
+                formatPrice={formatPrice}
               />
             ))}
           </div>
@@ -330,7 +352,7 @@ export function ProductList({
               
               {/* Price */}
               <div className="w-32 flex-shrink-0">
-                <span className="text-sm">{hideDetails ? '...' : (product.price || '')}</span>
+                <span className="text-sm">{hideDetails ? '...' : (formatPrice(product.price) ?? '')}</span>
               </div>
               
               {/* Rating */}

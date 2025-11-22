@@ -21,11 +21,23 @@
       "@monorepo/shared-hooks-scanner": [
         "libs/shared/hooks/scanner/src/index.ts"
       ],
+      "@monorepo/shared-hooks-currency": [
+        "libs/shared/hooks/currency/src/index.ts"
+      ],
+      "@monorepo/shared-hooks-currency/*": [
+        "libs/shared/hooks/currency/src/*"
+      ],
       "@monorepo/shared-hooks-keyboard-shortcuts": [
         "libs/shared/hooks/keyboard-shortcuts/src/index.ts"
       ],
       "@monorepo/shared-hooks-printer": [
         "libs/shared/hooks/printer/src/index.ts"
+      ],
+      "@monorepo/shared-hooks-datetime": [
+        "libs/shared/hooks/datetime/src/index.ts"
+      ],
+      "@monorepo/shared-hooks-datetime/*": [
+        "libs/shared/hooks/datetime/src/*"
       ],
       "@monorepo/shared-data-access": ["libs/shared/data-access/src/index.ts"],
       "@monorepo/shared-data-access/*": ["libs/shared/data-access/src/*"],

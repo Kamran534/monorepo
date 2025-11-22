@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Trash2, Plus, Minus, User, Percent, DollarSign } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface SalesPerson {
   id: string;
@@ -63,13 +64,8 @@ export function LineItemEditor({
   className = '',
 }: LineItemEditorProps) {
   const [expandedLineId, setExpandedLineId] = useState<string | null>(null);
-
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatCurrency = React.useCallback((amount: number) => formatAmount(amount), [formatAmount]);
 
   const handleQuantityChange = (lineId: string, delta: number) => {
     const lineItem = lineItems.find(l => l.id === lineId);

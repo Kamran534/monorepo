@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CornerDownLeft } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface PaymentMethod {
   id: string;
@@ -52,13 +53,8 @@ export function CompactPaymentPanel({
 }: CompactPaymentPanelProps) {
   const [selectedMethodId, setSelectedMethodId] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<string>('');
-  const methodInputRef = useRef<HTMLInputElement>(null);
-
-  const formatCurrency = (amount: number): string =>
-    new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
 
   const filteredMethods = useMemo(() => {
     if (mode === 'cash') {
@@ -80,10 +76,11 @@ export function CompactPaymentPanel({
   }, [selectedMethodId, availableMethods]);
 
   useEffect(() => {
-    if (selectedMethodId && methodInputRef.current && !disabled) {
-      methodInputRef.current.focus();
+    if (!disabled && amountInputRef.current) {
+      amountInputRef.current.focus();
+      amountInputRef.current.select();
     }
-  }, [selectedMethodId, disabled]);
+  }, [selectedMethodId, disabled, mode]);
 
   const keypadAmount = parseFloat(paymentAmount || '0') || 0;
 
@@ -120,6 +117,24 @@ export function CompactPaymentPanel({
     setPaymentAmount('');
   };
 
+  const handleManualInput = (value: string) => {
+    if (disabled) return;
+    const sanitized = value
+      .replace(/[^0-9.]/g, '')
+      .replace(/(\..*)\./g, '$1');
+    setPaymentAmount(sanitized);
+  };
+
+  const handleAmountKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleAddPaymentInternal();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setPaymentAmount('');
+    }
+  };
+
   const handleAddPaymentInternal = () => {
     if (!selectedMethodId || !paymentAmount) return;
     const amount = parseFloat(paymentAmount);
@@ -144,7 +159,7 @@ export function CompactPaymentPanel({
             Amount due
           </p>
           <p className="text-4xl font-bold mb-4" style={{ color: 'var(--color-text-primary)' }}>
-            {formatCurrency(amountDue).replace('$', '')}
+            {formatAmount(amountDue, { showSymbol: false })}
           </p>
         </div>
       </div>
@@ -155,17 +170,46 @@ export function CompactPaymentPanel({
           <p className="text-xs uppercase tracking-wide font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
             Payment amount
           </p>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-4xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-              {formatCurrency(keypadAmount)}
-            </p>
-            <button
-              onClick={() => setPaymentAmount('')}
-              className="text-2xl px-2 hover:opacity-70"
-              style={{ color: 'var(--color-text-secondary)' }}
+          <div className="relative mb-3">
+            <div
+              className="flex items-center justify-between border rounded px-3 py-2"
+              style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-card)' }}
             >
-              ×
-            </button>
+              <p
+                className="text-3xl md:text-4xl font-bold"
+                style={{
+                  color: 'var(--color-text-primary)',
+                  minHeight: '42px',
+                  maxWidth: 'calc(100% - 32px)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {paymentAmount ? formatAmount(keypadAmount) : formatAmount(0)}
+              </p>
+              <button
+                onClick={() => setPaymentAmount('')}
+                className="text-2xl px-2 hover:opacity-70"
+                style={{ color: 'var(--color-text-secondary)' }}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <input
+              ref={amountInputRef}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={paymentAmount}
+              onChange={(e) => handleManualInput(e.target.value)}
+              onKeyDown={handleAmountKeyDown}
+              className="absolute inset-y-0 left-0 opacity-0 cursor-text"
+              style={{ width: 'calc(100% - 40px)' }}
+              aria-label="Payment amount input"
+              disabled={disabled}
+            />
           </div>
         </div>
 
@@ -193,7 +237,7 @@ export function CompactPaymentPanel({
           disabled={disabled || !selectedMethodId || !paymentAmount}
           className="w-full h-12 cursor-pointer text-sm font-semibold uppercase tracking-wide hover:opacity-90 transition-opacity flex items-center justify-center"
           style={{
-            backgroundColor: '#ef4444',
+            backgroundColor: '#ea580c',
             color: '#ffffff',
           }}
         >
@@ -207,16 +251,16 @@ export function CompactPaymentPanel({
           Denominations
         </p>
 
-        <div className="flex flex-wrap gap-2 max-w-[280px] ml-24">
+          <div className="flex flex-wrap gap-2 max-w-[280px] ml-24">
           {DENOMINATIONS.map((value) => (
             <button
               key={value}
               onClick={() => handleDenomination(value)}
               disabled={disabled}
               className="w-32 h-32 text-white text-base font-semibold hover:opacity-90 transition-opacity flex items-end justify-start pb-3 pl-3"
-              style={{ backgroundColor: '#ef4444' }}
+                style={{ backgroundColor: '#ea580c' }}
             >
-              {formatCurrency(value).replace('.00', '')}
+              {formatAmount(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </button>
           ))}
         </div>  

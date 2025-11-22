@@ -19,6 +19,7 @@ export interface TransactionNumpadProps extends ComponentProps {
   onAddCustomer?: () => void;
   customer?: Customer | null;
   onRemoveCustomer?: () => void;
+  manualBarcodeMode?: boolean;
 }
 
 /**
@@ -34,6 +35,7 @@ export function TransactionNumpad({
   onAddCustomer,
   customer,
   onRemoveCustomer,
+  manualBarcodeMode = false,
   className = '',
 }: TransactionNumpadProps) {
   // Ensure the display never overflows the box: show the last 12 chars with leading ellipsis
@@ -91,6 +93,7 @@ export function TransactionNumpad({
   const detailTextStyle = { color: 'var(--color-text-secondary)' };
   const detailIconStyle = { color: 'var(--color-text-secondary)', opacity: 0.8 };
 
+  const placeholderText = manualBarcodeMode ? 'Type barcode and press Enter' : 'Search or enter quantity';
   return (
     <div
       className={`flex flex-col h-full w-full md:w-80 lg:w-96 min-h-0 overflow-y-auto md:overflow-visible ${className}`}
@@ -238,7 +241,7 @@ export function TransactionNumpad({
             fontStyle: displayValue ? 'normal' : 'italic',
           }}
         >
-          {displayValue || 'Search or enter quantity'}
+          {displayValue || placeholderText}
         </div>
 
         {/* Numpad Grid */}

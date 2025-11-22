@@ -7,6 +7,54 @@
 
 import type { LocalDbClient } from '../types';
 
+const SQLITE_TABLE_MISSING_MESSAGE = 'no such table: PaymentMethod';
+
+const PAYMENT_METHOD_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS PaymentMethod (
+  id TEXT PRIMARY KEY NOT NULL,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('Cash', 'Card', 'BankTransfer', 'Check', 'GiftCard', 'StoreCredit', 'OnAccount')),
+  currency TEXT DEFAULT 'USD' CHECK(currency IN ('USD', 'EUR', 'GBP', 'PKR', 'INR', 'CAD', 'AUD')),
+  isActive INTEGER DEFAULT 1,
+  requiresAuthorization INTEGER DEFAULT 0,
+  accountId TEXT,
+  sortOrder INTEGER DEFAULT 0,
+  icon TEXT,
+  createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+  updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+);`.trim();
+
+const PAYMENT_METHOD_CODE_INDEX_SQL = `
+CREATE INDEX IF NOT EXISTS idx_paymentMethod_code ON PaymentMethod(code);`.trim();
+
+const PAYMENT_METHOD_ACTIVE_INDEX_SQL = `
+CREATE INDEX IF NOT EXISTS idx_paymentMethod_isActive ON PaymentMethod(isActive);`.trim();
+
+const PAYMENT_METHOD_TABLE_CHECK_SQL = 'SELECT 1 FROM PaymentMethod LIMIT 1';
+
+async function ensurePaymentMethodTable(localDb: LocalDbClient) {
+  try {
+    await localDb.query(PAYMENT_METHOD_TABLE_CHECK_SQL);
+    return;
+  } catch (error: any) {
+    const message: string = error?.message ?? '';
+    if (!message.includes(SQLITE_TABLE_MISSING_MESSAGE)) {
+      throw error;
+    }
+    console.warn('[SeedPaymentMethods] PaymentMethod table missing. Creating schema...');
+    try {
+      await localDb.execute(PAYMENT_METHOD_TABLE_SQL);
+      await localDb.execute(PAYMENT_METHOD_CODE_INDEX_SQL);
+      await localDb.execute(PAYMENT_METHOD_ACTIVE_INDEX_SQL);
+      console.log('[SeedPaymentMethods] PaymentMethod table created successfully.');
+    } catch (schemaError) {
+      console.error('[SeedPaymentMethods] Failed to create PaymentMethod table:', schemaError);
+      throw schemaError;
+    }
+  }
+}
+
 export interface PaymentMethod {
   id: string;
   code: string;
@@ -91,6 +139,8 @@ const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
 export async function seedPaymentMethods(localDb: LocalDbClient): Promise<void> {
   try {
     console.log('[SeedPaymentMethods] Checking if payment methods need to be seeded...');
+
+    await ensurePaymentMethodTable(localDb);
 
     // Check if any payment methods already exist
     const existingMethods = await localDb.query<PaymentMethod>('SELECT * FROM PaymentMethod LIMIT 1');

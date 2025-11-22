@@ -57,6 +57,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           price: existing.price, // keep existing price
           total: existing.price * newQuantity,
           availableQuantity: availableQty, // Update available quantity
+          isReturn: existing.isReturn || (item as any).isReturn || false, // Preserve return flag
         };
         return updated;
       }
@@ -94,6 +95,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         productId: item.productId,
         productVariantId: item.productVariantId,
         availableQuantity: availableQty,
+        isReturn: (item as any).isReturn || false, // Preserve return flag
       }];
     });
   }, []);

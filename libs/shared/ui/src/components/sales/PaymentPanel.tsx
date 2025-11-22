@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Banknote, Check, CornerDownLeft, CreditCard, Trash2 } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface PaymentMethod {
   id: string;
@@ -57,12 +58,8 @@ export function PaymentPanel({
   const [cardBrand, setCardBrand] = useState<string>('');
   const [authCode, setAuthCode] = useState<string>('');
   const methodInputRef = useRef<HTMLInputElement>(null);
-
-  const formatCurrency = (amount: number): string =>
-    new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatCurrency = React.useCallback((amount: number) => formatAmount(amount), [formatAmount]);
 
   const filteredMethods = useMemo(() => {
     if (mode === 'cash') {

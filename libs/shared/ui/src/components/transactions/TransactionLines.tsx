@@ -1,6 +1,7 @@
 import React from 'react';
 import { Package, CreditCard, ChevronDown, ChevronRight } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface LineItem {
   id: string;
@@ -11,6 +12,7 @@ export interface LineItem {
   productId?: string; // Product ID for inventory tracking
   productVariantId?: string; // Variant ID for inventory tracking
   availableQuantity?: number; // Available stock quantity
+  isReturn?: boolean; // Flag to indicate if this is a return item
 }
 
 export interface BillingSummary {
@@ -63,14 +65,30 @@ export function TransactionLines({
   className = '',
 }: TransactionLinesProps) {
   const [expandedItemId, setExpandedItemId] = React.useState<string | null>(null);
-  const formatCurrency = (amount: number): string =>
-    new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+  const { formatAmount, currency } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatCurrency = React.useCallback(
+    (amount: number) => `Rs ${formatAmount(amount, { showSymbol: false })}`,
+    [formatAmount],
+  );
+  const paymentCurrencyLabel = React.useMemo(() => (currency === 'PKR' ? 'Rs' : currency), [currency]);
 
-  const fallbackSubtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
-  const fallbackTax = fallbackSubtotal * 0.1;
+  // Calculate subtotal: regular items add, return items subtract (since their total is positive but represents a credit)
+  const fallbackSubtotal = lineItems.reduce((sum, item) => {
+    if (item.isReturn || (item.price < 0 && item.quantity < 0)) {
+      // Return items: subtract their absolute total (they're credits)
+      return sum - Math.abs(item.total);
+    }
+    return sum + item.total;
+  }, 0);
+  // Tax only on non-return items
+  const taxableSubtotal = lineItems.reduce((sum, item) => {
+    if (item.isReturn || (item.price < 0 && item.quantity < 0)) {
+      return sum; // Exclude returns from tax
+    }
+    return sum + item.total;
+  }, 0);
+  const fallbackTax = taxableSubtotal * 0.1;
+  // Total can be negative if subtotal is negative (returns exceed sales)
   const fallbackTotal = fallbackSubtotal + fallbackTax;
 
   const summary: BillingSummary = billingSummary ?? {
@@ -83,7 +101,8 @@ export function TransactionLines({
   const adjustmentValue = summary.adjustment ?? 0;
   const taxValue = summary.tax ?? 0;
   const amountPaid = summary.paid ?? 0;
-  const amountDue = Math.max(0, summary.total - amountPaid);
+  // Allow negative amount due for returns (don't clamp to 0)
+  const amountDue = summary.total - amountPaid;
 
   return (
     <div
@@ -171,7 +190,7 @@ export function TransactionLines({
                   </div>
                   <div className="flex items-center justify-end">
                     <span className="text-xs md:text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                      USD
+                      {paymentCurrencyLabel}
                     </span>
                   </div>
                 </div>
@@ -194,7 +213,7 @@ export function TransactionLines({
             <div className="p-2 md:p-4 space-y-1.5 md:space-y-2 h-full">
               {/* Header Row */}
               <div
-                className="grid grid-cols-[3fr,0.7fr,1fr,1fr] gap-2 px-3 py-1 rounded text-[10px] md:text-xs font-semibold uppercase tracking-wide sticky top-0 z-10"
+                className="grid grid-cols-[1.4fr,0.9fr,1.1fr,1.1fr] gap-3 px-3 py-1 rounded text-[10px] md:text-xs font-semibold uppercase tracking-wide sticky top-0 z-10"
                 style={{
                   backgroundColor: 'var(--color-bg-card)',
                   color: 'var(--color-text-secondary)',
@@ -212,13 +231,15 @@ export function TransactionLines({
                 {lineItems.map((item) => {
                   const isSelected = selectedItem === item.id;
                   const isExpanded = expandedItemId === item.id;
+                  const formattedPrice = formatCurrency(Math.abs(item.price));
+                  const formattedTotal = formatCurrency(Math.abs(item.total));
                   return (
                     <div key={item.id} className="space-y-1">
                       <div
                         onClick={() => {
                           onItemSelect?.(item.id);
                         }}
-                        className="grid grid-cols-[3fr,0.7fr,1fr,1fr] gap-2 px-3 py-2 md:py-2.5 rounded cursor-pointer hover:opacity-80"
+                        className="grid grid-cols-[1.4fr,0.9fr,1.1fr,1.1fr] gap-3 px-3 py-2 md:py-2.5 rounded cursor-pointer hover:opacity-80"
                         style={{
                           backgroundColor: isSelected
                             ? 'var(--color-accent-blue)'
@@ -255,13 +276,31 @@ export function TransactionLines({
                           </div>
                         </div>
                         <div className="flex items-center justify-center font-mono text-xs md:text-sm">
-                          {item.quantity}
+                          {item.isReturn ? (
+                            <span className="line-through">{Math.abs(item.quantity)}</span>
+                          ) : (
+                            item.quantity
+                          )}
                         </div>
-                        <div className="flex items-center justify-end font-mono text-xs md:text-sm">
-                          ${item.price.toFixed(2)}
+                        <div
+                          className="flex items-center justify-end font-mono text-xs md:text-sm gap-1"
+                          style={{ fontVariantNumeric: 'tabular-nums' }}
+                        >
+                          {item.isReturn ? (
+                            <span className="line-through">{formattedPrice}</span>
+                          ) : (
+                            <span>{formattedPrice}</span>
+                          )}
                         </div>
-                        <div className="flex items-center justify-end font-mono text-xs md:text-sm font-semibold">
-                          ${item.total.toFixed(2)}
+                        <div
+                          className="flex items-center justify-end font-mono text-xs md:text-sm font-semibold gap-1"
+                          style={{ fontVariantNumeric: 'tabular-nums' }}
+                        >
+                          {item.isReturn ? (
+                            <span className="line-through">{formattedTotal}</span>
+                          ) : (
+                            <span>{formattedTotal}</span>
+                          )}
                         </div>
                       </div>
 
@@ -274,6 +313,11 @@ export function TransactionLines({
                             border: '1px dashed var(--color-border-light)',
                           }}
                         >
+                          <div className="flex flex-col gap-2 mb-2">
+                            <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                              {item.name}
+                            </span>
+                          </div>
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-y-1 gap-x-4">
                             <div>
                               <span className="font-semibold">Color:</span>{' '}
@@ -289,11 +333,11 @@ export function TransactionLines({
                             </div>
                             <div>
                               <span className="font-semibold">Original price:</span>{' '}
-                              <span>${item.price.toFixed(2)}</span>
+                              <span>{formattedPrice}</span>
                             </div>
                             <div>
                               <span className="font-semibold">Total (with tax):</span>{' '}
-                              <span>${item.total.toFixed(2)}</span>
+                              <span>{formattedTotal}</span>
                             </div>
                           </div>
                         </div>
@@ -361,7 +405,16 @@ export function TransactionLines({
           }}
         >
           <span>Amount due</span>
-          <span style={{ color: amountDue > 0 ? 'var(--color-accent-blue)' : 'var(--color-success)' }}>
+          <span
+            style={{
+              color:
+                amountDue > 0
+                  ? 'var(--color-accent-blue)'
+                  : amountDue < 0
+                    ? 'var(--color-success)'
+                    : 'var(--color-text-secondary)',
+            }}
+          >
             {formatCurrency(amountDue)}
           </span>
         </div>

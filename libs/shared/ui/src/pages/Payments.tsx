@@ -8,6 +8,7 @@ import {
   useToast,
 } from '../index.js';
 import type { SalesOrderRepository, ParkedOrderRepository } from '@monorepo/shared-data-access';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 // Simple fallback methods – in a real app these would come from the repo
 const FALLBACK_PAYMENT_METHODS: PaymentPanelMethod[] = [
@@ -27,6 +28,9 @@ const FALLBACK_PAYMENT_METHODS: PaymentPanelMethod[] = [
   },
 ];
 
+const DEFAULT_TAX_RATE = 0.03;
+const PAYMENT_TOLERANCE = 0.01;
+
 export interface PaymentsProps {
   salesOrderRepo?: SalesOrderRepository;
   parkedOrderRepo?: ParkedOrderRepository;
@@ -43,6 +47,11 @@ export function Payments({
   const location = useLocation();
   const navigate = useNavigate();
   const { show } = useToast();
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatCurrency = useCallback(
+    (amount: number) => formatAmount(amount),
+    [formatAmount],
+  );
   const search = new URLSearchParams(location.search);
   const modeParam = search.get('mode');
   const mode = modeParam === 'card' ? 'card' : modeParam === 'cash' ? 'cash' : null;
@@ -85,14 +94,19 @@ export function Payments({
       };
     }
     // Fallback calculation if no navigation state
-    const subtotal = lineItems.reduce((sum, li) => sum + li.price * li.quantity, 0);
+    const subtotal = lineItems.reduce(
+      (sum, li) => sum + Number(li.price ?? 0) * Number(li.quantity ?? 1),
+      0
+    );
+    const taxValue = Number((subtotal * DEFAULT_TAX_RATE).toFixed(2));
+    const total = Number((subtotal + taxValue).toFixed(2));
     return {
       subtotal,
       discountValue: 0,
       giftCardValue: 0,
       adjustmentValue: 0,
-      taxValue: 0,
-      total: subtotal,
+      taxValue,
+      total,
     };
   }, [navigationState, lineItems]);
 
@@ -160,13 +174,17 @@ export function Payments({
     const newAmountPaid = amountPaid + payment.amount;
     const newAmountDue = orderTotal - newAmountPaid;
 
+    const withinTolerance = Math.abs(newAmountDue) <= PAYMENT_TOLERANCE;
+
     show(
       `Payment of ${formatCurrency(payment.amount)} added. ${
-        newAmountDue > 0
+        newAmountDue > PAYMENT_TOLERANCE
           ? `Remaining: ${formatCurrency(newAmountDue)}`
-          : newAmountDue < 0
+          : newAmountDue < -PAYMENT_TOLERANCE
           ? `Change: ${formatCurrency(Math.abs(newAmountDue))}`
-          : 'Order fully paid!'
+          : withinTolerance
+          ? 'Order fully paid!'
+          : `Remaining: ${formatCurrency(newAmountDue)}`
       }`,
       'success'
     );
@@ -175,21 +193,22 @@ export function Payments({
     amountPaid,
     orderTotal,
     show,
+    formatCurrency,
   ]);
 
   const handleRemovePayment = (id: string) => {
     setPayments((prev) => prev.filter((p) => p.id !== id));
   };
 
-  const formatCurrency = (amount: number): string =>
-    new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-
   // Auto-complete order when fully paid
   React.useEffect(() => {
-    if (payments.length > 0 && amountDue <= 0 && !isProcessing && salesOrderRepo && !orderCreatedRef.current) {
+    if (
+      payments.length > 0 &&
+      amountDue <= PAYMENT_TOLERANCE &&
+      !isProcessing &&
+      salesOrderRepo &&
+      !orderCreatedRef.current
+    ) {
       // Create order completion inline to avoid dependency issues
       const completeOrder = async () => {
         // Mark as created immediately to prevent race conditions
@@ -211,12 +230,16 @@ export function Payments({
             cashierId: currentUserId,
             salesPersonId: navigationState?.salesPersonId || currentUserId,
             customerId: navigationState?.customerId,
-            lineItems: lineItems.map((item: any) => ({
-              variantId: item.productId || item.id,
-              salesPersonId: navigationState?.salesPersonId || currentUserId,
-              quantity: item.quantity,
-              unitPrice: item.price,
-            })),
+            lineItems: lineItems.map((item: any) => {
+              const baseQuantity = Number(item.quantity ?? 1);
+              const unitPrice = Math.abs(Number(item.price ?? 0));
+              return {
+                variantId: item.productId || item.id,
+                salesPersonId: navigationState?.salesPersonId || currentUserId,
+                quantity: item.isReturn ? -Math.abs(baseQuantity) : baseQuantity,
+                unitPrice,
+              };
+            }),
             payments: paymentInputs,
             orderLevelDiscount: navigationState?.discount
               ? navigationState.discount.type === 'percent'

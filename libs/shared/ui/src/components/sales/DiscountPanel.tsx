@@ -1,6 +1,7 @@
 import React from 'react';
 import { Percent, DollarSign, Tag } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface OrderDiscount {
   amount?: number;
@@ -26,12 +27,11 @@ export function DiscountPanel({
   disabled = false,
   className = '',
 }: DiscountPanelProps) {
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatCurrency = React.useCallback(
+    (amount: number) => `Rs ${formatAmount(amount, { showSymbol: false })}`,
+    [formatAmount],
+  );
 
   const calculateDiscountAmount = (): number => {
     if (discount.amount) {

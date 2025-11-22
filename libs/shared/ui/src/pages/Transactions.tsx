@@ -27,6 +27,9 @@ import {
   useSalesPersonModal,
 } from '@monorepo/shared-ui';
 import { useBarcodeScanner } from '@monorepo/shared-hooks-scanner';
+import { useCurrency, type Currency } from '@monorepo/shared-hooks-currency';
+import { parsePriceValue } from '../utils/price';
+import { useAppDateTime } from '@monorepo/shared-hooks-datetime';
 import type { Customer as TransactionCustomer } from '../components/customer/CustomerCard';
 import {
   Archive,
@@ -71,7 +74,7 @@ import {
   type IndexedDBSchema,
 } from '@monorepo/shared-data-access';
 
-const TAX_RATE = 0.1;
+const TAX_RATE = 0.03;
 const AUTO_IDB_DB_NAME = 'transactions-autoconfig';
 const AUTO_IDB_DB_VERSION = 1;
 
@@ -173,6 +176,9 @@ export function Transactions({
   
   const [selectedItem, setSelectedItem] = useState<string>('');
   const [numpadValue, setNumpadValue] = useState<string>('');
+  const [isManualBarcodeMode, setIsManualBarcodeMode] = useState(false);
+  const manualBarcodeModeRef = useRef(isManualBarcodeMode);
+  const numpadValueRef = useRef(numpadValue);
   
   const [activeSection, setActiveSectionState] = useState<string>(() => {
     const saved = localStorage.getItem('transactions-activeSection');
@@ -198,7 +204,12 @@ export function Transactions({
   const [adjustmentAmountInput, setAdjustmentAmountInput] = useState('');
   const [adjustmentReasonInput, setAdjustmentReasonInput] = useState('');
   const [appliedAdjustment, setAppliedAdjustment] = useState<{ amount: number; reason?: string } | null>(null);
-
+  useEffect(() => {
+    manualBarcodeModeRef.current = isManualBarcodeMode;
+  }, [isManualBarcodeMode]);
+  useEffect(() => {
+    numpadValueRef.current = numpadValue;
+  }, [numpadValue]);
   // Parked orders state
   const [isParkedOrdersModalOpen, setIsParkedOrdersModalOpen] = useState(false);
   const [parkedOrders, setParkedOrders] = useState<ParkedOrderListItem[]>([]);
@@ -234,7 +245,12 @@ export function Transactions({
   const { items: lineItems, setItemQuantity, removeItem, addItem } = useCart();
   const { customer, setCustomer, clearCustomer } = useTransactionCustomer();
   const { show } = useToast();
-  
+  const { formatAmount, setCurrency } = useCurrency({ defaultCurrency: 'PKR' });
+  const { formatDateTime } = useAppDateTime();
+  const formatCurrency = useCallback(
+    (amount: number) => formatAmount(amount, { showSymbol: true }),
+    [formatAmount],
+  );
   // Get selected item data
   const selectedItemData = useMemo(() => {
     return selectedItem ? lineItems.find(item => item.id === selectedItem) : null;
@@ -253,14 +269,10 @@ export function Transactions({
     paymentMethodRepo?: PaymentMethodRepository;
     salesPersonRepo?: SalesPersonRepository;
   }>({});
-  const formatCurrency = useCallback(
-    (amount: number) =>
-      new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-      }).format(amount),
-    []
-  );
+  const handleRemoveCustomer = useCallback(() => {
+    clearCustomer();
+    show('Customer removed from transaction', 'info');
+  }, [clearCustomer, show]);
 
   useEffect(() => {
     if (salesOrderRepo || typeof window === 'undefined') {
@@ -286,6 +298,17 @@ export function Transactions({
         await seedPaymentMethods(dbClient);
         console.log('[Transactions] Payment methods seeding complete');
 
+        try {
+          const storeConfigs = await dbClient.query<Array<{ defaultCurrency?: string }>>('StoreConfig');
+          const dbCurrency = (storeConfigs[0] as { defaultCurrency?: string } | undefined)?.defaultCurrency;
+          if (dbCurrency) {
+            setCurrency(dbCurrency as Currency);
+            console.log('[Transactions] Applied currency from StoreConfig:', dbCurrency);
+          }
+        } catch (currencyError) {
+          console.warn('[Transactions] Failed to load currency from StoreConfig:', currencyError);
+        }
+
         const apiClient = new HttpApiClient();
         await apiClient.initialize().catch((err) => {
           console.warn('[Transactions] API client initialization warning:', err);
@@ -310,7 +333,7 @@ export function Transactions({
     return () => {
       isActive = false;
     };
-  }, [autoRepos.salesOrderRepo, salesOrderRepo]);
+  }, [autoRepos.salesOrderRepo, salesOrderRepo, setCurrency]);
 
   const effectiveSalesOrderRepo = useMemo(
     () => salesOrderRepo ?? autoRepos.salesOrderRepo,
@@ -911,7 +934,7 @@ export function Transactions({
     navigate(`/products/${product.id}`);
   };
   const handleAddProduct = (product: Product) => {
-    const price = product.price ? Number(product.price.replace(/[^0-9.]/g, '')) : 0;
+    const price = parsePriceValue(product.price ?? null) ?? 0;
     // Add product to cart with default quantity of 1
     addItem({
       id: product.id,
@@ -1037,6 +1060,76 @@ export function Transactions({
     enabled: !isPaymentModalOpen, // Disable during payment input
     preventDefault: true,
   });
+  useEffect(() => {
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      const isEditableTarget =
+        (target && (target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select')) ||
+        false;
+
+      const isShortcutTrigger =
+        (event.key === '?' && !event.ctrlKey && !event.metaKey && !event.altKey) ||
+        (event.key === '/' && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey);
+
+      if (!manualBarcodeModeRef.current) {
+        if (!isEditableTarget && isShortcutTrigger) {
+          event.preventDefault();
+          setIsManualBarcodeMode(true);
+          setSelectedItem('');
+          setNumpadValue('');
+          show('Manual barcode entry enabled. Type the code and press Enter.', 'info');
+        }
+        return;
+      }
+
+      if (isEditableTarget) {
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        const code = numpadValueRef.current.trim();
+        if (code) {
+          void handleBarcodeScan(code);
+        }
+        setIsManualBarcodeMode(false);
+        setNumpadValue('');
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setIsManualBarcodeMode(false);
+        setNumpadValue('');
+        return;
+      }
+
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+        setNumpadValue((prev) => prev.slice(0, -1));
+        return;
+      }
+
+      if (
+        event.key.length === 1 &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        setNumpadValue((prev) => {
+          if (prev.length >= 40) {
+            return prev;
+          }
+          return prev + event.key;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [handleBarcodeScan, show]);
 
   // Handle numpad enter: set quantity if product selected, or search by barcode if not
   const handleNumpadEnter = useCallback(async (value: string) => {
@@ -1078,19 +1171,37 @@ export function Transactions({
   }, [selectedItem, selectedItemData, setItemQuantity, removeItem, show, handleBarcodeScan]);
 
   const orderTotals = useMemo(() => {
-    const subtotal = lineItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    // Calculate subtotal: return items contribute negatively
+    const subtotal = lineItems.reduce((sum, item) => {
+      if (item.isReturn || (item.price < 0 && item.quantity < 0)) {
+        // Return items: subtract their absolute total (negative contribution)
+        return sum - Math.abs(item.price * item.quantity);
+      }
+      return sum + item.price * item.quantity;
+    }, 0);
+    
     const discountValue =
       appliedDiscount && appliedDiscount.value > 0
         ? appliedDiscount.type === 'percent'
-          ? (subtotal * appliedDiscount.value) / 100
+          ? (Math.abs(subtotal) * appliedDiscount.value) / 100
           : appliedDiscount.value
         : 0;
     const giftCardValue = giftCardData?.discount ?? 0;
     const adjustmentValue = appliedAdjustment?.amount ?? 0;
 
-    const taxableBase = Math.max(0, subtotal - discountValue - giftCardValue + adjustmentValue);
+    // Calculate taxable base excluding return items (items with negative price/quantity)
+    const taxableSubtotal = lineItems.reduce((sum, item) => {
+      // Exclude return items from tax calculation
+      if (item.isReturn || (item.price < 0 && item.quantity < 0)) {
+        return sum;
+      }
+      return sum + item.price * item.quantity;
+    }, 0);
+    
+    const taxableBase = Math.max(0, taxableSubtotal - discountValue - giftCardValue + adjustmentValue);
     const taxValue = Number((taxableBase * TAX_RATE).toFixed(2));
-    const total = Math.max(0, taxableBase + taxValue);
+    // Total can be negative if subtotal is negative (returns exceed sales)
+    const total = subtotal - discountValue - giftCardValue + adjustmentValue + taxValue;
     return {
       subtotal,
       discountValue,
@@ -1479,7 +1590,7 @@ export function Transactions({
     show('Adjustment removed', 'info');
   }, [show]);
 
-  const actionButtons: ActionButton[] = [
+  const primaryActionButtons: ActionButton[] = [
     // Orange/Reddish-Brown Section
     {
       id: 'set-quantity',
@@ -1571,39 +1682,6 @@ export function Transactions({
       rectangular: true,
       onClick: handleVoidTransaction,
     },
-    {
-      id: 'tax-overrides',
-      icon: <RotateCcw className="w-5 h-5" />,
-      label: 'Tax overrides',
-      color: 'bg-gray-700',
-      square: true,
-      rectangular: true,
-      onClick: () => console.log('Tax overrides'),
-    },
-    {
-      id: 'add-coupon',
-      icon: <TicketPercent className="w-5 h-5" />,
-      label: 'Add coupon',
-      color: 'bg-gray-700',
-      square: true,
-      onClick: () => setIsCouponPanelOpen(true),
-    },
-    {
-      id: 'order-discount',
-      icon: <Percent className="w-5 h-5" />,
-      label: 'Order discount',
-      color: 'bg-gray-700',
-      square: true,
-      onClick: openDiscountPanel,
-    },
-    {
-      id: 'order-adjustment',
-      icon: <SlidersHorizontal className="w-5 h-5" />,
-      label: 'Order adjustment',
-      color: 'bg-gray-700',
-      square: true,
-      onClick: openAdjustmentPanel,
-    },
     // Green Section - Small square buttons
     {
       id: 'equals',
@@ -1643,6 +1721,22 @@ export function Transactions({
       square: true,
       onClick: () => console.log('Heart'),
     },
+    // {
+    //   id: 'profile',
+    //   icon: <User className="w-4 h-4" />,
+    //   label: '',
+    //   color: 'bg-green-700',
+    //   square: true,
+    //   onClick: () => salesPersonModal.open(),
+    // },
+    // {
+    //   id: 'heart',
+    //   icon: <Heart className="w-4 h-4" />,
+    //   label: '',
+    //   color: 'bg-green-700',
+    //   square: true,
+    //   onClick: () => console.log('Heart'),
+    // },
     // Green Section - Payment buttons
     {
       id: 'pay-cash',
@@ -1661,6 +1755,48 @@ export function Transactions({
       onClick: () => handleInitiatePayment('card'),
     },
   ];
+
+  const discountActionButtons: ActionButton[] = [
+    {
+      id: 'tax-overrides',
+      icon: <RotateCcw className="w-5 h-5" />,
+      label: 'Tax overrides',
+      color: 'bg-gray-700',
+      section: 'discounts',
+      square: true,
+      rectangular: true,
+      onClick: () => console.log('Tax overrides'),
+    },
+    {
+      id: 'add-coupon',
+      icon: <TicketPercent className="w-5 h-5" />,
+      label: 'Add coupon',
+      color: 'bg-gray-700',
+      section: 'discounts',
+      square: true,
+      onClick: () => setIsCouponPanelOpen(true),
+    },
+    {
+      id: 'order-discount',
+      icon: <Percent className="w-5 h-5" />,
+      label: 'Order discount',
+      color: 'bg-gray-700',
+      section: 'discounts',
+      square: true,
+      onClick: openDiscountPanel,
+    },
+    {
+      id: 'order-adjustment',
+      icon: <SlidersHorizontal className="w-5 h-5" />,
+      label: 'Order adjustment',
+      color: 'bg-gray-700',
+      section: 'discounts',
+      square: true,
+      onClick: openAdjustmentPanel,
+    },
+  ];
+
+  const actionButtons: ActionButton[] = [...primaryActionButtons, ...discountActionButtons];
 
   return (
     <div
@@ -1704,7 +1840,8 @@ export function Transactions({
             onEnter={handleNumpadEnter}
             onAddCustomer={() => navigate('/customers')}
             customer={customer}
-            onRemoveCustomer={clearCustomer}
+            onRemoveCustomer={handleRemoveCustomer}
+            manualBarcodeMode={isManualBarcodeMode}
           />
         </div>
       </div>
@@ -1814,7 +1951,7 @@ export function Transactions({
             <Invoice
               brand={{ storeName: 'PayFlow' }}
               invoiceNo="TEST-0001"
-              date={new Date().toLocaleString()}
+              date={formatDateTime()}
               cashier="Tester"
               items={lineItems.map(li => ({ id: li.id, name: li.name, quantity: li.quantity, unitPrice: li.price }))}
               subTotal={lineItems.reduce((s, li) => s + li.price * li.quantity, 0)}
@@ -1967,29 +2104,33 @@ export function Transactions({
       />
 
       {/* Parked Orders Search Panel - Opens with Ctrl+Shift+Z */}
-      <ParkedOrderSearch
-        isOpen={isParkedOrdersModalOpen}
-        onClose={handleCloseParkedOrdersModal}
-        onLoadOrder={handleResumeParkedOrder}
-        parkedOrders={parkedOrders}
-        onSearch={handleSearchParkedOrders}
-        isLoading={loadingParkedOrders}
-      />
+      <div className="relative z-[260]">
+        <ParkedOrderSearch
+          isOpen={isParkedOrdersModalOpen}
+          onClose={handleCloseParkedOrdersModal}
+          onLoadOrder={handleResumeParkedOrder}
+          parkedOrders={parkedOrders}
+          onSearch={handleSearchParkedOrders}
+          isLoading={loadingParkedOrders}
+        />
+      </div>
 
-      <ConfirmationModal
-        isOpen={isResumeConfirmOpen}
-        onClose={closeResumeModal}
-        onConfirm={confirmResumeParkedOrder}
-        title="Resume Parked Order"
-        message={
-          pendingResumeOrder
-            ? `Resume ${pendingResumeOrder.orderNumber} for ${pendingResumeOrder.customerName ?? 'Walk-in Customer'}?`
-            : 'Resume this parked order?'
-        }
-        confirmText="Resume Order"
-        cancelText="Cancel"
-        variant="info"
-      />
+      <div className="relative z-[270]">
+        <ConfirmationModal
+          isOpen={isResumeConfirmOpen}
+          onClose={closeResumeModal}
+          onConfirm={confirmResumeParkedOrder}
+          title="Resume Parked Order"
+          message={
+            pendingResumeOrder
+              ? `Resume ${pendingResumeOrder.orderNumber} for ${pendingResumeOrder.customerName ?? 'Walk-in Customer'}?`
+              : 'Resume this parked order?'
+          }
+          confirmText="Resume Order"
+          cancelText="Cancel"
+          variant="info"
+        />
+      </div>
 
       {/* Void Confirmation Modal */}
       <ConfirmationModal

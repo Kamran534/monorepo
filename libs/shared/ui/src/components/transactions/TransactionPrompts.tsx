@@ -1,5 +1,18 @@
 import React, { type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { useCurrency, CURRENCY_CONFIGS, type Currency, type FormatOptions } from '@monorepo/shared-hooks-currency';
+const useCurrencyFormatter = () => {
+  const { formatAmount, currency } = useCurrency({ defaultCurrency: 'PKR' });
+  const label = currency === 'PKR' ? 'Rs' : currency;
+
+  return React.useCallback(
+    (amount: number, options?: FormatOptions) => {
+      const formatted = formatAmount(amount, { ...options, showSymbol: false });
+      return `${label} ${formatted}`;
+    },
+    [formatAmount, label],
+  );
+};
 
 type PromptModalProps = {
   isOpen: boolean;
@@ -79,73 +92,78 @@ export const DiscountPrompt = ({
   onValueChange,
   onApply,
   onClose,
-}: DiscountPromptProps) => (
-  <PromptModal
-    isOpen={isOpen}
-    title="Order Discount"
-    onClose={onClose}
-    footer={
-      <>
-        <button
-          onClick={onClose}
-          className="px-4 py-2 rounded border text-sm"
-          style={{ borderColor: 'var(--color-border-light)' }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onApply}
-          className="px-4 py-2 rounded text-sm font-semibold"
-          style={{ backgroundColor: 'var(--color-primary-500)', color: 'var(--color-text-light)' }}
-        >
-          Apply Discount
-        </button>
-      </>
-    }
-  >
-    <div className="flex gap-2">
-      {(['amount', 'percent'] as const).map((option) => (
-        <button
-          key={option}
-          onClick={() => onModeChange(option)}
-          className={`flex-1 px-3 py-2 rounded border text-sm font-medium ${
-            mode === option ? 'bg-[var(--color-primary-500)] text-white' : ''
-          }`}
+}: DiscountPromptProps) => {
+  const { currency } = useCurrency({ defaultCurrency: 'PKR' });
+  const currencyLabel = currency === 'PKR' ? 'Rs' : currency;
+
+  return (
+    <PromptModal
+      isOpen={isOpen}
+      title="Order Discount"
+      onClose={onClose}
+      footer={
+        <>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded border text-sm"
+            style={{ borderColor: 'var(--color-border-light)' }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onApply}
+            className="px-4 py-2 rounded text-sm font-semibold"
+            style={{ backgroundColor: 'var(--color-primary-500)', color: 'var(--color-text-light)' }}
+          >
+            Apply Discount
+          </button>
+        </>
+      }
+    >
+      <div className="flex gap-2">
+        {(['amount', 'percent'] as const).map((option) => (
+          <button
+            key={option}
+            onClick={() => onModeChange(option)}
+            className={`flex-1 px-3 py-2 rounded border text-sm font-medium ${
+              mode === option ? 'bg-[var(--color-primary-500)] text-white' : ''
+            }`}
+            style={{
+              borderColor: 'var(--color-border-light)',
+              color: mode === option ? 'white' : 'var(--color-text-primary)',
+            }}
+          >
+            {option === 'amount' ? `Amount (${currencyLabel})` : 'Percent (%)'}
+          </button>
+        ))}
+      </div>
+      <div>
+        <label className="text-sm font-medium block mb-1" style={{ color: 'var(--color-text-primary)' }}>
+          {mode === 'amount' ? 'Discount amount' : 'Discount percent'}
+        </label>
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => onValueChange(e.target.value)}
+          placeholder={mode === 'amount' ? 'e.g. 25' : 'e.g. 10'}
+          className="w-full px-3 py-2 rounded border text-sm"
           style={{
+            backgroundColor: 'var(--color-bg-secondary)',
+            color: 'var(--color-text-primary)',
             borderColor: 'var(--color-border-light)',
-            color: mode === option ? 'white' : 'var(--color-text-primary)',
           }}
-        >
-          {option === 'amount' ? 'Amount ($)' : 'Percent (%)'}
-        </button>
-      ))}
-    </div>
-    <div>
-      <label className="text-sm font-medium block mb-1" style={{ color: 'var(--color-text-primary)' }}>
-        {mode === 'amount' ? 'Discount amount' : 'Discount percent'}
-      </label>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onValueChange(e.target.value)}
-        placeholder={mode === 'amount' ? 'e.g. 25' : 'e.g. 10'}
-        className="w-full px-3 py-2 rounded border text-sm"
-        style={{
-          backgroundColor: 'var(--color-bg-secondary)',
-          color: 'var(--color-text-primary)',
-          borderColor: 'var(--color-border-light)',
-        }}
-      />
-    </div>
-    {current && (
-      <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-        Current: {current.type === 'amount' ? '$' : ''}
-        {current.value}
-        {current.type === 'percent' ? '%' : ''} discount applied.
-      </p>
-    )}
-  </PromptModal>
-);
+        />
+      </div>
+      {current && (
+        <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+          Current: {current.type === 'amount' ? `${currencyLabel} ` : ''}
+          {current.value}
+          {current.type === 'percent' ? '%' : ''} discount applied.
+        </p>
+      )}
+    </PromptModal>
+  );
+};
 
 export type CouponPromptProps = {
   isOpen: boolean;
@@ -171,8 +189,10 @@ export const CouponPrompt = ({
   onClose,
   title = "Apply Coupon",
   codeLabel = "Coupon code",
-}: CouponPromptProps) => (
-  <PromptModal
+}: CouponPromptProps) => {
+  const formatCurrency = useCurrencyFormatter();
+  return (
+    <PromptModal
     isOpen={isOpen}
     title={title}
     onClose={onClose}
@@ -229,13 +249,14 @@ export const CouponPrompt = ({
         }}
       />
     </div>
-    {current && (
-      <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-        {codeLabel} "{current.code}" currently applies {formatCurrency(current.discount)}.
-      </p>
-    )}
-  </PromptModal>
-);
+      {current && (
+        <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+          {codeLabel} "{current.code}" currently applies {formatCurrency(current.discount)}.
+        </p>
+      )}
+    </PromptModal>
+  );
+};
 
 export type AdjustmentPromptProps = {
   isOpen: boolean;
@@ -257,8 +278,11 @@ export const AdjustmentPrompt = ({
   onReasonChange,
   onApply,
   onClose,
-}: AdjustmentPromptProps) => (
-  <PromptModal
+}: AdjustmentPromptProps) => {
+  const formatCurrency = useCurrencyFormatter();
+
+  return (
+    <PromptModal
     isOpen={isOpen}
     title="Order Adjustment"
     onClose={onClose}
@@ -315,13 +339,14 @@ export const AdjustmentPrompt = ({
         }}
       />
     </div>
-    {current && (
-      <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-        Current adjustment: {formatCurrency(current.amount)} {current.reason ? `(${current.reason})` : ''}
-      </p>
-    )}
-  </PromptModal>
-);
+      {current && (
+        <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+          Current adjustment: {formatCurrency(current.amount)} {current.reason ? `(${current.reason})` : ''}
+        </p>
+      )}
+    </PromptModal>
+  );
+};
 
 export type PreviewLineItem = {
   id: string;
@@ -353,8 +378,10 @@ export const PreviewPrompt = ({
   giftCard,
   adjustment,
   onClose,
-}: PreviewPromptProps) => (
-  <PromptModal
+}: PreviewPromptProps) => {
+  const formatCurrency = useCurrencyFormatter();
+  return (
+    <PromptModal
     isOpen={isOpen}
     title="Order Preview"
     onClose={onClose}
@@ -441,9 +468,20 @@ export const PreviewPrompt = ({
         <p className="text-2xl font-semibold">{formatCurrency(totals.total)}</p>
       </div>
     </div>
-  </PromptModal>
-);
+    </PromptModal>
+  );
+};
 
-export const formatCurrency = (amount: number): string =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+export const formatCurrency = (amount: number): string => {
+  let currency: Currency = 'PKR';
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('app-currency');
+    if (stored && stored in CURRENCY_CONFIGS) {
+      currency = stored as Currency;
+    }
+  }
+  const label = currency === 'PKR' ? 'Rs' : currency;
+  const formatted = new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 2 }).format(amount);
+  return `${label} ${formatted}`;
+};
 

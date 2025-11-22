@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Wifi } from 'lucide-react';
 
 export interface LoginProps {
@@ -22,14 +22,23 @@ export interface LoginProps {
    * @default "PayFlow POS"
    */
   appName?: string;
+  /**
+   * Optional navigation handler. If provided, the component will use this instead of react-router's navigate.
+   */
+  onNavigate?: (path: string) => void;
 }
 
-export function Login({
+interface LoginInnerProps extends LoginProps {
+  navigateImpl: (path: string) => void;
+}
+
+function LoginInner({
   onLogin,
   showConnectionStatus = false,
   emailPlaceholder = 'Email, Username, or Employee Code',
   appName = 'PayFlow POS',
-}: LoginProps) {
+  navigateImpl,
+}: LoginInnerProps) {
   const [emailOrUsername, setEmailOrUsername] = useState('');
   const [password, setPassword] = useState('');
   const [bgFailed, setBgFailed] = useState(false);
@@ -37,7 +46,6 @@ export function Login({
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +55,7 @@ export function Login({
     try {
       const ok = await onLogin(emailOrUsername, password, remember);
       if (ok) {
-        navigate('/');
+        navigateImpl('/');
       } else {
         setError('Invalid username or password');
       }
@@ -133,8 +141,8 @@ export function Login({
               </button>
             </div>
 
-            <div className="flex items-center justify-between cursor-pointer">
-              <label className="inline-flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--color-text-secondary)' }}>
+          <div className="flex items-center justify-between cursor-pointer">
+            <label className="inline-flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--color-text-secondary)' }}>
                 <input
                   type="checkbox"
                   className="accent-[var(--color-primary-500)]"
@@ -143,9 +151,14 @@ export function Login({
                 />
                 Remember me
               </label>
-              <Link to="/forgot" className="text-xs hover:underline" style={{ color: 'var(--color-primary-500)' }}>
-                Forgot password?
-              </Link>
+            <button
+              type="button"
+              onClick={() => navigateImpl('/forgot')}
+              className="text-xs hover:underline"
+              style={{ color: 'var(--color-primary-500)' }}
+            >
+              Forgot password?
+            </button>
             </div>
 
             <button
@@ -170,9 +183,14 @@ export function Login({
             <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
               Don't have an account?{' '}
             </span>
-            <Link to="/signup" className="text-xs hover:underline" style={{ color: 'var(--color-primary-500)' }}>
+            <button
+              type="button"
+              onClick={() => navigateImpl('/signup')}
+              className="text-xs hover:underline"
+              style={{ color: 'var(--color-primary-500)' }}
+            >
               Sign up
-            </Link>
+            </button>
           </div>
         </div>
       </div>
@@ -181,4 +199,13 @@ export function Login({
 }
 
 export default Login;
+
+export function Login(props: LoginProps) {
+  if (props.onNavigate) {
+    return <LoginInner {...props} navigateImpl={props.onNavigate} />;
+  }
+
+  const navigate = useNavigate();
+  return <LoginInner {...props} navigateImpl={navigate} />;
+}
 

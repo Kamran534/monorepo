@@ -3,6 +3,7 @@ import { Search, Square, Printer, HelpCircle } from 'lucide-react';
 import { ReturnableProductsTable } from '../components/transactions/ReturnableProductsTable.js';
 import { ReturnDetailsPanel } from '../components/transactions/ReturnDetailsPanel.js';
 import type { ReturnableProduct } from '../components/transactions/ReturnableProductsTable.js';
+import { useCart, useToast } from '@monorepo/shared-ui';
 
 export interface ReturnTransactionProps {
   originalOrderId?: string;
@@ -16,6 +17,8 @@ export interface ReturnTransactionProps {
  * on the left and selected product details on the right.
  */
 export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransactionProps) {
+  const { addItem } = useCart();
+  const { show } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string | undefined>();
   const [returningQuantities, setReturningQuantities] = useState<Record<string, number>>({});
@@ -40,7 +43,22 @@ export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransaction
         barcode: 'PPB0100010059ME',
         imageUrl: undefined, // Can be set to actual image URL
       },
-      // Add more products as needed
+      {
+        id: '2',
+        productNumber: 'P-PB-0100011',
+        productName: 'P-PB-0100011',
+        sold: 1,
+        uom: 'PCS',
+        previous: 0,
+        available: 1.0,
+        returning: 1.0,
+        unitPrice: 25.0,
+        total: 25.0,
+        variant: 'BLUE, ME',
+        sku: '3265',
+        barcode: 'PPB0100010059BLUE',
+        imageUrl: undefined, // Can be set to actual image URL
+      }
     ];
   }, [originalOrderId]);
 
@@ -95,6 +113,38 @@ export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransaction
     }
   }, [selectedProductId, baseReturnableProducts]);
 
+  const handleAddToCart = useCallback(() => {
+    if (!selectedProduct || returningQuantity <= 0) {
+      show('Please select a product and set a returning quantity', 'error');
+      return;
+    }
+
+    // Add product to cart with negative quantity and negative price for returns
+    // The cart will calculate total as price * quantity, which will be positive
+    // We mark it as return so it displays with strikethrough and excludes tax
+    addItem(
+      {
+        name: selectedProduct.productName || selectedProduct.productNumber,
+        price: -selectedProduct.unitPrice, // Negative price for returns
+        quantity: -returningQuantity, // Negative quantity for returns
+        productId: selectedProduct.id,
+        availableQuantity: Infinity, // Returns don't need stock check
+        isReturn: true, // Mark as return item
+      },
+      show
+    );
+
+    show(`Added ${returningQuantity} item(s) for return`, 'success');
+    
+    // Reset selection after adding to cart
+    setSelectedProductId(undefined);
+    setReturningQuantities((prev) => {
+      const updated = { ...prev };
+      delete updated[selectedProduct.id];
+      return updated;
+    });
+  }, [selectedProduct, returningQuantity, addItem, show]);
+
   return (
     <div
       className="w-full h-full flex flex-col"
@@ -126,6 +176,7 @@ export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransaction
             selectedProduct={selectedProduct}
             returningQuantity={returningQuantity}
             onReturningQuantityChange={handleReturningQuantityChange}
+            onAddToCart={handleAddToCart}
           />
         </div>
       </div>

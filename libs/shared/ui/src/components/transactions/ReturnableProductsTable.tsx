@@ -1,6 +1,7 @@
 import React from 'react';
 import { Package } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
+import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 export interface ReturnableProduct {
   id: string;
@@ -35,12 +36,11 @@ export function ReturnableProductsTable({
   searchQuery = '',
   className = '',
 }: ReturnableProductsTableProps) {
-  const formatCurrency = (amount: number): string =>
-    new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-    }).format(amount);
+  const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const formatCurrency = React.useCallback(
+    (amount: number) => formatAmount(amount, { minimumFractionDigits: 2 }),
+    [formatAmount],
+  );
 
   const formatNumber = (num: number): string => {
     return num.toFixed(1);
