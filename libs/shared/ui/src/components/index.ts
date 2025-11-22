@@ -80,6 +80,8 @@ export {
   CompactPaymentPanel,
   ParkedOrderSearch,
   SalesOrderForm,
+  PrintConfirmationDialog,
+  usePrintReceipt,
 } from './sales/index.js';
 export type {
   CustomerSelectorProps,

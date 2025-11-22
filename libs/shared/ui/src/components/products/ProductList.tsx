@@ -163,13 +163,24 @@ function ProductGridCard({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onAddProduct?.(product); }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onAddProduct?.(product);
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             className="w-6 h-6 rounded-full flex items-center justify-center hover:opacity-90 transition-opacity"
             style={{
               backgroundColor: isSelected
                 ? 'rgba(255,255,255,0.2)'
                 : 'var(--color-primary-500)',
               color: 'var(--color-text-light)',
+              pointerEvents: 'auto',
+              cursor: 'pointer',
+              zIndex: 10,
             }}
             title="Add to cart"
             aria-label="Add to cart"
@@ -365,8 +376,13 @@ export function ProductList({
                 <button
                   type="button"
                   onClick={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     onAddProduct?.(product);
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                   }}
                   className="px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity flex items-center gap-1.5"
                   style={{
@@ -374,6 +390,10 @@ export function ProductList({
                       ? 'rgba(255,255,255,0.2)'
                       : 'var(--color-primary-500)',
                     color: 'var(--color-text-light)',
+                    pointerEvents: 'auto',
+                    cursor: 'pointer',
+                    zIndex: 10,
+                    position: 'relative',
                   }}
                   title="Add to cart"
                   aria-label="Add to cart"

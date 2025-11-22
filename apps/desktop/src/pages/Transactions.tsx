@@ -23,11 +23,11 @@ export function Transactions() {
   const currentUserId = 'd1c633de-7adc-4eec-87fc-ce4232bf0858'; // cashier user
   const currentLocationId = '3ffcbd8a-703b-4b37-9f31-30ec61546e98'; // Main Store
 
-  console.log('[Desktop Transactions] Using IDs:', {
-    currentUserId,
-    currentLocationId,
-    usingIPCRepositories: true,
-  });
+  // console.log('[Desktop Transactions] Using IDs:', {
+  //   currentUserId,
+  //   currentLocationId,
+  //   usingIPCRepositories: true,
+  // });
 
   return (
     <SharedTransactions

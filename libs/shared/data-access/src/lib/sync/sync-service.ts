@@ -21,6 +21,7 @@ import {
 } from './types';
 
 // List of tables to sync (in dependency order)
+// Matches SQLite schema exactly - same table names for seamless sync
 const SYNC_TABLES = [
   // Core reference data (no dependencies)
   'CustomerGroup',
@@ -59,6 +60,7 @@ const SYNC_TABLES = [
   'ReturnOrder',
   'ReturnLineItem',
   'ExchangeOrder',
+  'ExchangeLineItem',
   'GiftCard',
   'StoreCredit',
   'Shift',
@@ -72,6 +74,7 @@ const SYNC_TABLES = [
   'ParkedOrder',
   'AuditLog',
   'SystemSetting',
+  'StoreConfig',
 ];
 
 const DEFAULT_CONFIG: Required<Omit<SyncConfig, 'serverUrl' | 'authToken'>> = {

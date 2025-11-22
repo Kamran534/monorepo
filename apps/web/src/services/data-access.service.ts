@@ -9,7 +9,6 @@ import {
   getDataSourceManager,
   createLocalDbClient,
   getApiClient,
-  ConnectionStatus,
   DataSource,
   type ConnectionState,
   type LocalDbClient,
@@ -71,13 +70,13 @@ class WebDataAccessService {
         const settings: ConnectionSettings = JSON.parse(settingsData);
         this.manualOverride = settings.manualOverride || false;
         this.preferredDataSource = settings.preferredDataSource || null;
-        console.log('[WebDataAccessService] Loaded settings:', {
-          manualOverride: this.manualOverride,
-          preferredDataSource: this.preferredDataSource,
-        });
+        // console.log('[WebDataAccessService] Loaded settings:', {
+        //   manualOverride: this.manualOverride,
+        //   preferredDataSource: this.preferredDataSource,
+        // });
       }
-    } catch (error) {
-      console.warn('[WebDataAccessService] Failed to load settings:', error);
+    } catch {
+      // console.warn('[WebDataAccessService] Failed to load settings:', error);
     }
   }
 
@@ -91,9 +90,9 @@ class WebDataAccessService {
         preferredDataSource: this.preferredDataSource,
       };
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-      console.log('[WebDataAccessService] Settings saved:', settings);
-    } catch (error) {
-      console.error('[WebDataAccessService] Failed to save settings:', error);
+      // console.log('[WebDataAccessService] Settings saved:', settings);
+    } catch {
+      // console.error('[WebDataAccessService] Failed to save settings:', error);
     }
   }
 
@@ -101,77 +100,78 @@ class WebDataAccessService {
    * Initialize the data access service
    */
   async initialize(): Promise<void> {
-    const initId = Math.random().toString(36).substring(7);
+    // const initId = Math.random().toString(36).substring(7);
 
     if (this.isInitialized) {
-      console.warn(`[WebDataAccessService:${initId}] Already initialized`);
+      // console.warn(`[WebDataAccessService:${initId}] Already initialized`);
       return;
     }
 
-    console.log(`[WebDataAccessService:${initId}] 🚀 Starting initialization...`);
-    console.log(`[WebDataAccessService:${initId}] Server URL:`, SERVER_URL);
-    console.log(`[WebDataAccessService:${initId}] Database:`, CPOS_DB_NAME);
+    // console.log(`[WebDataAccessService:${initId}] 🚀 Starting initialization...`);
+    // console.log(`[WebDataAccessService:${initId}] Server URL:`, SERVER_URL);
+    // console.log(`[WebDataAccessService:${initId}] Database:`, CPOS_DB_NAME);
 
+    // Initialize local database (IndexedDB) with full schema
+    this.localDb = createLocalDbClient('web', {
+      dbName: CPOS_DB_NAME,
+      dbVersion: CPOS_DB_VERSION,
+      schema: CPOS_INDEXEDDB_SCHEMA,
+    });
+    await this.localDb.initialize();
+    // console.log(`[WebDataAccessService:${initId}] ✅ Local database initialized with schema`);
+
+    // Seed payment methods after database initialization
     try {
-      // Initialize local database (IndexedDB) with full schema
-      this.localDb = createLocalDbClient('web', {
-        dbName: CPOS_DB_NAME,
-        dbVersion: CPOS_DB_VERSION,
-        schema: CPOS_INDEXEDDB_SCHEMA,
-      });
-      await this.localDb.initialize();
-      console.log(`[WebDataAccessService:${initId}] ✅ Local database initialized with schema`);
-
-      // Skip payment methods seeding - it will be done by the application if needed
-      console.log(`[WebDataAccessService:${initId}] Skipping payment methods seeding (will be done by app if needed)`);
-
-      // Initialize API client (non-blocking - server may not be available)
-      console.log(`[WebDataAccessService:${initId}] Initializing API client...`);
-      this.apiClient = getApiClient({
-        baseUrl: SERVER_URL,
-        timeout: 5000, // Shorter timeout for initial check
-      });
-      try {
-        await this.apiClient.initialize();
-        console.log(`[WebDataAccessService:${initId}] ✅ API client initialized`);
-      } catch (error) {
-        console.warn(`[WebDataAccessService:${initId}] ⚠️ API client initialization failed (server may be offline):`, error);
-        // Continue anyway - offline mode is supported
-      }
-
-      // Initialize data source manager (non-blocking - server may not be available)
-      console.log(`[WebDataAccessService:${initId}] Initializing data source manager...`);
-      try {
-        await this.dataSourceManager.initialize();
-        console.log(`[WebDataAccessService:${initId}] ✅ Data source manager initialized`);
-      } catch (error) {
-        console.warn(`[WebDataAccessService:${initId}] ⚠️ Data source manager initialization failed:`, error);
-        // Continue anyway - offline mode is supported
-      }
-
-      // Apply saved manual override if exists
-      if (this.manualOverride && this.preferredDataSource) {
-        this.dataSourceManager.setAutoSwitch(false);
-        await this.dataSourceManager.checkConnectivity();
-        this.dataSourceManager.switchDataSource(this.preferredDataSource);
-        console.log(`[WebDataAccessService] Applied manual override: ${this.preferredDataSource}`);
-      } else {
-        this.dataSourceManager.setAutoSwitch(true);
-        await this.dataSourceManager.checkConnectivity();
-      }
-
-      // Subscribe to connection changes
-      this.dataSourceManager.onConnectionChange(this.handleConnectionChange);
-
-      const initialState = this.dataSourceManager.getConnectionState();
-      this.logConnectionStatus(initialState);
-
-      this.isInitialized = true;
-      console.log(`[WebDataAccessService:${initId}] ✅✅✅ Initialization COMPLETE - Service is ready!`);
-    } catch (error) {
-      console.error(`[WebDataAccessService:${initId}] ❌ Initialization FAILED:`, error);
-      throw error;
+      // console.log(`[WebDataAccessService:${initId}] Seeding payment methods...`);
+      await seedPaymentMethods(this.localDb);
+      // console.log(`[WebDataAccessService:${initId}] ✅ Payment methods seeded`);
+    } catch {
+      // console.warn(`[WebDataAccessService:${initId}] ⚠️ Payment methods seeding failed (non-critical):`, error);
     }
+
+    // Initialize API client (non-blocking - server may not be available)
+    // console.log(`[WebDataAccessService:${initId}] Initializing API client...`);
+    this.apiClient = getApiClient({
+      baseUrl: SERVER_URL,
+      timeout: 5000, // Shorter timeout for initial check
+    });
+    try {
+      await this.apiClient.initialize();
+      // console.log(`[WebDataAccessService:${initId}] ✅ API client initialized`);
+    } catch {
+      // console.warn(`[WebDataAccessService:${initId}] ⚠️ API client initialization failed (server may be offline):`, error);
+      // Continue anyway - offline mode is supported
+    }
+
+    // Initialize data source manager (non-blocking - server may not be available)
+    // console.log(`[WebDataAccessService:${initId}] Initializing data source manager...`);
+    try {
+      await this.dataSourceManager.initialize();
+      // console.log(`[WebDataAccessService:${initId}] ✅ Data source manager initialized`);
+    } catch {
+      // console.warn(`[WebDataAccessService:${initId}] ⚠️ Data source manager initialization failed:`, error);
+      // Continue anyway - offline mode is supported
+    }
+
+    // Apply saved manual override if exists
+    if (this.manualOverride && this.preferredDataSource) {
+      this.dataSourceManager.setAutoSwitch(false);
+      await this.dataSourceManager.checkConnectivity();
+      this.dataSourceManager.switchDataSource(this.preferredDataSource);
+      // console.log(`[WebDataAccessService] Applied manual override: ${this.preferredDataSource}`);
+    } else {
+      this.dataSourceManager.setAutoSwitch(true);
+      await this.dataSourceManager.checkConnectivity();
+    }
+
+    // Subscribe to connection changes
+    this.dataSourceManager.onConnectionChange(this.handleConnectionChange);
+
+    const initialState = this.dataSourceManager.getConnectionState();
+    this.logConnectionStatus(initialState);
+
+    this.isInitialized = true;
+    // console.log(`[WebDataAccessService:${initId}] ✅✅✅ Initialization COMPLETE - Service is ready!`);
   }
 
   /**
@@ -179,51 +179,72 @@ class WebDataAccessService {
    * This should be called after successful online login with auth token
    */
   async initializeSyncService(authToken: string): Promise<void> {
-    try {
-      // Stop existing sync service if any
-      if (this.syncService) {
-        console.log('[WebDataAccessService] Stopping existing sync service...');
-        this.syncService.stopPeriodicSync();
-        await this.syncService.close();
-      }
-
-      if (!this.localDb || !this.apiClient) {
-        throw new Error('Local DB and API client must be initialized before sync service');
-      }
-
-      // Set auth token
-      this.apiClient.setAuthToken(authToken);
-
-      console.log('[WebDataAccessService] Initializing sync service...');
-      this.syncService = new SyncService(this.localDb, this.apiClient, {
-        syncInterval: 3600000, // 1 hour
-        batchSize: 100,
-        retryAttempts: 3,
-        retryDelay: 1000,
-      });
-
-      await this.syncService.initialize();
-      console.log('[WebDataAccessService] Sync service initialized');
-
-      // Sync User table immediately to get passwordHash for offline login
-      console.log('[WebDataAccessService] Syncing User table immediately...');
-      await this.syncService.syncUserTable().catch((error) => {
-        console.error('[WebDataAccessService] User table sync failed:', error);
-      });
-
-      // Perform full sync in background
-      console.log('[WebDataAccessService] Starting full sync in background...');
-      this.syncService.syncAll().catch((error) => {
-        console.error('[WebDataAccessService] Full sync failed:', error);
-      });
-
-      // Start periodic sync (every 1 hour)
-      this.syncService.startPeriodicSync();
-      console.log('[WebDataAccessService] Periodic sync started (interval: 1 hour)');
-    } catch (error) {
-      console.error('[WebDataAccessService] Failed to initialize sync service:', error);
-      throw error;
+    // Stop existing sync service if any
+    if (this.syncService) {
+      // console.log('[WebDataAccessService] Stopping existing sync service...');
+      this.syncService.stopPeriodicSync();
+      await this.syncService.close();
     }
+
+    if (!this.localDb || !this.apiClient) {
+      throw new Error('Local DB and API client must be initialized before sync service');
+    }
+
+    // Set auth token
+    this.apiClient.setAuthToken(authToken);
+
+    // console.log('[WebDataAccessService] Initializing sync service...');
+    this.syncService = new SyncService(this.localDb, this.apiClient, {
+      syncInterval: 3600000, // 1 hour
+      batchSize: 100,
+      retryAttempts: 3,
+      retryDelay: 1000,
+    });
+
+    await this.syncService.initialize();
+    // console.log('[WebDataAccessService] Sync service initialized');
+
+    // Sync User table immediately to get passwordHash for offline login
+    // console.log('[WebDataAccessService] Syncing User table immediately...');
+    await this.syncService.syncUserTable().catch((error) => {
+      // console.error('[WebDataAccessService] User table sync failed:', error);
+    });
+
+    // Perform full sync in background
+    // console.log('[WebDataAccessService] Starting full sync in background...');
+    this.syncService.syncAll()
+      .then(async (summary) => {
+        // console.log('[WebDataAccessService] Full sync completed:', {
+        //   success: summary.success,
+        //   tablesSynced: summary.tablesSynced,
+        //   totalRecords: summary.totalRecordsProcessed,
+        // });
+        
+        // After sync, ensure payment methods exist (seed if missing)
+        try {
+          if (!this.localDb) {
+            // console.warn('[WebDataAccessService] Local DB not initialized, skipping payment method check');
+            return;
+          }
+          const paymentMethods = await this.localDb.query('SELECT * FROM PaymentMethod LIMIT 1');
+          if (!paymentMethods || paymentMethods.length === 0) {
+            // console.log('[WebDataAccessService] No payment methods found after sync, seeding defaults...');
+            await seedPaymentMethods(this.localDb);
+            // console.log('[WebDataAccessService] ✅ Payment methods seeded after sync');
+          } else {
+            // console.log('[WebDataAccessService] Payment methods exist after sync, no seeding needed');
+          }
+        } catch {
+          // console.warn('[WebDataAccessService] Failed to seed payment methods after sync:', seedError);
+        }
+      })
+      .catch((error) => {
+        // console.error('[WebDataAccessService] Full sync failed:', error);
+      });
+
+    // Start periodic sync (every 1 hour)
+    this.syncService.startPeriodicSync();
+    // console.log('[WebDataAccessService] Periodic sync started (interval: 1 hour)');
   }
 
   /**
@@ -231,11 +252,11 @@ class WebDataAccessService {
    */
   async stopSyncService(): Promise<void> {
     if (this.syncService) {
-      console.log('[WebDataAccessService] Stopping sync service...');
+      // console.log('[WebDataAccessService] Stopping sync service...');
       this.syncService.stopPeriodicSync();
       await this.syncService.close();
       this.syncService = null;
-      console.log('[WebDataAccessService] Sync service stopped');
+      // console.log('[WebDataAccessService] Sync service stopped');
     }
   }
 
@@ -332,19 +353,19 @@ class WebDataAccessService {
       this.preferredDataSource = null;
       this.dataSourceManager.setAutoSwitch(true);
       await this.dataSourceManager.checkConnectivity();
-      console.log('[WebDataAccessService] Manual override disabled, auto-switch enabled');
+        // console.log('[WebDataAccessService] Manual override disabled, auto-switch enabled');
     } else {
       this.manualOverride = true;
       this.preferredDataSource = source;
       this.dataSourceManager.setAutoSwitch(false);
 
       if (source === DataSource.SERVER) {
-        console.log('[WebDataAccessService] Checking server connectivity before manual switch...');
+        // console.log('[WebDataAccessService] Checking server connectivity before manual switch...');
         await this.dataSourceManager.checkConnectivity();
       }
 
       this.dataSourceManager.switchDataSource(source);
-      console.log(`[WebDataAccessService] Manual override enabled: ${source}`);
+      // console.log(`[WebDataAccessService] Manual override enabled: ${source}`);
 
       const updatedState = this.dataSourceManager.getConnectionState();
       this.handleConnectionChange(updatedState);
@@ -365,41 +386,41 @@ class WebDataAccessService {
     this.stateChangeListeners.forEach((callback) => {
       try {
         callback(state);
-      } catch (error) {
-        console.error('[WebDataAccessService] Error in listener callback:', error);
+      } catch {
+        // console.error('[WebDataAccessService] Error in listener callback:', error);
       }
     });
   };
 
   private logConnectionStatus(state: ConnectionState): void {
-    const statusEmoji =
-      state.status === ConnectionStatus.ONLINE
-        ? '🟢'
-        : state.status === ConnectionStatus.OFFLINE
-        ? '🔴'
-        : state.status === ConnectionStatus.CHECKING
-        ? '🟡'
-        : '⚪';
+    // const statusEmoji =
+    //   state.status === ConnectionStatus.ONLINE
+    //     ? '🟢'
+    //     : state.status === ConnectionStatus.OFFLINE
+    //     ? '🔴'
+    //     : state.status === ConnectionStatus.CHECKING
+    //     ? '🟡'
+    //     : '⚪';
 
-    const dataSourceEmoji = state.dataSource === DataSource.SERVER ? '🌐' : '💾';
-    const dataSourceText = state.dataSource === DataSource.SERVER ? 'SERVER' : 'LOCAL DB';
+    // const dataSourceEmoji = state.dataSource === DataSource.SERVER ? '🌐' : '💾';
+    // const dataSourceText = state.dataSource === DataSource.SERVER ? 'SERVER' : 'LOCAL DB';
 
-    console.log('\n' + '='.repeat(60));
-    console.log(`${statusEmoji} [CONNECTION STATUS] ${statusEmoji}`);
-    console.log(`   Status: ${state.status}`);
-    console.log(`   Data Source: ${dataSourceEmoji} ${dataSourceText}`);
-    console.log(`   Server URL: ${state.serverUrl}`);
-    if (state.lastChecked) {
-      console.log(`   Last Checked: ${state.lastChecked.toLocaleString()}`);
-    }
-    if (state.error) {
-      console.log(`   Error: ${state.error}`);
-    }
-    console.log('='.repeat(60) + '\n');
+    // console.log('\n' + '='.repeat(60));
+    // console.log(`${statusEmoji} [CONNECTION STATUS] ${statusEmoji}`);
+    // console.log(`   Status: ${state.status}`);
+    // console.log(`   Data Source: ${dataSourceEmoji} ${dataSourceText}`);
+    // console.log(`   Server URL: ${state.serverUrl}`);
+    // if (state.lastChecked) {
+    //   console.log(`   Last Checked: ${state.lastChecked.toLocaleString()}`);
+    // }
+    // if (state.error) {
+    //   console.log(`   Error: ${state.error}`);
+    // }
+    // console.log('='.repeat(60) + '\n');
   }
 
   async destroy(): Promise<void> {
-    console.log('[WebDataAccessService] Destroying...');
+    // console.log('[WebDataAccessService] Destroying...');
 
     // Stop sync service first
     await this.stopSyncService();
@@ -418,7 +439,7 @@ class WebDataAccessService {
     this.stateChangeListeners.clear();
     this.isInitialized = false;
 
-    console.log('[WebDataAccessService] Destroyed');
+    // console.log('[WebDataAccessService] Destroyed');
   }
 }
 

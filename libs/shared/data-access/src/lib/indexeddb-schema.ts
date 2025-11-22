@@ -1,180 +1,53 @@
 /**
  * IndexedDB Schema for POS System
  *
- * This schema mirrors the SQLite schema for offline-first web applications
- * Note: IndexedDB is NoSQL, so we create object stores instead of tables
+ * This schema EXACTLY matches the SQLite schema for desktop app
+ * Same table names (PascalCase), same columns, same structure
+ * This ensures seamless sync between desktop SQLite and web IndexedDB
  */
 
 import { IndexedDBSchema } from './local-db-client';
 
 /**
  * Complete schema for the CPOS database
- * Based on the SQLite DDL schema
+ * Matches SQLite schema exactly - same table names and structure
  */
 export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
   stores: {
-    // Customer Management
-    customer_groups: {
+    // ============================================
+    // 1. CUSTOMER MANAGEMENT
+    // ============================================
+    CustomerGroup: {
       keyPath: 'id',
       indexes: {
+        name: { keyPath: 'name', unique: true },
         sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    customers: {
+    Customer: {
       keyPath: 'id',
       indexes: {
-        customer_code: { keyPath: 'customer_code', unique: true },
+        customerCode: { keyPath: 'customerCode', unique: true },
         email: { keyPath: 'email' },
         phone: { keyPath: 'phone' },
-        customer_group_id: { keyPath: 'customer_group_id' },
+        customerGroupId: { keyPath: 'customerGroupId' },
         sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    customer_addresses: {
+    CustomerAddress: {
       keyPath: 'id',
       indexes: {
-        customer_id: { keyPath: 'customer_id' },
-      },
-    },
-
-    // Location/Store Management
-    locations: {
-      keyPath: 'id',
-      indexes: {
-        code: { keyPath: 'code', unique: true },
-        sync_status: { keyPath: 'sync_status' },
-      },
-    },
-
-    // Product Management
-    categories: {
-      keyPath: 'id',
-      indexes: {
-        name: { keyPath: 'name' },
-        parent_category_id: { keyPath: 'parent_category_id' },
-        sync_status: { keyPath: 'sync_status' },
-      },
-    },
-
-    products: {
-      keyPath: 'id',
-      indexes: {
-        sku: { keyPath: 'sku', unique: true },
-        barcode: { keyPath: 'barcode' },
-        category_id: { keyPath: 'category_id' },
-        sync_status: { keyPath: 'sync_status' },
-      },
-    },
-
-    product_variants: {
-      keyPath: 'id',
-      indexes: {
-        product_id: { keyPath: 'product_id' },
-        sku: { keyPath: 'sku', unique: true },
-        barcode: { keyPath: 'barcode' },
-      },
-    },
-
-    // Inventory Management
-    inventory: {
-      keyPath: 'id',
-      indexes: {
-        product_id: { keyPath: 'product_id' },
-        location_id: { keyPath: 'location_id' },
-        variant_id: { keyPath: 'variant_id' },
-        sync_status: { keyPath: 'sync_status' },
-      },
-    },
-
-    inventory_adjustments: {
-      keyPath: 'id',
-      indexes: {
-        inventory_id: { keyPath: 'inventory_id' },
-        created_at: { keyPath: 'created_at' },
-      },
-    },
-
-    // Sales/Transactions
-    sales: {
-      keyPath: 'id',
-      indexes: {
-        receipt_number: { keyPath: 'receipt_number', unique: true },
-        customer_id: { keyPath: 'customer_id' },
-        location_id: { keyPath: 'location_id' },
-        cashier_id: { keyPath: 'cashier_id' },
-        created_at: { keyPath: 'created_at' },
-        sync_status: { keyPath: 'sync_status' },
-      },
-    },
-
-    sale_items: {
-      keyPath: 'id',
-      indexes: {
-        sale_id: { keyPath: 'sale_id' },
-        product_id: { keyPath: 'product_id' },
-        variant_id: { keyPath: 'variant_id' },
-      },
-    },
-
-    // Order Management (must match SQLite table names exactly!)
-    SaleOrder: {
-      keyPath: 'id',
-      indexes: {
-        orderNumber: { keyPath: 'orderNumber', unique: true },
         customerId: { keyPath: 'customerId' },
-        locationId: { keyPath: 'locationId' },
-        cashierId: { keyPath: 'cashierId' },
-        salesPersonId: { keyPath: 'salesPersonId' },
-        status: { keyPath: 'status' },
-        createdAt: { keyPath: 'createdAt' },
         sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    OrderLineItem: {
-      keyPath: 'id',
-      indexes: {
-        orderId: { keyPath: 'orderId' },
-        productId: { keyPath: 'productId' },
-        variantId: { keyPath: 'variantId' },
-        salesPersonId: { keyPath: 'salesPersonId' },
-      },
-    },
-
-    OrderPayment: {
-      keyPath: 'id',
-      indexes: {
-        orderId: { keyPath: 'orderId' },
-        paymentMethodId: { keyPath: 'paymentMethodId' },
-        createdAt: { keyPath: 'createdAt' },
-      },
-    },
-
-    OrderDiscount: {
-      keyPath: 'id',
-      indexes: {
-        orderId: { keyPath: 'orderId' },
-        discountId: { keyPath: 'discountId' },
-      },
-    },
-
-    // Parked Orders
-    ParkedOrder: {
-      keyPath: 'id',
-      indexes: {
-        parkNumber: { keyPath: 'parkNumber', unique: true },
-        orderId: { keyPath: 'orderId', unique: true },
-        customerId: { keyPath: 'customerId' },
-        parkedBy: { keyPath: 'parkedBy' },
-        parkedAt: { keyPath: 'parkedAt' },
-        sync_status: { keyPath: 'sync_status' },
-      },
-    },
-
-    // Sales Person Management
-    SalesPerson: {
+    // ============================================
+    // 2. LOCATION/STORE MANAGEMENT
+    // ============================================
+    Location: {
       keyPath: 'id',
       indexes: {
         code: { keyPath: 'code', unique: true },
@@ -183,7 +56,212 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
       },
     },
 
-    // Payment Methods
+    // ============================================
+    // 3. PRODUCT & INVENTORY MANAGEMENT
+    // ============================================
+    Category: {
+      keyPath: 'id',
+      indexes: {
+        name: { keyPath: 'name' },
+        parentCategoryId: { keyPath: 'parentCategoryId' },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    Brand: {
+      keyPath: 'id',
+      indexes: {
+        name: { keyPath: 'name', unique: true },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    Supplier: {
+      keyPath: 'id',
+      indexes: {
+        name: { keyPath: 'name', unique: true },
+        email: { keyPath: 'email' },
+        phone: { keyPath: 'phone' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    TaxCategory: {
+      keyPath: 'id',
+      indexes: {
+        name: { keyPath: 'name', unique: true },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    Product: {
+      keyPath: 'id',
+      indexes: {
+        productCode: { keyPath: 'productCode', unique: true },
+        categoryId: { keyPath: 'categoryId' },
+        brandId: { keyPath: 'brandId' },
+        supplierId: { keyPath: 'supplierId' },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    ProductVariant: {
+      keyPath: 'id',
+      indexes: {
+        productId: { keyPath: 'productId' },
+        sku: { keyPath: 'sku', unique: true },
+        barcode: { keyPath: 'barcode' },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    InventoryItem: {
+      keyPath: 'id',
+      indexes: {
+        variantId: { keyPath: 'variantId' },
+        locationId: { keyPath: 'locationId' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    Barcode: {
+      keyPath: 'id',
+      indexes: {
+        variantId: { keyPath: 'variantId' },
+        barcodeValue: { keyPath: 'barcodeValue' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    SerialNumber: {
+      keyPath: 'id',
+      indexes: {
+        variantId: { keyPath: 'variantId' },
+        serialNumber: { keyPath: 'serialNumber', unique: true },
+        status: { keyPath: 'status' },
+        orderId: { keyPath: 'orderId' },
+        orderLineItemId: { keyPath: 'orderLineItemId' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    // ============================================
+    // 4. USERS & PERMISSIONS
+    // ============================================
+    Role: {
+      keyPath: 'id',
+      indexes: {
+        name: { keyPath: 'name', unique: true },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    User: {
+      keyPath: 'id',
+      indexes: {
+        username: { keyPath: 'username', unique: true },
+        email: { keyPath: 'email', unique: true },
+        employeeCode: { keyPath: 'employeeCode', unique: true },
+        roleId: { keyPath: 'roleId' },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    UserLocation: {
+      keyPath: 'id',
+      indexes: {
+        userId: { keyPath: 'userId' },
+        locationId: { keyPath: 'locationId' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    // ============================================
+    // 5. STOCK MANAGEMENT
+    // ============================================
+    StockAdjustment: {
+      keyPath: 'id',
+      indexes: {
+        locationId: { keyPath: 'locationId' },
+        adjustedBy: { keyPath: 'adjustedBy' },
+        adjustedAt: { keyPath: 'adjustedAt' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    StockAdjustmentLine: {
+      keyPath: 'id',
+      indexes: {
+        adjustmentId: { keyPath: 'adjustmentId' },
+        variantId: { keyPath: 'variantId' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    StockTransfer: {
+      keyPath: 'id',
+      indexes: {
+        transferNumber: { keyPath: 'transferNumber', unique: true },
+        fromLocationId: { keyPath: 'fromLocationId' },
+        toLocationId: { keyPath: 'toLocationId' },
+        status: { keyPath: 'status' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    StockTransferLine: {
+      keyPath: 'id',
+      indexes: {
+        transferId: { keyPath: 'transferId' },
+        variantId: { keyPath: 'variantId' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    // ============================================
+    // 6. SHIFT MANAGEMENT
+    // ============================================
+    CashRegister: {
+      keyPath: 'id',
+      indexes: {
+        code: { keyPath: 'code', unique: true },
+        locationId: { keyPath: 'locationId' },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    Shift: {
+      keyPath: 'id',
+      indexes: {
+        shiftNumber: { keyPath: 'shiftNumber', unique: true },
+        registerId: { keyPath: 'registerId' },
+        locationId: { keyPath: 'locationId' },
+        userId: { keyPath: 'userId' },
+        status: { keyPath: 'status' },
+        openedAt: { keyPath: 'openedAt' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    CashMovement: {
+      keyPath: 'id',
+      indexes: {
+        shiftId: { keyPath: 'shiftId' },
+        type: { keyPath: 'type' },
+        timestamp: { keyPath: 'timestamp' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    // ============================================
+    // 7. PAYMENT METHODS
+    // ============================================
     PaymentMethod: {
       keyPath: 'id',
       indexes: {
@@ -193,158 +271,103 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
       },
     },
 
-    payment_methods: {
+    GiftCard: {
+      keyPath: 'id',
+      indexes: {
+        cardNumber: { keyPath: 'cardNumber', unique: true },
+        customerId: { keyPath: 'customerId' },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    StoreCredit: {
+      keyPath: 'id',
+      indexes: {
+        customerId: { keyPath: 'customerId' },
+        issuedBy: { keyPath: 'issuedBy' },
+        sync_status: { keyPath: 'sync_status' },
+      },
+    },
+
+    // ============================================
+    // 8. SALES PERSON MANAGEMENT
+    // ============================================
+    SalesPerson: {
       keyPath: 'id',
       indexes: {
         code: { keyPath: 'code', unique: true },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    payments: {
+    // ============================================
+    // 9. SALES & ORDERS
+    // ============================================
+    SaleOrder: {
       keyPath: 'id',
       indexes: {
-        sale_id: { keyPath: 'sale_id' },
-        payment_method_id: { keyPath: 'payment_method_id' },
-        created_at: { keyPath: 'created_at' },
-      },
-    },
-
-    // Discounts and Promotions
-    discounts: {
-      keyPath: 'id',
-      indexes: {
-        code: { keyPath: 'code', unique: true },
-        active: { keyPath: 'active' },
-      },
-    },
-
-    // Tax Management
-    taxes: {
-      keyPath: 'id',
-      indexes: {
-        code: { keyPath: 'code', unique: true },
-        active: { keyPath: 'active' },
-      },
-    },
-
-    // User Management
-    users: {
-      keyPath: 'id',
-      indexes: {
-        email: { keyPath: 'email', unique: true },
-        employee_code: { keyPath: 'employee_code', unique: true },
-        role_id: { keyPath: 'role_id' },
-      },
-    },
-
-    roles: {
-      keyPath: 'id',
-      indexes: {
-        name: { keyPath: 'name', unique: true },
-      },
-    },
-
-    // Cash Management
-    cash_drawers: {
-      keyPath: 'id',
-      indexes: {
-        location_id: { keyPath: 'location_id' },
-        cashier_id: { keyPath: 'cashier_id' },
-        opened_at: { keyPath: 'opened_at' },
-      },
-    },
-
-    cash_drawer_transactions: {
-      keyPath: 'id',
-      indexes: {
-        cash_drawer_id: { keyPath: 'cash_drawer_id' },
-        created_at: { keyPath: 'created_at' },
-      },
-    },
-
-    // Suppliers
-    suppliers: {
-      keyPath: 'id',
-      indexes: {
-        code: { keyPath: 'code', unique: true },
-        email: { keyPath: 'email' },
-      },
-    },
-
-    // Purchase Orders
-    purchase_orders: {
-      keyPath: 'id',
-      indexes: {
-        po_number: { keyPath: 'po_number', unique: true },
-        supplier_id: { keyPath: 'supplier_id' },
-        created_at: { keyPath: 'created_at' },
-      },
-    },
-
-    purchase_order_items: {
-      keyPath: 'id',
-      indexes: {
-        purchase_order_id: { keyPath: 'purchase_order_id' },
-        product_id: { keyPath: 'product_id' },
-      },
-    },
-
-    // Sync Management
-    sync_queue: {
-      keyPath: 'id',
-      indexes: {
-        entity_type: { keyPath: 'entity_type' },
-        operation: { keyPath: 'operation' },
+        orderNumber: { keyPath: 'orderNumber', unique: true },
+        customerId: { keyPath: 'customerId' },
+        locationId: { keyPath: 'locationId' },
+        cashierId: { keyPath: 'cashierId' },
+        salesPersonId: { keyPath: 'salesPersonId' },
+        orderDate: { keyPath: 'orderDate' },
         status: { keyPath: 'status' },
-        created_at: { keyPath: 'created_at' },
+        shiftId: { keyPath: 'shiftId' },
+        sync_status: { keyPath: 'sync_status' },
+        last_synced_at: { keyPath: 'last_synced_at' },
       },
     },
 
-    sync_conflicts: {
+    OrderLineItem: {
       keyPath: 'id',
       indexes: {
-        entity_type: { keyPath: 'entity_type' },
+        orderId: { keyPath: 'orderId' },
+        variantId: { keyPath: 'variantId' },
+        salesPersonId: { keyPath: 'salesPersonId' },
+        sync_status: { keyPath: 'sync_status' },
+        last_synced_at: { keyPath: 'last_synced_at' },
+      },
+    },
+
+    OrderPayment: {
+      keyPath: 'id',
+      indexes: {
+        orderId: { keyPath: 'orderId' },
+        paymentMethodId: { keyPath: 'paymentMethodId' },
         status: { keyPath: 'status' },
-        detected_at: { keyPath: 'detected_at' },
+        createdAt: { keyPath: 'createdAt' },
+        sync_status: { keyPath: 'sync_status' },
+        last_synced_at: { keyPath: 'last_synced_at' },
       },
     },
 
-    // Audit Logs
-    audit_logs: {
+    OrderDiscount: {
       keyPath: 'id',
       indexes: {
-        entity_type: { keyPath: 'entity_type' },
-        user_id: { keyPath: 'user_id' },
-        created_at: { keyPath: 'created_at' },
+        orderId: { keyPath: 'orderId' },
+        discountId: { keyPath: 'discountId' },
+        sync_status: { keyPath: 'sync_status' },
+        last_synced_at: { keyPath: 'last_synced_at' },
       },
     },
 
-    // Additional tables for complete schema
-    product_images: {
+    ShiftTransaction: {
       keyPath: 'id',
       indexes: {
-        product_id: { keyPath: 'product_id' },
+        shiftId: { keyPath: 'shiftId' },
+        type: { keyPath: 'type' },
+        timestamp: { keyPath: 'timestamp' },
+        orderId: { keyPath: 'orderId' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    loyalty_programs: {
-      keyPath: 'id',
-      indexes: {
-        name: { keyPath: 'name', unique: true },
-        active: { keyPath: 'active' },
-      },
-    },
-
-    loyalty_transactions: {
-      keyPath: 'id',
-      indexes: {
-        customer_id: { keyPath: 'customer_id' },
-        sale_id: { keyPath: 'sale_id' },
-        created_at: { keyPath: 'created_at' },
-      },
-    },
-
-    // Return Management
+    // ============================================
+    // 10. RETURNS & EXCHANGES
+    // ============================================
     ReturnOrder: {
       keyPath: 'id',
       indexes: {
@@ -363,10 +386,10 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
         returnId: { keyPath: 'returnId' },
         originalLineItemId: { keyPath: 'originalLineItemId' },
         variantId: { keyPath: 'variantId' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    // Exchange Management
     ExchangeOrder: {
       keyPath: 'id',
       indexes: {
@@ -385,81 +408,150 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
         exchangeId: { keyPath: 'exchangeId' },
         returnedVariantId: { keyPath: 'returnedVariantId' },
         exchangedVariantId: { keyPath: 'exchangedVariantId' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    returns: {
+    // ============================================
+    // 11. DISCOUNTS & PROMOTIONS
+    // ============================================
+    Promotion: {
       keyPath: 'id',
       indexes: {
-        return_number: { keyPath: 'return_number', unique: true },
-        original_sale_id: { keyPath: 'original_sale_id' },
-        created_at: { keyPath: 'created_at' },
+        code: { keyPath: 'code', unique: true },
+        isActive: { keyPath: 'isActive' },
+        startDate: { keyPath: 'startDate' },
+        endDate: { keyPath: 'endDate' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    return_items: {
+    PromotionCategory: {
       keyPath: 'id',
       indexes: {
-        return_id: { keyPath: 'return_id' },
-        sale_item_id: { keyPath: 'sale_item_id' },
+        promotionId: { keyPath: 'promotionId' },
+        categoryId: { keyPath: 'categoryId' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    shifts: {
+    // ============================================
+    // 12. TAXES
+    // ============================================
+    TaxRate: {
       keyPath: 'id',
       indexes: {
-        cashier_id: { keyPath: 'cashier_id' },
-        location_id: { keyPath: 'location_id' },
-        start_time: { keyPath: 'start_time' },
+        name: { keyPath: 'name' },
+        isActive: { keyPath: 'isActive' },
+        effectiveDate: { keyPath: 'effectiveDate' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    gift_cards: {
+    // ============================================
+    // 13. EXPENSES & ACCOUNTING
+    // ============================================
+    ExpenseAccount: {
       keyPath: 'id',
       indexes: {
-        card_number: { keyPath: 'card_number', unique: true },
-        customer_id: { keyPath: 'customer_id' },
+        code: { keyPath: 'code', unique: true },
+        parentAccountId: { keyPath: 'parentAccountId' },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    gift_card_transactions: {
+    BankAccount: {
       keyPath: 'id',
       indexes: {
-        gift_card_id: { keyPath: 'gift_card_id' },
-        sale_id: { keyPath: 'sale_id' },
-        created_at: { keyPath: 'created_at' },
+        accountNumber: { keyPath: 'accountNumber', unique: true },
+        locationId: { keyPath: 'locationId' },
+        isActive: { keyPath: 'isActive' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    store_credit: {
+    Expense: {
       keyPath: 'id',
       indexes: {
-        customer_id: { keyPath: 'customer_id' },
+        expenseNumber: { keyPath: 'expenseNumber', unique: true },
+        expenseAccountId: { keyPath: 'expenseAccountId' },
+        locationId: { keyPath: 'locationId' },
+        status: { keyPath: 'status' },
+        expenseDate: { keyPath: 'expenseDate' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    store_credit_transactions: {
+    BankDeposit: {
       keyPath: 'id',
       indexes: {
-        store_credit_id: { keyPath: 'store_credit_id' },
-        sale_id: { keyPath: 'sale_id' },
-        created_at: { keyPath: 'created_at' },
+        depositNumber: { keyPath: 'depositNumber', unique: true },
+        bankAccountId: { keyPath: 'bankAccountId' },
+        locationId: { keyPath: 'locationId' },
+        status: { keyPath: 'status' },
+        depositDate: { keyPath: 'depositDate' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    device_info: {
+    BankDepositShift: {
       keyPath: 'id',
       indexes: {
-        device_id: { keyPath: 'device_id', unique: true },
-        location_id: { keyPath: 'location_id' },
+        depositId: { keyPath: 'depositId' },
+        shiftId: { keyPath: 'shiftId' },
+        sync_status: { keyPath: 'sync_status' },
       },
     },
 
-    app_settings: {
-      keyPath: 'key',
+    CashAccount: {
+      keyPath: 'id',
+      indexes: {
+        locationId: { keyPath: 'locationId' },
+        registerId: { keyPath: 'registerId' },
+        sync_status: { keyPath: 'sync_status' },
+      },
     },
 
-    // Store Configuration
+    // ============================================
+    // 14. ADDITIONAL FEATURES
+    // ============================================
+    ParkedOrder: {
+      keyPath: 'id',
+      indexes: {
+        parkNumber: { keyPath: 'parkNumber', unique: true },
+        orderId: { keyPath: 'orderId', unique: true },
+        customerId: { keyPath: 'customerId' },
+        parkedBy: { keyPath: 'parkedBy' },
+        parkedAt: { keyPath: 'parkedAt' },
+        expiryDate: { keyPath: 'expiryDate' },
+        sync_status: { keyPath: 'sync_status' },
+        last_synced_at: { keyPath: 'last_synced_at' },
+      },
+    },
+
+    AuditLog: {
+      keyPath: 'id',
+      indexes: {
+        userId: { keyPath: 'userId' },
+        entityType: { keyPath: 'entityType' },
+        entityId: { keyPath: 'entityId' },
+        action: { keyPath: 'action' },
+        timestamp: { keyPath: 'timestamp' },
+      },
+    },
+
+    SystemSetting: {
+      keyPath: 'id',
+      indexes: {
+        key: { keyPath: 'key', unique: true },
+        category: { keyPath: 'category' },
+      },
+    },
+
+    // ============================================
+    // 15. STORE CONFIGURATION
+    // ============================================
     StoreConfig: {
       keyPath: 'id',
       indexes: {
@@ -474,7 +566,7 @@ export const CPOS_INDEXEDDB_SCHEMA: IndexedDBSchema = {
  * Database version
  * Increment this when schema changes
  */
-export const CPOS_DB_VERSION = 5;
+export const CPOS_DB_VERSION = 6;
 
 /**
  * Database name

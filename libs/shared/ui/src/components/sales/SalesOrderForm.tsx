@@ -11,6 +11,8 @@ import { PaymentPanel, PaymentMethod, Payment } from './PaymentPanel.js';
 import { ParkedOrderSearch } from './ParkedOrderSearch.js';
 import { ConfirmationModal } from '@monorepo/shared-ui';
 import { useCurrency } from '@monorepo/shared-hooks-currency';
+import { usePrintReceipt } from './usePrintReceipt.js';
+import { PrintConfirmationDialog } from './PrintConfirmationDialog.js';
 import type { ParkedOrderListItem } from '@monorepo/shared-data-access';
 
 export interface CreateSalesOrderInput {
@@ -21,6 +23,16 @@ export interface CreateSalesOrderInput {
   couponCode?: string;
   adjustment?: OrderAdjustment;
   notes?: string;
+}
+
+export interface CreateSalesOrderResult {
+  success: boolean;
+  order?: {
+    id: string;
+    orderNumber?: string;
+    invoiceNumber?: string;
+  };
+  error?: string;
 }
 
 export interface SalesOrderFormProps extends ComponentProps {
@@ -41,7 +53,7 @@ export interface SalesOrderFormProps extends ComponentProps {
   loadingParkedOrders?: boolean;
 
   // Callbacks
-  onCreateOrder: (data: CreateSalesOrderInput) => void;
+  onCreateOrder: (data: CreateSalesOrderInput) => Promise<CreateSalesOrderResult | void> | void;
   onCancel?: () => void;
   onCreateCustomer: () => void;
   onValidateCoupon: (code: string, customerId?: string) => void;
@@ -53,6 +65,14 @@ export interface SalesOrderFormProps extends ComponentProps {
   onSearchParkedOrders?: (searchTerm: string) => void;
   onLoadParkedOrder?: (parkedOrderId: string, orderId: string, order?: ParkedOrderListItem) => void;
   onDeleteParkedOrder?: (parkedOrderId: string) => void;
+
+  // Print receipt configuration (optional)
+  enablePrintReceipt?: boolean;
+  storeName?: string;
+  storeNameArabic?: string;
+  storeUrl?: string;
+  posNumber?: string;
+  currentCashier?: string;
 
   // Optional props
   taxRate?: number;
@@ -86,6 +106,12 @@ export function SalesOrderForm({
   onSearchParkedOrders,
   onLoadParkedOrder,
   onDeleteParkedOrder,
+  enablePrintReceipt = true,
+  storeName = 'AL IMRAN BOUTIQUE',
+  storeNameArabic = 'العمران',
+  storeUrl = 'http://www.alimranboutique.com',
+  posNumber = 'ALIMRAN BOUTIQUE',
+  currentCashier,
   taxRate = 0,
   disabled = false,
   className = '',
@@ -107,6 +133,29 @@ export function SalesOrderForm({
   const [currentParkedOrderId, setCurrentParkedOrderId] = useState<string | null>(null);
   const [showParkConfirm, setShowParkConfirm] = useState(false);
   const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+
+  // Print receipt hook
+  const {
+    showPrintDialog,
+    isPrinting,
+    receiptData,
+    promptPrintReceipt,
+    confirmPrint,
+    cancelPrint,
+    skipPrint,
+  } = usePrintReceipt({
+    storeName,
+    storeNameArabic,
+    storeUrl,
+    posNumber,
+    onPrintSuccess: () => {
+      console.log('[SalesOrderForm] Receipt printed successfully');
+    },
+    onPrintError: (error) => {
+      console.error('[SalesOrderForm] Print error:', error);
+      alert('Failed to print receipt: ' + error.message);
+    },
+  });
 
   // Calculate order totals
   const orderTotals = useMemo<OrderTotals>(() => {
@@ -219,7 +268,7 @@ export function SalesOrderForm({
     return orderTotals.totalAmount - amountPaid;
   }, [orderTotals.totalAmount, amountPaid]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (lineItems.length === 0) {
       alert('Please add at least one item to the order');
       return;
@@ -258,7 +307,40 @@ export function SalesOrderForm({
       notes: notes.trim() || undefined,
     };
 
-    onCreateOrder(orderData);
+    // Call onCreateOrder and check if it returns a result
+    const result = await onCreateOrder(orderData);
+
+    // If print receipt is enabled and order was created successfully, show print dialog
+    if (enablePrintReceipt && result && result.success && result.order) {
+      // Calculate totals for receipt
+      const grossTotal = orderTotals.subtotal;
+      const itemDiscount =
+        orderTotals.lineItemDiscount +
+        orderTotals.orderDiscount +
+        orderTotals.couponDiscount;
+      const netTotal = orderTotals.totalAmount;
+      const tendered = amountPaid;
+      const change = Math.abs(Math.min(0, amountDue));
+
+      // Show print confirmation dialog
+      promptPrintReceipt({
+        invoiceNumber: result.order.invoiceNumber || result.order.orderNumber || result.order.id,
+        lineItems: lineItems,
+        payments: payments,
+        customer: selectedCustomer || undefined,
+        cashier: currentCashier,
+        grossTotal,
+        itemDiscount,
+        netTotal,
+        tendered,
+        change,
+      });
+
+      // Reset form after showing print dialog
+      setTimeout(() => {
+        handleReset();
+      }, 500);
+    }
   };
 
   const handleReset = () => {
@@ -666,6 +748,28 @@ export function SalesOrderForm({
           parkedOrders={parkedOrders}
           onSearch={handleSearchParkedOrders}
           isLoading={loadingParkedOrders}
+        />
+      )}
+
+      {/* Print Confirmation Dialog */}
+      {enablePrintReceipt && (
+        <PrintConfirmationDialog
+          isOpen={showPrintDialog}
+          onConfirm={confirmPrint}
+          onCancel={cancelPrint}
+          onSkip={skipPrint}
+          receiptData={
+            receiptData
+              ? {
+                  storeName: receiptData.storeName,
+                  invoiceNumber: receiptData.invoiceNumber,
+                  totalAmount: receiptData.netTotal,
+                  amountPaid: receiptData.tendered,
+                  change: receiptData.change,
+                }
+              : undefined
+          }
+          isProcessing={isPrinting}
         />
       )}
     </div>

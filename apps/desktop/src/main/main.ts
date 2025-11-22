@@ -12,7 +12,7 @@ function setupIpcHandlers(): void {
   ipcMain.handle('connection:get-state', async () => {
     try {
       if (!dataAccessService) {
-        console.warn('[IPC] DataAccessService not initialized, returning default state');
+        // console.warn('[IPC] DataAccessService not initialized, returning default state');
         return {
           status: 'unknown',
           dataSource: 'local',
@@ -22,9 +22,9 @@ function setupIpcHandlers(): void {
         };
       }
       const state = dataAccessService.getConnectionState();
-      console.log('[IPC] Raw connection state:', JSON.stringify(state, null, 2));
-      console.log('[IPC] Status:', state.status, 'Type:', typeof state.status);
-      console.log('[IPC] DataSource:', state.dataSource, 'Type:', typeof state.dataSource);
+      // console.log('[IPC] Raw connection state:', JSON.stringify(state, null, 2));
+      // console.log('[IPC] Status:', state.status, 'Type:', typeof state.status);
+      // console.log('[IPC] DataSource:', state.dataSource, 'Type:', typeof state.dataSource);
       
       // Serialize Date objects to ISO strings for IPC
       // Convert enum values to strings - enums are string enums, so the value is already a string
@@ -56,10 +56,10 @@ function setupIpcHandlers(): void {
         lastChecked: state.lastChecked ? state.lastChecked.toISOString() : null,
         error: state.error,
       };
-      console.log('[IPC] Serialized state:', JSON.stringify(serializedState, null, 2));
+      // console.log('[IPC] Serialized state:', JSON.stringify(serializedState, null, 2));
       return serializedState;
     } catch (error) {
-      console.error('[IPC] connection:get-state error:', error);
+      // console.error('[IPC] connection:get-state error:', error);
       // Return a default state instead of throwing - never throw from IPC handlers
       return {
         status: 'unknown',
@@ -76,7 +76,7 @@ function setupIpcHandlers(): void {
       if (!dataAccessService) {
         throw new Error('DataAccessService not initialized');
       }
-      console.log('[IPC] connection:set-manual - Setting manual source to:', source);
+      // console.log('[IPC] connection:set-manual - Setting manual source to:', source);
       const { DataSource } = await import('@monorepo/shared-data-access');
       const dataSource = source === 'server' ? DataSource.SERVER : 
                         source === 'local' ? DataSource.LOCAL : null;
@@ -84,7 +84,7 @@ function setupIpcHandlers(): void {
       
       // Get updated state and return it
       const updatedState = dataAccessService.getConnectionState();
-      console.log('[IPC] connection:set-manual - Updated state:', updatedState);
+      // console.log('[IPC] connection:set-manual - Updated state:', updatedState);
       
       return { 
         success: true,
@@ -97,7 +97,7 @@ function setupIpcHandlers(): void {
         }
       };
     } catch (error) {
-      console.error('[IPC] connection:set-manual error:', error);
+      // console.error('[IPC] connection:set-manual error:', error);
       throw error;
     }
   });
@@ -109,7 +109,7 @@ function setupIpcHandlers(): void {
       }
       return dataAccessService.getManualOverride();
     } catch (error) {
-      console.error('[IPC] connection:get-manual-override error:', error);
+      // console.error('[IPC] connection:get-manual-override error:', error);
       return { enabled: false, dataSource: null };
     }
   });
@@ -119,26 +119,26 @@ function setupIpcHandlers(): void {
       if (!dataAccessService) {
         throw new Error('DataAccessService not initialized');
       }
-      console.log('[IPC] connection:check - Starting connectivity check...');
+      // console.log('[IPC] connection:check - Starting connectivity check...');
       const result = await dataAccessService.checkConnectivity();
-      console.log('[IPC] connection:check - Result:', result);
+      // console.log('[IPC] connection:check - Result:', result);
       
       // Get updated state after check
       const updatedState = dataAccessService.getConnectionState();
-      console.log('[IPC] connection:check - Updated state:', updatedState);
+      // console.log('[IPC] connection:check - Updated state:', updatedState);
       
       return result;
     } catch (error) {
-      console.error('[IPC] connection:check error:', error);
+      // console.error('[IPC] connection:check error:', error);
       throw error;
     }
   });
 
   // Auth handlers
   ipcMain.handle('auth:login', async (event, username: string, password: string) => {
-    console.log('[IPC] ========== AUTH:LOGIN CALLED ==========');
-    console.log('[IPC] Username:', username);
-    console.log('[IPC] DataAccessService exists:', !!dataAccessService);
+    // console.log('[IPC] ========== AUTH:LOGIN CALLED ==========');
+    // console.log('[IPC] Username:', username);
+    // console.log('[IPC] DataAccessService exists:', !!dataAccessService);
     
     try {
       if (!dataAccessService) {
@@ -151,18 +151,18 @@ function setupIpcHandlers(): void {
       const apiClient = dataAccessService.getApiClient();
       const userRepository = new UserRepository(localDb, apiClient);
       
-      console.log('[IPC] Attempting login (will try online first, then offline)...');
+      // console.log('[IPC] Attempting login (will try online first, then offline)...');
       
       // Pass undefined for useServer to enable auto-detection with fallback
       const result = await userRepository.login({ username, password }, { useServer: undefined });
       
-      console.log('[IPC] Login result:', {
-        success: result.success,
-        hasUser: !!result.user,
-        hasToken: !!result.token,
-        isOffline: result.isOffline,
-        error: result.error,
-      });
+      // console.log('[IPC] Login result:', {
+      //   success: result.success,
+      //   hasUser: !!result.user,
+      //   hasToken: !!result.token,
+      //   isOffline: result.isOffline,
+      //   error: result.error,
+      // });
       
       if (result.success && result.user) {
         // Set auth token if available (online login)
@@ -171,11 +171,11 @@ function setupIpcHandlers(): void {
           
           // Initialize sync service for online login
           try {
-            console.log('[IPC] Initializing sync service after successful online login...');
+            // console.log('[IPC] Initializing sync service after successful online login...');
             await dataAccessService.initializeSyncService(result.token);
-            console.log('[IPC] Sync service initialized successfully');
+            // console.log('[IPC] Sync service initialized successfully');
           } catch (error) {
-            console.warn('[IPC] Failed to initialize sync service after login:', error);
+            // console.warn('[IPC] Failed to initialize sync service after login:', error);
           }
         }
         
@@ -204,7 +204,7 @@ function setupIpcHandlers(): void {
         isOffline: result.isOffline || false,
       };
     } catch (error) {
-      console.error('[IPC] auth:login error:', error);
+      // console.error('[IPC] auth:login error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Login failed',
@@ -217,16 +217,16 @@ function setupIpcHandlers(): void {
     try {
       if (dataAccessService) {
         // Stop sync service
-        console.log('[IPC] Stopping sync service on logout...');
+        // console.log('[IPC] Stopping sync service on logout...');
         await dataAccessService.stopSyncService();
 
         // Clear auth token
         dataAccessService.clearAuthToken();
-        console.log('[IPC] Logout complete - sync stopped and token cleared');
+        // console.log('[IPC] Logout complete - sync stopped and token cleared');
       }
       return { success: true };
     } catch (error) {
-      console.error('[IPC] auth:logout error:', error);
+      // console.error('[IPC] auth:logout error:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Logout failed' };
     }
   });
@@ -238,16 +238,16 @@ function setupIpcHandlers(): void {
         return { success: false, error: 'DataAccessService not initialized' };
       }
 
-      console.log('[IPC] Manual sync triggered...');
+      // console.log('[IPC] Manual sync triggered...');
       await dataAccessService.triggerManualSync();
-      console.log('[IPC] Manual sync completed');
+      // console.log('[IPC] Manual sync completed');
 
       return {
         success: true,
         lastSyncTime: dataAccessService.getLastSyncTime(),
       };
     } catch (error) {
-      console.error('[IPC] Manual sync failed:', error);
+      // console.error('[IPC] Manual sync failed:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Manual sync failed',
@@ -257,8 +257,8 @@ function setupIpcHandlers(): void {
 
   // Category handlers
   ipcMain.handle('category:get-all', async (event, includeInactive: boolean = false) => {
-    console.log('[IPC] ========== CATEGORY:GET-ALL CALLED ==========');
-    console.log('[IPC] Include inactive:', includeInactive);
+    // console.log('[IPC] ========== CATEGORY:GET-ALL CALLED ==========');
+    // console.log('[IPC] Include inactive:', includeInactive);
     
     try {
       if (!dataAccessService) {
@@ -272,7 +272,7 @@ function setupIpcHandlers(): void {
       const connectionState = dataAccessService.getConnectionState();
       const useServer = connectionState.dataSource === 'server';
       
-      console.log('[IPC] Category fetch - Using:', useServer ? 'server' : 'local');
+      // console.log('[IPC] Category fetch - Using:', useServer ? 'server' : 'local');
       
       // Use shared CategoryRepository for both online and offline modes
       const { CategoryRepository } = (await import('@monorepo/shared-data-access')) as any;
@@ -290,7 +290,7 @@ function setupIpcHandlers(): void {
         isOffline: result.isOffline || false,
       };
     } catch (error) {
-      console.error('[IPC] category:get-all error:', error);
+      // console.error('[IPC] category:get-all error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch categories',
@@ -300,8 +300,8 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('category:get-by-id', async (event, categoryId: string) => {
-    console.log('[IPC] ========== CATEGORY:GET-BY-ID CALLED ==========');
-    console.log('[IPC] Category ID:', categoryId);
+    // console.log('[IPC] ========== CATEGORY:GET-BY-ID CALLED ==========');
+    // console.log('[IPC] Category ID:', categoryId);
     
     try {
       if (!dataAccessService) {
@@ -335,7 +335,7 @@ function setupIpcHandlers(): void {
         error: 'Category not found',
       };
     } catch (error) {
-      console.error('[IPC] category:get-by-id error:', error);
+      // console.error('[IPC] category:get-by-id error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch category',
@@ -345,7 +345,7 @@ function setupIpcHandlers(): void {
 
   // Customer handlers
   ipcMain.handle('customer:get-all', async () => {
-    console.log('[IPC] ========== CUSTOMER:GET-ALL CALLED ==========');
+    // console.log('[IPC] ========== CUSTOMER:GET-ALL CALLED ==========');
     
     try {
       if (!dataAccessService) {
@@ -359,7 +359,7 @@ function setupIpcHandlers(): void {
       const connectionState = dataAccessService.getConnectionState();
       const useServer = connectionState.dataSource === 'server';
       
-      console.log('[IPC] Customer fetch - Using:', useServer ? 'server' : 'local');
+      // console.log('[IPC] Customer fetch - Using:', useServer ? 'server' : 'local');
       
       if (useServer) {
         // Fetch from API
@@ -394,7 +394,7 @@ function setupIpcHandlers(): void {
         };
       } else {
         // Fetch from local SQLite database
-        console.log('[IPC] Fetching customers from local SQLite database');
+        // console.log('[IPC] Fetching customers from local SQLite database');
         
         try {
           // Query all customers from local database
@@ -407,7 +407,7 @@ function setupIpcHandlers(): void {
           }>('SELECT id, firstName, lastName, email, phone FROM Customer');
           
           if (!dbCustomers || dbCustomers.length === 0) {
-            console.log('[IPC] No customers found in local database');
+            // console.log('[IPC] No customers found in local database');
             return {
               success: true,
               customers: [],
@@ -470,7 +470,7 @@ function setupIpcHandlers(): void {
             };
           });
           
-          console.log('[IPC] ✓ Loaded', customers.length, 'customers from local database');
+          // console.log('[IPC] ✓ Loaded', customers.length, 'customers from local database');
           
           return {
             success: true,
@@ -478,7 +478,7 @@ function setupIpcHandlers(): void {
             isOffline: true,
           };
         } catch (dbError) {
-          console.error('[IPC] Failed to fetch customers from local database:', dbError);
+          // console.error('[IPC] Failed to fetch customers from local database:', dbError);
           return {
             success: false,
             error: dbError instanceof Error ? dbError.message : 'Failed to fetch customers from local database',
@@ -487,7 +487,7 @@ function setupIpcHandlers(): void {
         }
       }
     } catch (error) {
-      console.error('[IPC] customer:get-all error:', error);
+      // console.error('[IPC] customer:get-all error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch customers',
@@ -497,8 +497,8 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('customer:create', async (_event, data: { name: string; email?: string; phone?: string; address?: string }) => {
-    console.log('[IPC] ========== CUSTOMER:CREATE CALLED ==========');
-    console.log('[IPC] Customer data:', data);
+    // console.log('[IPC] ========== CUSTOMER:CREATE CALLED ==========');
+    // console.log('[IPC] Customer data:', data);
 
     try {
       if (!dataAccessService) {
@@ -512,7 +512,7 @@ function setupIpcHandlers(): void {
       const connectionState = dataAccessService.getConnectionState();
       const useServer = connectionState.dataSource === 'server';
 
-      console.log('[IPC] Customer create - Using:', useServer ? 'server' : 'local');
+      // console.log('[IPC] Customer create - Using:', useServer ? 'server' : 'local');
 
       if (useServer) {
         // Create via API
@@ -542,7 +542,7 @@ function setupIpcHandlers(): void {
         };
       } else {
         // Create in local SQLite database
-        console.log('[IPC] Creating customer in local SQLite database');
+        // console.log('[IPC] Creating customer in local SQLite database');
 
         try {
           // Parse name into first and last name
@@ -576,7 +576,7 @@ function setupIpcHandlers(): void {
             ]
           );
 
-          console.log('[IPC] ✓ Customer created in local database:', customerId);
+          // console.log('[IPC] ✓ Customer created in local database:', customerId);
 
           // Insert address if provided
           if (data.address && data.address.trim()) {
@@ -608,7 +608,7 @@ function setupIpcHandlers(): void {
               ]
             );
 
-            console.log('[IPC] ✓ Customer address created in local database:', addressId);
+            // console.log('[IPC] ✓ Customer address created in local database:', addressId);
           }
 
           const customer = {
@@ -625,7 +625,7 @@ function setupIpcHandlers(): void {
             isOffline: true,
           };
         } catch (dbError) {
-          console.error('[IPC] Failed to create customer in local database:', dbError);
+          // console.error('[IPC] Failed to create customer in local database:', dbError);
           return {
             success: false,
             error: dbError instanceof Error ? dbError.message : 'Failed to create customer in local database',
@@ -634,7 +634,7 @@ function setupIpcHandlers(): void {
         }
       }
     } catch (error) {
-      console.error('[IPC] customer:create error:', error);
+      // console.error('[IPC] customer:create error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create customer',
@@ -643,7 +643,7 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('customer:update', async (_event, id: string, data: { name: string; email?: string; phone?: string; address?: string }) => {
-    console.log('[IPC] ========== CUSTOMER:UPDATE CALLED ==========');
+    // console.log('[IPC] ========== CUSTOMER:UPDATE CALLED ==========');
     
     try {
       if (!dataAccessService) {
@@ -676,7 +676,7 @@ function setupIpcHandlers(): void {
         error: response.error || 'Failed to update customer',
       };
     } catch (error) {
-      console.error('[IPC] customer:update error:', error);
+      // console.error('[IPC] customer:update error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update customer',
@@ -685,7 +685,7 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('customer:delete', async (_event, id: string) => {
-    console.log('[IPC] ========== CUSTOMER:DELETE CALLED ==========');
+    // console.log('[IPC] ========== CUSTOMER:DELETE CALLED ==========');
     
     try {
       if (!dataAccessService) {
@@ -700,7 +700,7 @@ function setupIpcHandlers(): void {
         error: response.error,
       };
     } catch (error) {
-      console.error('[IPC] customer:delete error:', error);
+      // console.error('[IPC] customer:delete error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to delete customer',
@@ -710,8 +710,8 @@ function setupIpcHandlers(): void {
 
   // Product handlers
   ipcMain.handle('product:get-all', async (_event, options?: { page?: number; limit?: number }) => {
-    console.log('[IPC] ========== PRODUCT:GET-ALL CALLED ==========');
-    console.log('[IPC] Pagination options:', options);
+    // console.log('[IPC] ========== PRODUCT:GET-ALL CALLED ==========');
+    // console.log('[IPC] Pagination options:', options);
     
     try {
       if (!dataAccessService) {
@@ -725,7 +725,7 @@ function setupIpcHandlers(): void {
       const connectionState = dataAccessService.getConnectionState();
       const useServer = connectionState.dataSource === 'server';
       
-      console.log('[IPC] Product fetch - Using:', useServer ? 'server' : 'local');
+      // console.log('[IPC] Product fetch - Using:', useServer ? 'server' : 'local');
       
       const page = options?.page || 1;
       const limit = options?.limit || 50;
@@ -734,19 +734,19 @@ function setupIpcHandlers(): void {
         // Fetch from API
         try {
           const apiUrl = `/api/products?includeVariants=false&includeInventory=false&page=${page}&limit=${limit}`;
-          console.log('[IPC] Fetching from API:', apiUrl);
+          // console.log('[IPC] Fetching from API:', apiUrl);
           const response = await apiClient.get(apiUrl);
           
-          console.log('[IPC] API response structure:', {
-            hasData: !!response.data?.data,
-            hasProducts: !!response.data?.products,
-            isArray: Array.isArray(response.data),
-            keys: response.data ? Object.keys(response.data) : [],
-            total: response.data?.total,
-            meta: response.data?.meta,
-            page: response.data?.page,
-            limit: response.data?.limit,
-          });
+          // console.log('[IPC] API response structure:', {
+          //   hasData: !!response.data?.data,
+          //   hasProducts: !!response.data?.products,
+          //   isArray: Array.isArray(response.data),
+          //   keys: response.data ? Object.keys(response.data) : [],
+          //   total: response.data?.total,
+          //   meta: response.data?.meta,
+          //   page: response.data?.page,
+          //   limit: response.data?.limit,
+          // });
           
           let products = response.data?.data || response.data?.products || (Array.isArray(response.data) ? response.data : []) || [];
           let total = response.data?.total || response.data?.meta?.total || response.data?.data?.total || (Array.isArray(response.data) ? response.data.length : products.length);
@@ -754,7 +754,7 @@ function setupIpcHandlers(): void {
           
           // If API returned more products than requested, apply client-side pagination
           if (products.length > limit && (!responseLimit || responseLimit !== limit)) {
-            console.warn('[IPC] API returned more products than requested, applying client-side pagination');
+            // console.warn('[IPC] API returned more products than requested, applying client-side pagination');
             const startIndex = (page - 1) * limit;
             const endIndex = startIndex + limit;
             products = products.slice(startIndex, endIndex);
@@ -762,15 +762,15 @@ function setupIpcHandlers(): void {
           
           const totalPages = Math.ceil(total / limit);
           
-          console.log('[IPC] Product result from API:', {
-            success: true,
-            count: products.length,
-            expected: limit,
-            page,
-            total,
-            totalPages,
-            isOffline: false,
-          });
+          // console.log('[IPC] Product result from API:', {
+          //   success: true,
+          //   count: products.length,
+          //   expected: limit,
+          //   page,
+          //   total,
+          //   totalPages,
+          //   isOffline: false,
+          // });
 
           // Transform products to match Product interface
           const SERVER_URL = process.env.SERVER_URL || 'http://localhost:4000';
@@ -813,9 +813,9 @@ function setupIpcHandlers(): void {
                 ]
               );
             }
-            console.log('[IPC] ✓ Products synced to local DB');
+            // console.log('[IPC] ✓ Products synced to local DB');
           } catch (syncError) {
-            console.warn('[IPC] ⚠️ Failed to sync products to local DB (non-fatal):', syncError);
+            // console.warn('[IPC] ⚠️ Failed to sync products to local DB (non-fatal):', syncError);
           }
 
           return {
@@ -830,7 +830,7 @@ function setupIpcHandlers(): void {
             },
           };
         } catch (apiError) {
-          console.warn('[IPC] API fetch failed, falling back to local:', apiError);
+          // console.warn('[IPC] API fetch failed, falling back to local:', apiError);
           // Fall through to local fetch
         }
       }
@@ -839,7 +839,7 @@ function setupIpcHandlers(): void {
       // limit is already declared above, reuse it
       const offset = ((options?.page || 1) - 1) * limit;
       
-      console.log('[IPC] Local DB pagination:', { page: options?.page || 1, limit, offset });
+      // console.log('[IPC] Local DB pagination:', { page: options?.page || 1, limit, offset });
       
       // First, get total count
       const countResult = await localDb.query<{ count: number }>(
@@ -848,7 +848,7 @@ function setupIpcHandlers(): void {
       const total = countResult[0]?.count || 0;
       const totalPages = Math.ceil(total / limit);
       
-      console.log('[IPC] Total products in DB:', total, 'Total pages:', totalPages);
+      // console.log('[IPC] Total products in DB:', total, 'Total pages:', totalPages);
 
       // Use template literals for LIMIT and OFFSET since they're numbers (no SQL injection risk)
       const products = await localDb.query(
@@ -868,7 +868,7 @@ function setupIpcHandlers(): void {
         LIMIT ${limit} OFFSET ${offset}`
       );
       
-      console.log('[IPC] Products fetched from local DB:', products.length, 'Expected:', limit);
+      // console.log('[IPC] Products fetched from local DB:', products.length, 'Expected:', limit);
 
       // Transform to match Product interface
       const transformedProducts = products.map((p: any) => {
@@ -894,17 +894,17 @@ function setupIpcHandlers(): void {
         };
       });
 
-      console.log('[IPC] Product result from local DB:', {
-        success: true,
-        count: transformedProducts.length,
-        isOffline: true,
-        pagination: {
-          page: options?.page || 1,
-          limit,
-          total,
-          totalPages,
-        },
-      });
+      // console.log('[IPC] Product result from local DB:', {
+      //   success: true,
+      //   count: transformedProducts.length,
+      //   isOffline: true,
+      //   pagination: {
+      //     page: options?.page || 1,
+      //     limit,
+      //     total,
+      //     totalPages,
+      //   },
+      // });
 
       return {
         success: true,
@@ -918,7 +918,7 @@ function setupIpcHandlers(): void {
         },
       };
     } catch (error) {
-      console.error('[IPC] product:get-all error:', error);
+      // console.error('[IPC] product:get-all error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch products',
@@ -940,7 +940,7 @@ function setupIpcHandlers(): void {
         lastSyncTime: dataAccessService.getLastSyncTime(),
       };
     } catch (error) {
-      console.error('[IPC] Get sync status failed:', error);
+      // console.error('[IPC] Get sync status failed:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get sync status',
@@ -950,8 +950,8 @@ function setupIpcHandlers(): void {
 
   // Product: get by ID handler
   ipcMain.handle('product:get-by-id', async (_event, productId: string) => {
-    console.log('[IPC] ========== PRODUCT:GET-BY-ID CALLED ==========');
-    console.log('[IPC] Product ID:', productId);
+    // console.log('[IPC] ========== PRODUCT:GET-BY-ID CALLED ==========');
+    // console.log('[IPC] Product ID:', productId);
     
     try {
       if (!dataAccessService) {
@@ -965,7 +965,7 @@ function setupIpcHandlers(): void {
 
       if (useServer) {
         // Fetch from API with variants and inventory
-        console.log('[IPC] Fetching product from API:', productId);
+        // console.log('[IPC] Fetching product from API:', productId);
         try {
           const response = await apiClient.get<{ success: boolean; data?: any }>(
             `/api/products/${productId}?includeVariants=true&includeInventory=true`
@@ -1040,13 +1040,13 @@ function setupIpcHandlers(): void {
             isOffline: false,
           };
         } catch (apiError) {
-          console.warn('[IPC] API fetch failed, falling back to local DB:', apiError);
+          // console.warn('[IPC] API fetch failed, falling back to local DB:', apiError);
           // Fall through to offline mode
         }
       }
 
       // Offline mode - fetch from local SQLite
-      console.log('[IPC] Fetching product from local SQLite:', productId);
+      // console.log('[IPC] Fetching product from local SQLite:', productId);
       const products = await localDb.query<any>('SELECT * FROM Product WHERE id = ?', [productId]);
       
       if (products.length === 0) {
@@ -1090,7 +1090,7 @@ function setupIpcHandlers(): void {
         isOffline: true,
       };
     } catch (error) {
-      console.error('[IPC] product:get-by-id error:', error);
+      // console.error('[IPC] product:get-by-id error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch product',
@@ -1100,7 +1100,7 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('product:lookup-barcode', async (_event, barcode: string) => {
-    console.log('[IPC] product:lookup-barcode called:', barcode);
+    // console.log('[IPC] product:lookup-barcode called:', barcode);
     if (!barcode) {
       return { success: false, error: 'Barcode is required' };
     }
@@ -1166,11 +1166,11 @@ function setupIpcHandlers(): void {
       }
 
       if (!rows.length) {
-        console.log('[IPC] product:lookup-barcode - No product found for barcode:', trimmedBarcode);
+        // console.log('[IPC] product:lookup-barcode - No product found for barcode:', trimmedBarcode);
         return { success: false, error: 'Product not found' };
       }
 
-      console.log('[IPC] product:lookup-barcode - Found product:', rows[0]);
+      // console.log('[IPC] product:lookup-barcode - Found product:', rows[0]);
 
       const row = rows[0];
       const price =
@@ -1189,12 +1189,12 @@ function setupIpcHandlers(): void {
         ? (hasInventoryRecord && row.availableQuantity != null ? Number(row.availableQuantity) : undefined)
         : undefined; // undefined means unlimited stock
       
-      console.log('[IPC] product:lookup-barcode - Inventory check:', {
-        trackInventory,
-        hasInventoryRecord,
-        rawAvailableQuantity: row.availableQuantity,
-        finalAvailableQuantity: availableQuantity,
-      });
+      // console.log('[IPC] product:lookup-barcode - Inventory check:', {
+      //   trackInventory,
+      //   hasInventoryRecord,
+      //   rawAvailableQuantity: row.availableQuantity,
+      //   finalAvailableQuantity: availableQuantity,
+      // });
 
       return {
         success: true,
@@ -1209,7 +1209,7 @@ function setupIpcHandlers(): void {
         },
       };
     } catch (error) {
-      console.error('[IPC] product:lookup-barcode failed:', error);
+      // console.error('[IPC] product:lookup-barcode failed:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Lookup failed',
@@ -1220,7 +1220,7 @@ function setupIpcHandlers(): void {
   // === Order Handlers ===
 
   ipcMain.handle('order:create', async (_event, orderData) => {
-    console.log('[IPC] order:create called');
+    // console.log('[IPC] order:create called');
     try {
       const { SalesOrderRepository } = await import('@monorepo/shared-data-access');
       const localDb = dataAccessService.getLocalDb();
@@ -1233,10 +1233,10 @@ function setupIpcHandlers(): void {
       const salesOrderRepo = new SalesOrderRepository(localDb, apiClient);
       const result = await salesOrderRepo.createOrder(orderData);
 
-      console.log('[IPC] order:create result:', { success: result.success, orderId: result.order?.id });
+      // console.log('[IPC] order:create result:', { success: result.success, orderId: result.order?.id });
       return result;
     } catch (error) {
-      console.error('[IPC] order:create error:', error);
+      // console.error('[IPC] order:create error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create order',
@@ -1245,7 +1245,7 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('order:park', async (_event, orderData) => {
-    console.log('[IPC] order:park called');
+    // console.log('[IPC] order:park called');
     try {
       const { ParkedOrderRepository } = await import('@monorepo/shared-data-access');
       const localDb = dataAccessService.getLocalDb();
@@ -1258,10 +1258,10 @@ function setupIpcHandlers(): void {
       const parkedOrderRepo = new ParkedOrderRepository(localDb, apiClient);
       const result = await parkedOrderRepo.parkOrder(orderData);
 
-      console.log('[IPC] order:park result:', { success: result.success });
+      // console.log('[IPC] order:park result:', { success: result.success });
       return result;
     } catch (error) {
-      console.error('[IPC] order:park error:', error);
+      // console.error('[IPC] order:park error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to park order',
@@ -1270,7 +1270,7 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('order:search-parked', async (_event, searchParams) => {
-    console.log('[IPC] order:search-parked called');
+    // console.log('[IPC] order:search-parked called');
     try {
       const { ParkedOrderRepository } = await import('@monorepo/shared-data-access');
       const localDb = dataAccessService.getLocalDb();
@@ -1283,10 +1283,10 @@ function setupIpcHandlers(): void {
       const parkedOrderRepo = new ParkedOrderRepository(localDb, apiClient);
       const result = await parkedOrderRepo.searchParkedOrders(searchParams);
 
-      console.log('[IPC] order:search-parked result:', { success: result.success, count: result.orders?.length });
+      // console.log('[IPC] order:search-parked result:', { success: result.success, count: result.orders?.length });
       return result;
     } catch (error) {
-      console.error('[IPC] order:search-parked error:', error);
+      // console.error('[IPC] order:search-parked error:', error);
       return {
         success: false,
         orders: [],
@@ -1296,7 +1296,7 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('order:load-parked', async (_event, parkNumber: string) => {
-    console.log('[IPC] order:load-parked called:', parkNumber);
+    // console.log('[IPC] order:load-parked called:', parkNumber);
     try {
       const { ParkedOrderRepository } = await import('@monorepo/shared-data-access');
       const localDb = dataAccessService.getLocalDb();
@@ -1309,10 +1309,10 @@ function setupIpcHandlers(): void {
       const parkedOrderRepo = new ParkedOrderRepository(localDb, apiClient);
       const result = await parkedOrderRepo.loadParkedOrder(parkNumber);
 
-      console.log('[IPC] order:load-parked result:', { success: result.success });
+      // console.log('[IPC] order:load-parked result:', { success: result.success });
       return result;
     } catch (error) {
-      console.error('[IPC] order:load-parked error:', error);
+      // console.error('[IPC] order:load-parked error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to load parked order',
@@ -1321,7 +1321,7 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('order:complete-parked', async (_event, data) => {
-    console.log('[IPC] order:complete-parked called');
+    // console.log('[IPC] order:complete-parked called');
     try {
       const { ParkedOrderRepository } = await import('@monorepo/shared-data-access');
       const localDb = dataAccessService.getLocalDb();
@@ -1334,10 +1334,10 @@ function setupIpcHandlers(): void {
       const parkedOrderRepo = new ParkedOrderRepository(localDb, apiClient);
       const result = await parkedOrderRepo.completeParkedOrder(data);
 
-      console.log('[IPC] order:complete-parked result:', { success: result.success });
+      // console.log('[IPC] order:complete-parked result:', { success: result.success });
       return result;
     } catch (error) {
-      console.error('[IPC] order:complete-parked error:', error);
+      // console.error('[IPC] order:complete-parked error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to complete parked order',
@@ -1346,7 +1346,7 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('payment-method:get-all', async (_event, params) => {
-    console.log('[IPC] payment-method:get-all called');
+    // console.log('[IPC] payment-method:get-all called');
     try {
       const { PaymentMethodRepository } = await import('@monorepo/shared-data-access');
       const localDb = dataAccessService.getLocalDb();
@@ -1359,10 +1359,10 @@ function setupIpcHandlers(): void {
       const paymentMethodRepo = new PaymentMethodRepository(localDb, apiClient);
       const result = await paymentMethodRepo.getPaymentMethods(params);
 
-      console.log('[IPC] payment-method:get-all result:', { success: result.success, count: result.paymentMethods?.length });
+      // console.log('[IPC] payment-method:get-all result:', { success: result.success, count: result.paymentMethods?.length });
       return result;
     } catch (error) {
-      console.error('[IPC] payment-method:get-all error:', error);
+      // console.error('[IPC] payment-method:get-all error:', error);
       return {
         success: false,
         paymentMethods: [],
@@ -1372,7 +1372,7 @@ function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('sales-person:get-all', async (_event, params?: { search?: string; isActive?: boolean; limit?: number; offset?: number }) => {
-    console.log('[IPC] sales-person:get-all called');
+    // console.log('[IPC] sales-person:get-all called');
     try {
       if (!dataAccessService) {
         throw new Error('DataAccessService not initialized');
@@ -1393,7 +1393,7 @@ function setupIpcHandlers(): void {
 
       return result;
     } catch (error) {
-      console.error('[IPC] sales-person:get-all error:', error);
+      // console.error('[IPC] sales-person:get-all error:', error);
       return {
         success: false,
         salesPersons: [],
@@ -1405,7 +1405,7 @@ function setupIpcHandlers(): void {
 
   // Database query handler for direct SQLite queries
   ipcMain.handle('db:query', async (_event, sql: string, params?: any[]) => {
-    console.log('[IPC] db:query called');
+    // console.log('[IPC] db:query called');
     try {
       const localDb = dataAccessService.getLocalDb();
 
@@ -1414,10 +1414,10 @@ function setupIpcHandlers(): void {
       }
 
       const result = await localDb.query(sql, params);
-      console.log('[IPC] db:query result:', { count: Array.isArray(result) ? result.length : 0 });
+      // console.log('[IPC] db:query result:', { count: Array.isArray(result) ? result.length : 0 });
       return result;
     } catch (error) {
-      console.error('[IPC] db:query error:', error);
+      // console.error('[IPC] db:query error:', error);
       throw error;
     }
   });
@@ -1425,7 +1425,7 @@ function setupIpcHandlers(): void {
   // Print handler for silent printing
   ipcMain.handle('print-content', async (event, options) => {
     try {
-      console.log('[Print] Starting silent print...');
+      // console.log('[Print] Starting silent print...');
       
       // Create a hidden window for printing
       const printWindow = new BrowserWindow({
@@ -1450,23 +1450,36 @@ function setupIpcHandlers(): void {
         deviceName: options?.deviceName || '',
       };
 
-      console.log('[Print] Printing with options:', printOptions);
+      // console.log('[Print] Printing with options:', printOptions);
 
       return new Promise((resolve, reject) => {
         printWindow.webContents.print(printOptions, (success, failureReason) => {
           printWindow.close();
           
           if (success) {
-            console.log('[Print] Print successful');
+            // console.log('[Print] Print successful');
             resolve({ success: true });
           } else {
-            console.error('[Print] Print failed:', failureReason);
-            reject(new Error(failureReason || 'Print failed'));
+            // console.error('[Print] Print failed:', failureReason);
+            // Check if failure reason indicates printer is missing
+            const failureReasonLower = (failureReason || '').toLowerCase();
+            const isPrinterMissing = 
+              failureReasonLower.includes('printer') ||
+              failureReasonLower.includes('device not found') ||
+              failureReasonLower.includes('no printer') ||
+              failureReasonLower.includes('printer not found') ||
+              failureReasonLower.includes('printer unavailable');
+            
+            if (isPrinterMissing) {
+              reject(new Error('Printer Missing: No printer is connected to your device. Please connect a printer and try again.'));
+            } else {
+              reject(new Error(failureReason || 'Print failed'));
+            }
           }
         });
       });
     } catch (error) {
-      console.error('[IPC] print-content error:', error);
+      // console.error('[IPC] print-content error:', error);
       throw error;
     }
   });
@@ -1474,9 +1487,9 @@ function setupIpcHandlers(): void {
 
 async function createWindow() {
   const preloadPath = join(__dirname, '../preload/preload.js');
-  console.log('[Main] __dirname:', __dirname);
-  console.log('[Main] Preload path:', preloadPath);
-  console.log('[Main] Preload exists:', require('fs').existsSync(preloadPath));
+  // console.log('[Main] __dirname:', __dirname);
+  // console.log('[Main] Preload path:', preloadPath);
+  // console.log('[Main] Preload exists:', require('fs').existsSync(preloadPath));
 
   const win = new BrowserWindow({
     width: 1200,
@@ -1493,26 +1506,26 @@ async function createWindow() {
 
   // Enable DevTools in production for debugging
   win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('[Window] Failed to load:', errorCode, errorDescription);
+    // console.error('[Window] Failed to load:', errorCode, errorDescription);
   });
 
   win.webContents.on('render-process-gone', (event, details) => {
-    console.error('[Window] Renderer process gone:', details.reason);
+    // console.error('[Window] Renderer process gone:', details.reason);
   });
 
   // Log preload script execution
   win.webContents.on('did-finish-load', () => {
-    console.log('[Window] Page finished loading');
+    // console.log('[Window] Page finished loading');
   });
 
   win.webContents.on('dom-ready', () => {
-    console.log('[Window] DOM ready (preload should have executed by now)');
+    // console.log('[Window] DOM ready (preload should have executed by now)');
   });
 
   // Log console messages from preload and renderer
   win.webContents.on('console-message', (event, level, message, line, sourceId) => {
     const levelStr = ['verbose', 'info', 'warning', 'error'][level] || 'log';
-    console.log(`[Renderer Console:${levelStr}] ${message}`);
+    // console.log(`[Renderer Console:${levelStr}] ${message}`);
   });
 
   if (isDev) {
@@ -1524,7 +1537,7 @@ async function createWindow() {
     win.webContents.openDevTools({ mode: 'detach' });
   } else {
     const rendererPath = join(__dirname, '../renderer/index.html');
-    console.log('[Window] Loading renderer from:', rendererPath);
+    // console.log('[Window] Loading renderer from:', rendererPath);
     await win.loadFile(rendererPath);
     // Enable DevTools in production for debugging white screen
     win.webContents.openDevTools({ mode: 'detach' });
@@ -1549,7 +1562,7 @@ app.whenReady().then(async () => {
       }
     });
   } catch (error) {
-    console.error('[App] Failed to initialize:', error);
+    // console.error('[App] Failed to initialize:', error);
     app.quit();
   }
 });

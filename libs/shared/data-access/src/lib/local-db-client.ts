@@ -4,7 +4,7 @@
  * Platform-specific implementations for local database access.
  *
  * - Desktop: SQLite via better-sqlite3 or sqlite3
- * - Web: IndexedDB (TODO)
+ * - Web: IndexedDB 
  * - Mobile: SQLite via react-native-sqlite-storage (TODO)
  */
 
@@ -34,7 +34,7 @@ export class DesktopSqliteClient implements LocalDbClient {
       const Database = await this.loadBetterSqlite3();
       return Database !== null;
     } catch (error) {
-      console.error('[DesktopSqliteClient] Not available:', error);
+      // console.error('[DesktopSqliteClient] Not available:', error);
       return false;
     }
   }
@@ -44,7 +44,7 @@ export class DesktopSqliteClient implements LocalDbClient {
    */
   async initialize(): Promise<void> {
     if (this.isInitialized) {
-      console.warn('[DesktopSqliteClient] Already initialized');
+      // console.warn('[DesktopSqliteClient] Already initialized');
       return;
     }
 
@@ -62,7 +62,7 @@ export class DesktopSqliteClient implements LocalDbClient {
         dbExists = fs.existsSync(this.dbPath);
       } catch (error) {
         // fs module not available (browser environment) - assume new database
-        console.warn('[DesktopSqliteClient] fs module not available, assuming new database');
+        // console.warn('[DesktopSqliteClient] fs module not available, assuming new database');
         dbExists = false;
       }
       this.db = new Database(this.dbPath, {
@@ -78,9 +78,9 @@ export class DesktopSqliteClient implements LocalDbClient {
       }
 
       this.isInitialized = true;
-      console.log(`[DesktopSqliteClient] Initialized database at: ${this.dbPath}`);
+      // console.log(`[DesktopSqliteClient] Initialized database at: ${this.dbPath}`);
     } catch (error) {
-      console.error('[DesktopSqliteClient] Initialization failed:', error);
+      // console.error('[DesktopSqliteClient] Initialization failed:', error);
       throw error;
     }
   }
@@ -101,7 +101,7 @@ export class DesktopSqliteClient implements LocalDbClient {
         path = await import('path');
       } catch (error) {
         // Node.js modules not available (browser environment)
-        console.warn('[DesktopSqliteClient] Node.js modules (fs/path) not available, skipping schema initialization');
+        // console.warn('[DesktopSqliteClient] Node.js modules (fs/path) not available, skipping schema initialization');
         return;
       }
       
@@ -110,28 +110,28 @@ export class DesktopSqliteClient implements LocalDbClient {
       const schemaPath = path.join(dbDir, 'schema.sql');
 
       if (!fs.existsSync(schemaPath)) {
-        console.warn(`[DesktopSqliteClient] Schema file not found at ${schemaPath}, skipping schema initialization`);
+        // console.warn(`[DesktopSqliteClient] Schema file not found at ${schemaPath}, skipping schema initialization`);
         return;
       }
 
-      console.log(`[DesktopSqliteClient] Initializing schema from ${schemaPath}`);
+      // console.log(`[DesktopSqliteClient] Initializing schema from ${schemaPath}`);
       const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
 
       // Execute entire schema at once using exec (supports multiple statements)
       try {
         this.db.exec(schemaSql);
-        console.log('[DesktopSqliteClient] Schema initialized successfully');
+        // console.log('[DesktopSqliteClient] Schema initialized successfully');
       } catch (error: any) {
         // Log the error but don't throw - some statements might fail due to existing objects
         if (error.message.includes('already exists')) {
-          console.log('[DesktopSqliteClient] Schema already exists, skipping initialization');
+          // console.log('[DesktopSqliteClient] Schema already exists, skipping initialization');
         } else {
-          console.error('[DesktopSqliteClient] Schema initialization error:', error.message);
+          // console.error('[DesktopSqliteClient] Schema initialization error:', error.message);
           throw error;
         }
       }
     } catch (error) {
-      console.error('[DesktopSqliteClient] Failed to initialize schema:', error);
+      // console.error('[DesktopSqliteClient] Failed to initialize schema:', error);
       // Don't throw - allow database to continue without schema if file is missing
     }
   }
@@ -147,7 +147,7 @@ export class DesktopSqliteClient implements LocalDbClient {
       const results = stmt.all(...params);
       return results as T[];
     } catch (error) {
-      console.error('[DesktopSqliteClient] Query failed:', error);
+      // console.error('[DesktopSqliteClient] Query failed:', error);
       throw error;
     }
   }
@@ -162,7 +162,7 @@ export class DesktopSqliteClient implements LocalDbClient {
       const stmt = this.db.prepare(sql);
       stmt.run(...params);
     } catch (error) {
-      console.error('[DesktopSqliteClient] Execute failed:', error);
+      // console.error('[DesktopSqliteClient] Execute failed:', error);
       throw error;
     }
   }
@@ -185,7 +185,7 @@ export class DesktopSqliteClient implements LocalDbClient {
         return callback() as any;
       });
     } catch (error) {
-      console.error('[DesktopSqliteClient] Transaction failed:', error);
+      // console.error('[DesktopSqliteClient] Transaction failed:', error);
       throw error;
     }
   }
@@ -198,7 +198,7 @@ export class DesktopSqliteClient implements LocalDbClient {
       this.db.close();
       this.db = null;
       this.isInitialized = false;
-      console.log('[DesktopSqliteClient] Database closed');
+      // console.log('[DesktopSqliteClient] Database closed');
     }
   }
 
@@ -230,7 +230,7 @@ export class DesktopSqliteClient implements LocalDbClient {
       const module = await import('better-sqlite3');
       return module.default || module;
     } catch (error) {
-      console.error('[DesktopSqliteClient] Failed to load better-sqlite3:', error);
+      // console.error('[DesktopSqliteClient] Failed to load better-sqlite3:', error);
       return null;
     }
   }
@@ -262,7 +262,7 @@ export class WebIndexedDbClient implements LocalDbClient {
     try {
       return typeof indexedDB !== 'undefined';
     } catch (error) {
-      console.error('[WebIndexedDbClient] Not available:', error);
+      // console.error('[WebIndexedDbClient] Not available:', error);
       return false;
     }
   }
@@ -272,7 +272,7 @@ export class WebIndexedDbClient implements LocalDbClient {
    */
   async initialize(): Promise<void> {
     if (this.isInitialized) {
-      console.warn('[WebIndexedDbClient] Already initialized');
+      // console.warn('[WebIndexedDbClient] Already initialized');
       return;
     }
 
@@ -283,9 +283,9 @@ export class WebIndexedDbClient implements LocalDbClient {
     try {
       this.db = await this.openDatabase();
       this.isInitialized = true;
-      console.log(`[WebIndexedDbClient] Initialized database: ${this.dbName} v${this.dbVersion}`);
+      // console.log(`[WebIndexedDbClient] Initialized database: ${this.dbName} v${this.dbVersion}`);
     } catch (error) {
-      console.error('[WebIndexedDbClient] Initialization failed:', error);
+      // console.error('[WebIndexedDbClient] Initialization failed:', error);
       throw error;
     }
   }
@@ -307,7 +307,7 @@ export class WebIndexedDbClient implements LocalDbClient {
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
-        console.log('[WebIndexedDbClient] Upgrading database schema...');
+        // console.log('[WebIndexedDbClient] Upgrading database schema...');
 
         // Create object stores based on schema
         if (this.schema) {
@@ -342,7 +342,7 @@ export class WebIndexedDbClient implements LocalDbClient {
         }
       }
 
-      console.log(`[WebIndexedDbClient] Created object store: ${storeName}`);
+      // console.log(`[WebIndexedDbClient] Created object store: ${storeName}`);
     }
   }
 
@@ -354,10 +354,10 @@ export class WebIndexedDbClient implements LocalDbClient {
   async query<T>(sql: string, params?: unknown[]): Promise<T[]> {
     this.ensureInitialized();
 
-    console.log('[WebIndexedDbClient] query() called with:', {
-      sql: sql.substring(0, 150) + (sql.length > 150 ? '...' : ''),
-      paramsCount: params?.length || 0,
-    });
+    // console.log('[WebIndexedDbClient] query() called with:', {
+    //   sql: sql.substring(0, 150) + (sql.length > 150 ? '...' : ''),
+    //   paramsCount: params?.length || 0,
+    // });
 
     // Parse SQL to extract store name and WHERE conditions
     let storeName: string;
@@ -398,13 +398,13 @@ export class WebIndexedDbClient implements LocalDbClient {
 
     return new Promise((resolve, reject) => {
       try {
-        console.log('[WebIndexedDbClient] Creating transaction for store:', storeName);
-        console.log('[WebIndexedDbClient] DB state:', {
-          dbExists: !!this.db,
-          dbName: this.db?.name,
-          dbVersion: this.db?.version,
-          objectStoreNames: this.db ? Array.from(this.db.objectStoreNames) : [],
-        });
+        // console.log('[WebIndexedDbClient] Creating transaction for store:', storeName);
+        // console.log('[WebIndexedDbClient] DB state:', {
+        //   dbExists: !!this.db,
+        //   dbName: this.db?.name,
+        //   dbVersion: this.db?.version,
+        //   objectStoreNames: this.db ? Array.from(this.db.objectStoreNames) : [],
+        // });
 
         if (!this.db) {
           reject(new Error('Database not initialized'));
@@ -422,21 +422,21 @@ export class WebIndexedDbClient implements LocalDbClient {
         const results: T[] = [];
 
         transaction.onerror = () => {
-          console.error('[WebIndexedDbClient] Transaction error:', transaction.error);
+          // console.error('[WebIndexedDbClient] Transaction error:', transaction.error);
           reject(new Error(`Transaction failed: ${transaction.error?.message}`));
         };
 
         transaction.onabort = () => {
-          console.error('[WebIndexedDbClient] Transaction aborted');
+          // console.error('[WebIndexedDbClient] Transaction aborted');
           reject(new Error('Transaction aborted'));
         };
 
         // Get all records first (IndexedDB doesn't support complex WHERE clauses natively)
-        console.log('[WebIndexedDbClient] Calling getAll() on store:', storeName);
+        // console.log('[WebIndexedDbClient] Calling getAll() on store:', storeName);
         const request = store.getAll();
 
         request.onsuccess = () => {
-          console.log('[WebIndexedDbClient] getAll() success, result count:', request.result?.length || 0);
+          // console.log('[WebIndexedDbClient] getAll() success, result count:', request.result?.length || 0);
           let data = request.result as T[];
 
           // Apply WHERE conditions if present
@@ -449,11 +449,11 @@ export class WebIndexedDbClient implements LocalDbClient {
             value: paramValue, // Use same value for all OR conditions
           }));
 
-          console.log('[WebIndexedDbClient] Filtering with conditions:', {
-            conditionCount: conditionsWithValues.length,
-            paramValue: paramValue,
-            fields: conditionsWithValues.map(c => c.field),
-          });
+          // console.log('[WebIndexedDbClient] Filtering with conditions:', {
+          //   conditionCount: conditionsWithValues.length,
+          //   paramValue: paramValue,
+          //   fields: conditionsWithValues.map(c => c.field),
+          // });
 
           // Filter results based on WHERE conditions (supporting OR logic)
           data = data.filter(item => {
@@ -468,10 +468,10 @@ export class WebIndexedDbClient implements LocalDbClient {
             return matches;
           });
           
-          console.log('[WebIndexedDbClient] Filtered results:', {
-            beforeFilter: request.result?.length || 0,
-            afterFilter: data.length,
-          });
+          // console.log('[WebIndexedDbClient] Filtered results:', {
+          //   beforeFilter: request.result?.length || 0,
+          //   afterFilter: data.length,
+          // });
         } else if (params && params.length > 0 && typeof params[0] === 'object') {
           // Legacy support: object-based filtering
           const queryFilter = params[0] as Record<string, any>;
@@ -492,21 +492,21 @@ export class WebIndexedDbClient implements LocalDbClient {
           data = data.slice(0, limit);
         }
 
-        console.log('[WebIndexedDbClient] Query success:', {
-          storeName,
-          resultCount: data.length,
-          firstId: data[0]?.id,
-        });
+        // console.log('[WebIndexedDbClient] Query success:', {
+        //   storeName,
+        //   resultCount: data.length,
+        //   firstId: (data[0] as { id?: unknown })?.id,
+        // });
 
         resolve(data);
       };
 
         request.onerror = () => {
-          console.error('[WebIndexedDbClient] getAll() error:', request.error);
+          // console.error('[WebIndexedDbClient] getAll() error:', request.error);
           reject(new Error(`Query failed: ${request.error?.message}`));
         };
       } catch (error) {
-        console.error('[WebIndexedDbClient] Exception in query():', error);
+        // console.error('[WebIndexedDbClient] Exception in query():', error);
         reject(error);
       }
     });
@@ -527,7 +527,7 @@ export class WebIndexedDbClient implements LocalDbClient {
     // Handle PRAGMA statements (SQLite-specific, ignore for IndexedDB)
     if (sql.trim().toUpperCase().startsWith('PRAGMA')) {
       // Silently ignore PRAGMA statements (e.g., "PRAGMA foreign_keys = OFF")
-      console.log('[WebIndexedDbClient] Ignoring PRAGMA statement');
+      // console.log('[WebIndexedDbClient] Ignoring PRAGMA statement');
       return Promise.resolve();
     }
 
@@ -535,14 +535,14 @@ export class WebIndexedDbClient implements LocalDbClient {
     const upperSQL = sql.trim().toUpperCase();
     if (upperSQL === 'BEGIN TRANSACTION' || upperSQL === 'COMMIT' || upperSQL === 'ROLLBACK' ||
         upperSQL === 'BEGIN' || upperSQL === 'END TRANSACTION') {
-      console.log('[WebIndexedDbClient] Ignoring transaction control statement:', sql);
+      // console.log('[WebIndexedDbClient] Ignoring transaction control statement:', sql);
       return Promise.resolve();
     }
 
-    console.log('[WebIndexedDbClient] execute() called with:', {
-      sql: sql.substring(0, 150) + (sql.length > 150 ? '...' : ''),
-      paramsCount: params?.length || 0,
-    });
+    // console.log('[WebIndexedDbClient] execute() called with:', {
+    //   sql: sql.substring(0, 150) + (sql.length > 150 ? '...' : ''),
+    //   paramsCount: params?.length || 0,
+    // });
 
     let storeName: string;
     let operation: 'add' | 'put' | 'delete';
@@ -613,12 +613,29 @@ export class WebIndexedDbClient implements LocalDbClient {
         throw new Error(`Invalid UPDATE statement: ${sql}`);
       }
     } else if (sql.trim().toUpperCase().startsWith('DELETE')) {
-      // Parse DELETE statement
+      // Parse DELETE statement: "DELETE FROM storeName WHERE id = ?"
       const match = sql.match(/DELETE\s+FROM\s+(\w+)/i);
       if (match) {
         storeName = match[1];
         operation = 'delete';
-        data = params && params.length > 0 ? params[0] : undefined;
+        
+        // Handle both array params and object params
+        if (Array.isArray(params) && params.length > 0) {
+          // If params is an array, use first element
+          data = params[0];
+        } else if (params && typeof params === 'object' && !Array.isArray(params) && 'id' in params) {
+          // If params is an object with 'id', use it directly
+          data = params;
+        } else {
+          // Try to extract id from WHERE clause if present
+          const whereMatch = sql.match(/WHERE\s+(\w+)\s*=\s*\?/i);
+          if (whereMatch && Array.isArray(params) && params.length > 0) {
+            const idField = whereMatch[1];
+            data = { [idField]: params[0] };
+          } else {
+            data = undefined;
+          }
+        }
       } else {
         throw new Error(`Invalid DELETE statement: ${sql}`);
       }
@@ -629,12 +646,12 @@ export class WebIndexedDbClient implements LocalDbClient {
       data = params && params.length > 0 ? params[0] : undefined;
     }
 
-    console.log('[WebIndexedDbClient] Parsed operation:', {
-      storeName,
-      operation,
-      dataKeys: data ? Object.keys(data) : [],
-      dataId: data?.id,
-    });
+    // console.log('[WebIndexedDbClient] Parsed operation:', {
+    //   storeName,
+    //   operation,
+    //   dataKeys: data ? Object.keys(data) : [],
+    //   dataId: data?.id,
+    // });
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(storeName, 'readwrite');
@@ -649,7 +666,16 @@ export class WebIndexedDbClient implements LocalDbClient {
           request = store.put(data);
           break;
         case 'delete':
-          request = store.delete(data);
+          // IndexedDB delete expects the key value directly
+          // If data is an object with id, extract the id; otherwise use data as key
+          const deleteKey = data && typeof data === 'object' && 'id' in data ? data.id : data;
+          // console.log('[WebIndexedDbClient] DELETE operation:', {
+          //   storeName,
+          //   deleteKey,
+          //   dataType: typeof data,
+          //   dataKeys: data && typeof data === 'object' ? Object.keys(data) : [],
+          // });
+          request = store.delete(deleteKey);
           break;
         default:
           reject(new Error(`Unknown operation: ${operation}`));
@@ -657,21 +683,21 @@ export class WebIndexedDbClient implements LocalDbClient {
       }
 
       request.onsuccess = () => {
-        console.log('[WebIndexedDbClient] Execute success:', {
-          storeName,
-          operation,
-          dataId: data?.id,
-        });
+        // console.log('[WebIndexedDbClient] Execute success:', {
+        //   storeName,
+        //   operation,
+        //   dataId: data?.id,
+        // });
         resolve();
       };
 
       request.onerror = () => {
-        console.error('[WebIndexedDbClient] Execute error:', {
-          storeName,
-          operation,
-          error: request.error?.message,
-          dataId: data?.id,
-        });
+        // console.error('[WebIndexedDbClient] Execute error:', {
+        //   storeName,
+        //   operation,
+        //   error: request.error?.message,
+        //   dataId: data?.id,
+        // });
         reject(new Error(`Execute failed: ${request.error?.message}`));
       };
     });
@@ -688,7 +714,7 @@ export class WebIndexedDbClient implements LocalDbClient {
       // Just execute the callback
       return await callback();
     } catch (error) {
-      console.error('[WebIndexedDbClient] Transaction failed:', error);
+      // console.error('[WebIndexedDbClient] Transaction failed:', error);
       throw error;
     }
   }
@@ -701,7 +727,7 @@ export class WebIndexedDbClient implements LocalDbClient {
       this.db.close();
       this.db = null;
       this.isInitialized = false;
-      console.log('[WebIndexedDbClient] Database closed');
+      // console.log('[WebIndexedDbClient] Database closed');
     }
   }
 
@@ -813,7 +839,7 @@ export interface IndexedDBSchema {
 export class MobileSqliteClient implements LocalDbClient {
   async isAvailable(): Promise<boolean> {
     // TODO: Check if react-native-sqlite-storage is available
-    console.warn('[MobileSqliteClient] Not implemented yet');
+    // console.warn('[MobileSqliteClient] Not implemented yet');
     return false;
   }
 
@@ -839,7 +865,7 @@ export class MobileSqliteClient implements LocalDbClient {
 
   async close(): Promise<void> {
     // TODO: Close SQLite connection
-    console.warn('[MobileSqliteClient] Not implemented yet');
+    // console.warn('[MobileSqliteClient] Not implemented yet');
   }
 }
 
@@ -855,7 +881,7 @@ export function createLocalDbClient(platform: 'desktop' | 'web' | 'mobile', conf
       return new WebIndexedDbClient(config.dbName, config.dbVersion, config.schema);
     case 'mobile':
       // TODO: Return MobileSqliteClient when implemented
-      console.warn('[createLocalDbClient] Mobile platform not fully implemented');
+      // console.warn('[createLocalDbClient] Mobile platform not fully implemented');
       return new MobileSqliteClient();
     default:
       throw new Error(`Unsupported platform: ${platform}`);

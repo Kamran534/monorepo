@@ -143,7 +143,7 @@ export class ConnectivityChecker {
     callback: (result: ConnectivityCheckResult) => void
   ): void {
     if (this.checkIntervalId) {
-      console.warn('[ConnectivityChecker] Periodic check already started');
+      // console.warn('[ConnectivityChecker] Periodic check already started');
       return;
     }
 
@@ -156,9 +156,9 @@ export class ConnectivityChecker {
       callback(result);
     }, this.config.checkInterval);
 
-    console.log(
-      `[ConnectivityChecker] Started periodic checks (interval: ${this.config.checkInterval}ms)`
-    );
+    // console.log(
+    //   `[ConnectivityChecker] Started periodic checks (interval: ${this.config.checkInterval}ms)`
+    // );
   }
 
   /**
@@ -168,7 +168,7 @@ export class ConnectivityChecker {
     if (this.checkIntervalId) {
       clearInterval(this.checkIntervalId);
       this.checkIntervalId = null;
-      console.log('[ConnectivityChecker] Stopped periodic checks');
+      // console.log('[ConnectivityChecker] Stopped periodic checks');
     }
   }
 
@@ -195,7 +195,7 @@ export class ConnectivityChecker {
   destroy(): void {
     this.stopPeriodicCheck();
     this.lastCheckResult = null;
-    console.log('[ConnectivityChecker] Destroyed');
+    // console.log('[ConnectivityChecker] Destroyed');
   }
 
   /**

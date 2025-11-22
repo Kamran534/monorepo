@@ -400,15 +400,23 @@ export function Products({ repository }: ProductsProps) {
             hideDetails={hideDetails}
             viewMode={viewMode}
             onAddProduct={(product) => {
-              const numericPrice = parseFloat((product.price || '0').replace(/[^0-9.]/g, '')) || 0;
-              addItem({
-                id: product.id,
-                name: product.name,
-                price: numericPrice,
-                quantity: 1,
-                productId: product.id,
-              });
-              show('Added to cart', 'success');
+              try {
+                const priceStr: string = typeof product.price === 'number' 
+                  ? product.price.toString() 
+                  : (product.price || '0');
+                const numericPrice = parseFloat(priceStr.replace(/[^0-9.]/g, '')) || 0;
+                addItem({
+                  id: product.id,
+                  name: product.name,
+                  price: numericPrice,
+                  quantity: 1,
+                  productId: product.id,
+                }, show);
+                show('Added to cart', 'success');
+              } catch (error) {
+                console.error('[Products] Failed to add product to cart:', error);
+                show('Failed to add product to cart', 'error');
+              }
             }}
             className="h-full"
           />

@@ -95,10 +95,10 @@ class DataAccessService {
         const settings: ConnectionSettings = JSON.parse(settingsData);
         this.manualOverride = settings.manualOverride || false;
         this.preferredDataSource = settings.preferredDataSource || null;
-        console.log('[DataAccessService] Loaded settings:', { manualOverride: this.manualOverride, preferredDataSource: this.preferredDataSource });
+        // console.log('[DataAccessService] Loaded settings:', { manualOverride: this.manualOverride, preferredDataSource: this.preferredDataSource });
       }
     } catch (error) {
-      console.warn('[DataAccessService] Failed to load settings:', error);
+      // console.warn('[DataAccessService] Failed to load settings:', error);
     }
   }
 
@@ -113,9 +113,9 @@ class DataAccessService {
       };
       const settingsJson = JSON.stringify(settings, null, 2);
       writeFileSync(SETTINGS_PATH, settingsJson, 'utf-8');
-      console.log('[DataAccessService] Settings saved:', settings);
+      // console.log('[DataAccessService] Settings saved:', settings);
     } catch (error) {
-      console.error('[DataAccessService] Failed to save settings:', error);
+      // console.error('[DataAccessService] Failed to save settings:', error);
     }
   }
 
@@ -124,18 +124,18 @@ class DataAccessService {
    */
   async initialize(): Promise<void> {
     if (this.isInitialized) {
-      console.warn('[DataAccessService] Already initialized');
+      // console.warn('[DataAccessService] Already initialized');
       return;
     }
 
-    console.log('[DataAccessService] Initializing...');
-    console.log('[DataAccessService] Server URL:', SERVER_URL);
-    console.log('[DataAccessService] Database Path:', DB_PATH);
+    // console.log('[DataAccessService] Initializing...');
+    // console.log('[DataAccessService] Server URL:', SERVER_URL);
+    // console.log('[DataAccessService] Database Path:', DB_PATH);
 
     try {
       // Ensure database directory exists
       if (!existsSync(DB_DIR)) {
-        console.log(`[DataAccessService] Creating database directory: ${DB_DIR}`);
+        // console.log(`[DataAccessService] Creating database directory: ${DB_DIR}`);
         mkdirSync(DB_DIR, { recursive: true });
       }
 
@@ -144,12 +144,12 @@ class DataAccessService {
         dbPath: DB_PATH,
       });
       await this.localDb.initialize();
-      console.log('[DataAccessService] Local database initialized');
+      // console.log('[DataAccessService] Local database initialized');
 
       // Auto-seed payment methods
-      console.log('[DataAccessService] Auto-seeding payment methods...');
+      // console.log('[DataAccessService] Auto-seeding payment methods...');
       await seedPaymentMethods(this.localDb);
-      console.log('[DataAccessService] Payment methods seeding complete');
+      // console.log('[DataAccessService] Payment methods seeding complete');
 
       // Initialize API client
       this.apiClient = getApiClient({
@@ -157,11 +157,11 @@ class DataAccessService {
         timeout: 30000,
       });
       await this.apiClient.initialize();
-      console.log('[DataAccessService] API client initialized');
+      // console.log('[DataAccessService] API client initialized');
 
       // Initialize data source manager
       await this.dataSourceManager.initialize();
-      console.log('[DataAccessService] Data source manager initialized');
+      // console.log('[DataAccessService] Data source manager initialized');
 
       // Apply saved manual override if exists
       if (this.manualOverride && this.preferredDataSource) {
@@ -169,7 +169,7 @@ class DataAccessService {
         // Still check connectivity to update status, even with manual override
         await this.dataSourceManager.checkConnectivity();
         this.dataSourceManager.switchDataSource(this.preferredDataSource);
-        console.log(`[DataAccessService] Applied manual override: ${this.preferredDataSource}`);
+        // console.log(`[DataAccessService] Applied manual override: ${this.preferredDataSource}`);
       } else {
         // If no manual override, ensure auto-switch is enabled and check connectivity
         this.dataSourceManager.setAutoSwitch(true);
@@ -184,9 +184,9 @@ class DataAccessService {
       this.logConnectionStatus(initialState);
 
       this.isInitialized = true;
-      console.log('[DataAccessService] Initialization complete');
+      // console.log('[DataAccessService] Initialization complete');
     } catch (error) {
-      console.error('[DataAccessService] Initialization failed:', error);
+      // console.error('[DataAccessService] Initialization failed:', error);
       throw error;
     }
   }
@@ -270,7 +270,7 @@ class DataAccessService {
       this.dataSourceManager.setAutoSwitch(true);
       // Check connectivity to auto-switch based on server availability
       await this.dataSourceManager.checkConnectivity();
-      console.log('[DataAccessService] Manual override disabled, auto-switch enabled');
+      // console.log('[DataAccessService] Manual override disabled, auto-switch enabled');
     } else {
       // Enable manual override
       this.manualOverride = true;
@@ -279,12 +279,12 @@ class DataAccessService {
       
       // If switching to server, check connectivity first to update status
       if (source === DataSource.SERVER) {
-        console.log('[DataAccessService] Checking server connectivity before manual switch...');
+        // console.log('[DataAccessService] Checking server connectivity before manual switch...');
         await this.dataSourceManager.checkConnectivity();
       }
       
       this.dataSourceManager.switchDataSource(source);
-      console.log(`[DataAccessService] Manual override enabled: ${source}`);
+      // console.log(`[DataAccessService] Manual override enabled: ${source}`);
       
       // Get the updated state and notify renderer
       const updatedState = this.dataSourceManager.getConnectionState();
@@ -323,11 +323,11 @@ class DataAccessService {
           error: state.error,
         };
         mainWindow.webContents.send('connection:state-changed', serializedState);
-        console.log('[DataAccessService] Sent connection state change to renderer');
+        // console.log('[DataAccessService] Sent connection state change to renderer');
       }
     } catch (error) {
       // IPC notification is optional, don't fail if it doesn't work
-      console.warn('[DataAccessService] Could not notify renderer of state change:', error);
+      // console.warn('[DataAccessService] Could not notify renderer of state change:', error);
     }
   };
 
@@ -342,18 +342,18 @@ class DataAccessService {
     const dataSourceEmoji = state.dataSource === DataSource.SERVER ? '🌐' : '💾';
     const dataSourceText = state.dataSource === DataSource.SERVER ? 'SERVER' : 'LOCAL DB';
     
-    console.log('\n' + '='.repeat(60));
-    console.log(`${statusEmoji} [CONNECTION STATUS] ${statusEmoji}`);
-    console.log(`   Status: ${state.status}`);
-    console.log(`   Data Source: ${dataSourceEmoji} ${dataSourceText}`);
-    console.log(`   Server URL: ${state.serverUrl}`);
-    if (state.lastChecked) {
-      console.log(`   Last Checked: ${state.lastChecked.toLocaleString()}`);
-    }
-    if (state.error) {
-      console.log(`   Error: ${state.error}`);
-    }
-    console.log('='.repeat(60) + '\n');
+    // console.log('\n' + '='.repeat(60));
+    // console.log(`${statusEmoji} [CONNECTION STATUS] ${statusEmoji}`);
+    // console.log(`   Status: ${state.status}`);
+    // console.log(`   Data Source: ${dataSourceEmoji} ${dataSourceText}`);
+    // console.log(`   Server URL: ${state.serverUrl}`);
+    // if (state.lastChecked) {
+    //   console.log(`   Last Checked: ${state.lastChecked.toLocaleString()}`);
+    // }
+    // if (state.error) {
+    //   console.log(`   Error: ${state.error}`);
+    // }
+    // console.log('='.repeat(60) + '\n');
   };
 
   /**
@@ -363,7 +363,7 @@ class DataAccessService {
     try {
       // Stop existing sync service if any
       if (this.syncService) {
-        console.log('[DataAccessService] Stopping existing sync service...');
+        // console.log('[DataAccessService] Stopping existing sync service...');
         this.syncService.stopPeriodicSync();
         await this.syncService.close();
       }
@@ -375,7 +375,7 @@ class DataAccessService {
       // Set auth token
       this.apiClient.setAuthToken(authToken);
 
-      console.log('[DataAccessService] Initializing sync service...');
+      // console.log('[DataAccessService] Initializing sync service...');
       this.syncService = new SyncService(this.localDb, this.apiClient, {
         syncInterval: 3600000, // 1 hour
         batchSize: 100,
@@ -384,25 +384,25 @@ class DataAccessService {
       });
 
       await this.syncService.initialize();
-      console.log('[DataAccessService] Sync service initialized');
+      // console.log('[DataAccessService] Sync service initialized');
 
       // Sync User table immediately to get passwordHash for offline login
-      console.log('[DataAccessService] Syncing User table immediately...');
+      // console.log('[DataAccessService] Syncing User table immediately...');
       await this.syncService.syncUserTable().catch((error) => {
-        console.error('[DataAccessService] User table sync failed:', error);
+        // console.error('[DataAccessService] User table sync failed:', error);
       });
 
       // Perform full sync in background
-      console.log('[DataAccessService] Starting full sync in background...');
+      // console.log('[DataAccessService] Starting full sync in background...');
       this.syncService.syncAll().catch((error) => {
-        console.error('[DataAccessService] Full sync failed:', error);
+        // console.error('[DataAccessService] Full sync failed:', error);
       });
 
       // Start periodic sync (every 1 hour)
       this.syncService.startPeriodicSync();
-      console.log('[DataAccessService] Periodic sync started (interval: 1 hour)');
+      // console.log('[DataAccessService] Periodic sync started (interval: 1 hour)');
     } catch (error) {
-      console.error('[DataAccessService] Failed to initialize sync service:', error);
+      // console.error('[DataAccessService] Failed to initialize sync service:', error);
       throw error;
     }
   }
@@ -412,11 +412,11 @@ class DataAccessService {
    */
   async stopSyncService(): Promise<void> {
     if (this.syncService) {
-      console.log('[DataAccessService] Stopping sync service...');
+      // console.log('[DataAccessService] Stopping sync service...');
       this.syncService.stopPeriodicSync();
       await this.syncService.close();
       this.syncService = null;
-      console.log('[DataAccessService] Sync service stopped');
+      // console.log('[DataAccessService] Sync service stopped');
     }
   }
 
@@ -455,7 +455,7 @@ class DataAccessService {
    * Clean up resources
    */
   async destroy(): Promise<void> {
-    console.log('[DataAccessService] Destroying...');
+    // console.log('[DataAccessService] Destroying...');
 
     // Stop sync service first
     await this.stopSyncService();
@@ -473,7 +473,7 @@ class DataAccessService {
     this.dataSourceManager.destroy();
     this.isInitialized = false;
 
-    console.log('[DataAccessService] Destroyed');
+    // console.log('[DataAccessService] Destroyed');
   }
 }
 

@@ -42,14 +42,14 @@ async function ensurePaymentMethodTable(localDb: LocalDbClient) {
     if (!message.includes(SQLITE_TABLE_MISSING_MESSAGE)) {
       throw error;
     }
-    console.warn('[SeedPaymentMethods] PaymentMethod table missing. Creating schema...');
+    // console.warn('[SeedPaymentMethods] PaymentMethod table missing. Creating schema...');
     try {
       await localDb.execute(PAYMENT_METHOD_TABLE_SQL);
       await localDb.execute(PAYMENT_METHOD_CODE_INDEX_SQL);
       await localDb.execute(PAYMENT_METHOD_ACTIVE_INDEX_SQL);
-      console.log('[SeedPaymentMethods] PaymentMethod table created successfully.');
+      // console.log('[SeedPaymentMethods] PaymentMethod table created successfully.');
     } catch (schemaError) {
-      console.error('[SeedPaymentMethods] Failed to create PaymentMethod table:', schemaError);
+      // console.error('[SeedPaymentMethods] Failed to create PaymentMethod table:', schemaError);
       throw schemaError;
     }
   }
@@ -138,50 +138,68 @@ const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
  */
 export async function seedPaymentMethods(localDb: LocalDbClient): Promise<void> {
   try {
-    console.log('[SeedPaymentMethods] Checking if payment methods need to be seeded...');
+    // console.log('[SeedPaymentMethods] Checking if payment methods need to be seeded...');
 
     await ensurePaymentMethodTable(localDb);
 
-    // Check if any payment methods already exist
-    const existingMethods = await localDb.query<PaymentMethod>('SELECT * FROM PaymentMethod LIMIT 1');
+    // Always ensure default payment methods exist (by code)
+    // This ensures payment methods are available even if server has different ones
+    // console.log('[SeedPaymentMethods] Ensuring default payment methods exist...');
 
-    if (existingMethods && existingMethods.length > 0) {
-      console.log('[SeedPaymentMethods] Payment methods already exist, skipping seed');
-      return;
-    }
-
-    console.log('[SeedPaymentMethods] No payment methods found, seeding defaults...');
-
-    // Insert each payment method
+    // Insert each payment method using upsert logic (insert or update by code)
     for (const method of DEFAULT_PAYMENT_METHODS) {
       try {
-        await localDb.execute(
-          `INSERT INTO PaymentMethod (id, code, name, type, isActive, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            method.id,
-            method.code,
-            method.name,
-            method.type,
-            method.isActive ? 1 : 0, // Convert boolean to integer for SQLite
-            method.createdAt,
-            method.updatedAt,
-          ]
+        // Check if payment method with this code already exists
+        const existing = await localDb.query<PaymentMethod>(
+          `SELECT * FROM PaymentMethod WHERE code = ?`,
+          [method.code]
         );
-        console.log(`[SeedPaymentMethods] Inserted payment method: ${method.name} (${method.code})`);
+
+        if (existing && existing.length > 0) {
+          // Update existing payment method (preserve server ID if it exists)
+          const existingMethod = existing[0];
+          await localDb.execute(
+            `UPDATE PaymentMethod SET name = ?, type = ?, isActive = ?, updatedAt = ? WHERE code = ?`,
+            [
+              method.name,
+              method.type,
+              method.isActive ? 1 : 0,
+              method.updatedAt,
+              method.code,
+            ]
+          );
+          // console.log(`[SeedPaymentMethods] Updated payment method: ${method.name} (${method.code})`);
+        } else {
+          // Insert new payment method
+          await localDb.execute(
+            `INSERT INTO PaymentMethod (id, code, name, type, isActive, createdAt, updatedAt)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+              method.id,
+              method.code,
+              method.name,
+              method.type,
+              method.isActive ? 1 : 0, // Convert boolean to integer for SQLite
+              method.createdAt,
+              method.updatedAt,
+            ]
+          );
+          // console.log(`[SeedPaymentMethods] Inserted payment method: ${method.name} (${method.code})`);
+        }
       } catch (error: any) {
         // Ignore unique constraint errors (method already exists)
         if (error.message?.includes('UNIQUE constraint') || error.message?.includes('already exists')) {
-          console.log(`[SeedPaymentMethods] Payment method ${method.code} already exists, skipping`);
+          // console.log(`[SeedPaymentMethods] Payment method ${method.code} already exists, skipping`);
         } else {
-          throw error;
+          // console.error(`[SeedPaymentMethods] Error processing payment method ${method.code}:`, error);
+          // Continue with next method instead of throwing
         }
       }
     }
 
-    console.log(`[SeedPaymentMethods] Successfully seeded ${DEFAULT_PAYMENT_METHODS.length} payment methods`);
+    // console.log(`[SeedPaymentMethods] Successfully seeded ${DEFAULT_PAYMENT_METHODS.length} payment methods`);
   } catch (error) {
-    console.error('[SeedPaymentMethods] Error seeding payment methods:', error);
+    // console.error('[SeedPaymentMethods] Error seeding payment methods:', error);
     throw error;
   }
 }
@@ -195,10 +213,10 @@ export async function verifyPaymentMethods(localDb: LocalDbClient): Promise<numb
   try {
     const methods = await localDb.query<PaymentMethod>('SELECT * FROM PaymentMethod');
     const count = methods?.length || 0;
-    console.log(`[SeedPaymentMethods] Found ${count} payment methods in database`);
+    // console.log(`[SeedPaymentMethods] Found ${count} payment methods in database`);
     return count;
   } catch (error) {
-    console.error('[SeedPaymentMethods] Error verifying payment methods:', error);
+    // console.error('[SeedPaymentMethods] Error verifying payment methods:', error);
     return 0;
   }
 }

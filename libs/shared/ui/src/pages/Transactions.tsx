@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   TransactionLines,
   TransactionNumpad,
@@ -25,6 +25,8 @@ import {
   useToast,
   useKeyboardShortcuts,
   useSalesPersonModal,
+  usePrintReceipt,
+  PrintConfirmationDialog,
 } from '@monorepo/shared-ui';
 import { useBarcodeScanner } from '@monorepo/shared-hooks-scanner';
 import { useCurrency, type Currency } from '@monorepo/shared-hooks-currency';
@@ -167,6 +169,7 @@ export function Transactions({
   });
 
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Load initial state from localStorage
   const [activeTab, setActiveTabState] = useState<'lines' | 'payments'>(() => {
@@ -247,6 +250,29 @@ export function Transactions({
   const { show } = useToast();
   const { formatAmount, setCurrency } = useCurrency({ defaultCurrency: 'PKR' });
   const { formatDateTime } = useAppDateTime();
+
+  // Print receipt hook
+  const {
+    showPrintDialog,
+    isPrinting,
+    receiptData,
+    promptPrintReceipt,
+    confirmPrint,
+    cancelPrint,
+    skipPrint,
+  } = usePrintReceipt({
+    storeName: 'AL IMRAN BOUTIQUE',
+    storeNameArabic: 'العمران',
+    storeUrl: 'http://www.alimranboutique.com',
+    posNumber: 'ALIMRAN BOUTIQUE',
+    onPrintSuccess: () => {
+      console.log('[Transactions] Receipt printed successfully');
+    },
+    onPrintError: (error) => {
+      console.error('[Transactions] Print error:', error);
+      show('Failed to print receipt: ' + error.message, 'error');
+    },
+  });
   const formatCurrency = useCallback(
     (amount: number) => formatAmount(amount, { showSymbol: true }),
     [formatAmount],
@@ -1302,6 +1328,36 @@ export function Transactions({
     setCurrentParkedOrderId(null);
   }, [clearCustomer, lineItems, removeItem]);
 
+  // Check for order completion from Payments page and reset state
+  useEffect(() => {
+    const navigationState = location.state as { orderCompleted?: boolean; orderNumber?: string } | null;
+    if (navigationState?.orderCompleted) {
+      console.log('[Transactions] Order completed, resetting transaction state...');
+      // Reset transaction state (cart should already be cleared by Payments page)
+      // But ensure all other state is reset
+      // Note: Don't clear cart here as it's already cleared in Payments page
+      clearCustomer();
+      setAppliedDiscount(null);
+      setGiftCardData(null);
+      setAppliedAdjustment(null);
+      setNumpadValue('');
+      setSelectedItem('');
+      setActiveTab('lines');
+      setActiveSection('actions');
+      setIsPaymentModalOpen(false);
+      setPaymentEntries([]);
+      setPaymentDialogError(null);
+      setCurrentParkedOrderId(null);
+      // Clear navigation state to prevent resetting on every render
+      window.history.replaceState({}, document.title);
+      
+      // Show success message
+      if (navigationState.orderNumber) {
+        show(`Order ${navigationState.orderNumber} completed successfully!`, 'success');
+      }
+    }
+  }, [location.state, clearCustomer, show]);
+
   const handleVoidTransaction = useCallback(() => {
     if (lineItems.length > 0 || customer) {
       setIsVoidConfirmationOpen(true);
@@ -1332,25 +1388,115 @@ export function Transactions({
       const orderData = buildOrderInput(payments);
 
       try {
+        console.log('[Transactions] Calling createOrder with data:', {
+          lineItemsCount: orderData.lineItems.length,
+          paymentsCount: orderData.payments.length,
+          locationId: orderData.locationId,
+          cashierId: orderData.cashierId,
+        });
         const result = await repo.createOrder(orderData);
+        console.log('[Transactions] createOrder result:', {
+          success: result.success,
+          hasOrder: !!result.order,
+          orderNumber: result.order?.orderNumber,
+          error: result.error,
+        });
 
-      if (result.success && result.order) {
-        show(`Order completed! Order #: ${result.order.orderNumber}`, 'success');
+        if (result.success && result.order) {
+          console.log('[Transactions] Order completed successfully, clearing transaction state...');
+          show(`Order completed! Order #: ${result.order.orderNumber}`, 'success');
 
           if (currentParkedOrderId && effectiveParkedOrderRepo) {
-          try {
+            try {
               await effectiveParkedOrderRepo.completeParkedOrder(currentParkedOrderId);
-            setCurrentParkedOrderId(null);
-            handleSearchParkedOrders('');
-          } catch (err) {
-            console.error('[Transactions] Failed to complete parked order:', err);
+              setCurrentParkedOrderId(null);
+              handleSearchParkedOrders('');
+            } catch (err) {
+              console.error('[Transactions] Failed to complete parked order:', err);
+            }
           }
-        }
 
-          resetTransactionState();
+          // Calculate receipt totals before resetting state
+          const grossTotal = orderTotals.subtotal;
+          const itemDiscount = orderTotals.discountValue + orderTotals.giftCardValue;
+          const netTotal = orderTotals.total;
+          const tendered = payments.reduce((sum, p) => sum + p.amount, 0);
+          const change = Math.max(0, tendered - netTotal);
+
+          // Convert cart items to receipt line items
+          const receiptLineItems = lineItems.map(item => ({
+            id: item.id,
+            variantId: item.id,
+            sku: (item as any).sku || item.productVariantId || '',
+            productName: item.name,
+            variantName: '',
+            quantity: item.quantity,
+            unitPrice: item.price,
+            saleDiscount: (item as any).discount ? { amount: (item as any).discount } : undefined,
+            customDiscount: undefined,
+            lineSubtotal: item.price * item.quantity,
+            lineDiscount: (item as any).discount || 0,
+            lineTotal: (item.price * item.quantity) - ((item as any).discount || 0),
+          }));
+
+          // Convert payment entries to receipt payments
+          const receiptPayments = payments.map(payment => {
+            const paymentMethod = (payment as any).paymentMethod;
+            return {
+              id: payment.paymentMethodId,
+              paymentMethodId: payment.paymentMethodId,
+              paymentMethod: paymentMethod ? {
+                id: paymentMethod.id || payment.paymentMethodId,
+                code: paymentMethod.code || 'CASH',
+                name: paymentMethod.name || 'Cash',
+                type: paymentMethod.type || 'Cash',
+                isActive: true,
+              } : {
+                id: payment.paymentMethodId,
+                code: 'CASH',
+                name: 'Cash',
+                type: 'Cash' as const,
+                isActive: true,
+              },
+              amount: payment.amount,
+              cardLast4: (payment as any).cardLast4,
+              cardBrand: (payment as any).cardBrand,
+              authorizationCode: (payment as any).authorizationCode,
+              transactionId: (payment as any).transactionId,
+            };
+          });
+
+          // Show print dialog BEFORE resetting state
+          const invoiceNumber = (result.order as any).invoiceNumber || result.order.orderNumber || result.order.id;
+          promptPrintReceipt({
+            invoiceNumber,
+            lineItems: receiptLineItems,
+            payments: receiptPayments,
+            customer: customer ? {
+              id: customer.id || '',
+              firstName: customer.name.split(' ')[0] || '',
+              lastName: customer.name.split(' ').slice(1).join(' ') || '',
+              email: customer.email,
+              phone: customer.phone,
+            } : undefined,
+            cashier: assignedSalesPerson?.name || 'Cashier',
+            grossTotal,
+            itemDiscount,
+            netTotal,
+            tendered,
+            change,
+          });
+
+          // Reset state after a short delay to allow print dialog to show
+          setTimeout(() => {
+            resetTransactionState();
+            console.log('[Transactions] Transaction state cleared');
+          }, 500);
+
           return true;
         }
 
+        console.error('[Transactions] Order creation failed:', result.error);
         show(result.error || 'Failed to complete order', 'error');
         return false;
     } catch (err: any) {
@@ -2153,6 +2299,26 @@ export function Transactions({
         selectedId={salesPersonModal.selectedPerson?.id}
         isLoading={salesPersonsLoading}
         subtitle="On transaction"
+      />
+
+      {/* Print Confirmation Dialog */}
+      <PrintConfirmationDialog
+        isOpen={showPrintDialog}
+        onConfirm={confirmPrint}
+        onCancel={cancelPrint}
+        onSkip={skipPrint}
+        receiptData={
+          receiptData
+            ? {
+                storeName: receiptData.storeName,
+                invoiceNumber: receiptData.invoiceNumber,
+                totalAmount: receiptData.netTotal,
+                amountPaid: receiptData.tendered,
+                change: receiptData.change,
+              }
+            : undefined
+        }
+        isProcessing={isPrinting}
       />
     </div>
   );

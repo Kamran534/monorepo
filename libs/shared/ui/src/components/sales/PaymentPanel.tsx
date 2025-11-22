@@ -233,6 +233,7 @@ export function PaymentPanel({
                 {KEYPAD_KEYS.map((key) => (
                   <button
                     key={key}
+                    type="button"
                     onClick={() => handleKeypadInput(key)}
                     disabled={disabled}
                     className="h-14 rounded-lg text-xl font-semibold hover:opacity-80 transition-opacity"
@@ -246,6 +247,7 @@ export function PaymentPanel({
                   </button>
                 ))}
                 <button
+                  type="button"
                   onClick={handleClear}
                   disabled={disabled}
                   className="col-span-3 h-12 rounded-lg text-sm font-semibold uppercase tracking-wide hover:opacity-80 transition-opacity"
@@ -260,6 +262,7 @@ export function PaymentPanel({
               </div>
               <div className="flex flex-col gap-2 w-20">
                 <button
+                  type="button"
                   onClick={handleToggleSign}
                   disabled={disabled}
                   className="h-12 rounded-xl text-base font-semibold hover:opacity-80 transition-opacity"
@@ -272,6 +275,7 @@ export function PaymentPanel({
                   ±
                 </button>
                 <button
+                  type="button"
                   onClick={handleBackspace}
                   disabled={disabled}
                   className="h-12 rounded-xl text-base font-semibold hover:opacity-80 transition-opacity"
@@ -284,6 +288,7 @@ export function PaymentPanel({
                   ⌫
                 </button>
                 <button
+                  type="button"
                   onClick={handleAddPaymentInternal}
                   disabled={disabled || !selectedMethodId || !paymentAmount}
                   className="flex-1 rounded-xl text-2xl font-semibold text-white hover:opacity-90 transition-opacity flex items-center justify-center"
@@ -314,6 +319,7 @@ export function PaymentPanel({
             {availableMethods.map((method) => (
               <button
                 key={method.id}
+                type="button"
                 onClick={() => setSelectedMethodId(method.id)}
                 disabled={disabled}
                 className={`px-4 py-2 rounded-full border text-sm transition-all ${
@@ -386,6 +392,7 @@ export function PaymentPanel({
                 {denominations.map((value) => (
                   <button
                     key={value}
+                    type="button"
                     onClick={() => handleDenomination(value)}
                     disabled={disabled}
                     className="h-12 rounded-xl text-sm font-semibold flex items-center justify-between px-3 shadow-sm"

@@ -9,3 +9,4 @@ export * from './category-repository';
 export * from './order-repository';
 export * from './web-product-repository';
 export * from './customer-repository';
+export * from './web-order-repositories';

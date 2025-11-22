@@ -62,9 +62,14 @@ export {
 
 // Sync Module
 export * from './lib/sync';
+export { SyncService } from './lib/sync/sync-service';
 
 // Repositories
 export * from './lib/repos';
+export { SalesOrderRepository } from './lib/repos/sales-order-repository';
+export { ParkedOrderRepository } from './lib/repos/parked-order-repository';
+export { PaymentMethodRepository } from './lib/repos/payment-method-repository';
+export { SalesPersonRepository } from './lib/repos/sales-person-repository';
 
 // Seed Functions
 export { seedPaymentMethods, verifyPaymentMethods } from './lib/seed/seed-payment-methods';

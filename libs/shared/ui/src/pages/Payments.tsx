@@ -6,8 +6,10 @@ import {
   type PaymentMethod as PaymentPanelMethod,
   useCart,
   useToast,
+  usePrintReceipt,
+  PrintConfirmationDialog,
 } from '../index.js';
-import type { SalesOrderRepository, ParkedOrderRepository } from '@monorepo/shared-data-access';
+import type { SalesOrderRepository, ParkedOrderRepository, PaymentMethodRepository } from '@monorepo/shared-data-access';
 import { useCurrency } from '@monorepo/shared-hooks-currency';
 
 // Simple fallback methods – in a real app these would come from the repo
@@ -34,6 +36,7 @@ const PAYMENT_TOLERANCE = 0.01;
 export interface PaymentsProps {
   salesOrderRepo?: SalesOrderRepository;
   parkedOrderRepo?: ParkedOrderRepository;
+  paymentMethodRepo?: PaymentMethodRepository;
   currentUserId?: string;
   currentLocationId?: string;
 }
@@ -41,6 +44,7 @@ export interface PaymentsProps {
 export function Payments({
   salesOrderRepo,
   parkedOrderRepo,
+  paymentMethodRepo,
   currentUserId = '1',
   currentLocationId = '1',
 }: PaymentsProps = {}) {
@@ -52,6 +56,35 @@ export function Payments({
     (amount: number) => formatAmount(amount),
     [formatAmount],
   );
+
+  // Print receipt hook
+  const {
+    showPrintDialog,
+    isPrinting,
+    receiptData,
+    promptPrintReceipt,
+    confirmPrint: originalConfirmPrint,
+    cancelPrint: originalCancelPrint,
+    skipPrint: originalSkipPrint,
+  } = usePrintReceipt({
+    storeName: 'AL IMRAN BOUTIQUE',
+    storeNameArabic: 'العمران',
+    storeUrl: 'http://www.alimranboutique.com',
+    posNumber: 'ALIMRAN BOUTIQUE',
+    onPrintSuccess: () => {
+      // console.log('[Payments] Receipt printed successfully');
+    },
+    onPrintError: (error) => {
+      // console.error('[Payments] Print error:', error);
+      const errorMessage = error.message || String(error);
+      if (errorMessage.toLowerCase().includes('printer missing')) {
+        show('Printer Missing: Please connect a printer to your device and try again.', 'error');
+      } else {
+        show('Failed to print receipt: ' + errorMessage, 'error');
+      }
+    },
+  });
+
   const search = new URLSearchParams(location.search);
   const modeParam = search.get('mode');
   const mode = modeParam === 'card' ? 'card' : modeParam === 'cash' ? 'cash' : null;
@@ -118,6 +151,65 @@ export function Payments({
     return `payment-session-${itemIds}-${orderTotal}`;
   }, [lineItems, orderTotal]);
 
+  // Handler to navigate back to transactions and clear state
+  const handleReturnToTransactions = useCallback(() => {
+    if (completedOrderRef.current) {
+      const { orderNumber, lineItems: completedLineItems } = completedOrderRef.current;
+      
+      // Clear session storage if not already cleared
+      try {
+        sessionStorage.removeItem(sessionKey);
+      } catch (error) {
+        // console.error('[Payments] Failed to clear session storage:', error);
+      }
+
+      // Clear cart items AFTER print dialog is handled
+      // Use the current lineItems from state (which might be from navigationState or cart)
+      const itemsToClear = completedLineItems || lineItems;
+      if (itemsToClear && itemsToClear.length > 0) {
+        itemsToClear.forEach((item: any) => {
+          try {
+            if (item.id) {
+              removeItem(item.id);
+            }
+          } catch (error) {
+            // Ignore errors if item already removed
+          }
+        });
+      }
+
+      // Navigate back to transactions
+      navigate('/transactions', {
+        state: {
+          orderCompleted: true,
+          orderNumber,
+        },
+      });
+
+      // Reset ref
+      completedOrderRef.current = null;
+    }
+  }, [navigate, sessionKey, removeItem, lineItems]);
+
+  // Wrapper for confirm print - navigate after printing
+  const confirmPrint = useCallback(async () => {
+    await originalConfirmPrint();
+    // Navigate after print is complete
+    handleReturnToTransactions();
+  }, [originalConfirmPrint, handleReturnToTransactions]);
+
+  // Wrapper for cancel print - navigate immediately
+  const cancelPrint = useCallback(() => {
+    originalCancelPrint();
+    handleReturnToTransactions();
+  }, [originalCancelPrint, handleReturnToTransactions]);
+
+  // Wrapper for skip print - navigate immediately
+  const skipPrint = useCallback(() => {
+    originalSkipPrint();
+    handleReturnToTransactions();
+  }, [originalSkipPrint, handleReturnToTransactions]);
+
   // Load payment state from sessionStorage
   const loadPaymentState = useCallback(() => {
     try {
@@ -136,6 +228,45 @@ export function Payments({
   const [payments, setPayments] = useState<PaymentEntry[]>(() => loadPaymentState());
   const [isProcessing, setIsProcessing] = useState(false);
   const orderCreatedRef = React.useRef(false);
+  const completedOrderRef = React.useRef<{ orderNumber: string; lineItems: any[] } | null>(null);
+  const [availablePaymentMethods, setAvailablePaymentMethods] = useState<PaymentPanelMethod[]>(FALLBACK_PAYMENT_METHODS);
+  const [isPaymentMethodsLoading, setIsPaymentMethodsLoading] = useState(false);
+
+  // Load payment methods from repository
+  React.useEffect(() => {
+    const loadPaymentMethods = async () => {
+      if (!paymentMethodRepo) {
+        setAvailablePaymentMethods(FALLBACK_PAYMENT_METHODS);
+        return;
+      }
+
+      setIsPaymentMethodsLoading(true);
+      try {
+        const result = await paymentMethodRepo.getPaymentMethods({ isActive: true });
+        if (result.success && result.paymentMethods && result.paymentMethods.length > 0) {
+          setAvailablePaymentMethods(
+            result.paymentMethods.map((method) => ({
+              id: method.id, // Use actual UUID from database
+              code: method.code,
+              name: method.name,
+              type: method.type,
+              isActive: method.isActive,
+              icon: method.icon,
+            }))
+          );
+        } else {
+          setAvailablePaymentMethods(FALLBACK_PAYMENT_METHODS);
+        }
+      } catch (error) {
+        console.error('[Payments] Failed to load payment methods:', error);
+        setAvailablePaymentMethods(FALLBACK_PAYMENT_METHODS);
+      } finally {
+        setIsPaymentMethodsLoading(false);
+      }
+    };
+
+    loadPaymentMethods();
+  }, [paymentMethodRepo]);
 
   // Save payment state to sessionStorage whenever it changes
   React.useEffect(() => {
@@ -254,36 +385,132 @@ export function Payments({
             customerNotes: undefined,
           };
 
+          console.log('[Payments] Creating order with data:', {
+            lineItemsCount: orderInput.lineItems.length,
+            paymentsCount: orderInput.payments.length,
+            locationId: orderInput.locationId,
+            cashierId: orderInput.cashierId,
+          });
           const result = await salesOrderRepo.createOrder(orderInput);
+          console.log('[Payments] Order creation result:', {
+            success: result.success,
+            hasOrder: !!result.order,
+            orderNumber: result.order?.orderNumber,
+            error: result.error,
+            isOffline: result.isOffline,
+          });
 
-          if (result.success) {
-            show('Order completed successfully!', 'success');
+          if (result.success && result.order) {
+            const orderNumber = result.order.orderNumber;
+            const invoiceNumber = (result.order as any).invoiceNumber || result.order.orderNumber || result.order.id;
+            // console.log('[Payments] Order completed successfully:', orderNumber);
+            show(`Order completed! Order #: ${orderNumber}`, 'success');
 
             // Complete parked order if this was a resumed order
             if (navigationState?.parkedOrderId && parkedOrderRepo) {
               try {
                 await parkedOrderRepo.completeParkedOrder(navigationState.parkedOrderId);
-                console.log('[Payments] Parked order completed:', navigationState.parkedOrderId);
+                // console.log('[Payments] Parked order completed:', navigationState.parkedOrderId);
               } catch (error) {
-                console.error('[Payments] Failed to complete parked order:', error);
+                // console.error('[Payments] Failed to complete parked order:', error);
               }
             }
 
-            // Clear session storage
-            try {
-              sessionStorage.removeItem(sessionKey);
-            } catch (error) {
-              console.error('[Payments] Failed to clear session storage:', error);
-            }
+            // Calculate receipt totals
+            const grossTotal = orderBreakdown.subtotal;
+            const itemDiscount = orderBreakdown.discountValue;
+            const netTotal = orderTotal;
+            const tendered = amountPaid;
+            const change = changeDue;
 
-            // Clear cart items
-            lineItems.forEach((item: any) => removeItem(item.id));
+            // Convert line items to receipt format
+            // The receipt template expects LineItem with productName, variantName, sku
+            // We'll map cart items to match this structure
+            const receiptLineItems = lineItems.map((item: any) => {
+              // Extract product name from item name
+              const productName = item.name || 'Item';
+              const variantName = item.variantName || '';
+              const sku = item.sku || item.barcode || item.productVariantId || '';
+              const quantity = item.quantity || 1;
+              const unitPrice = Number(item.price || 0);
+              const discount = item.discount || 0;
+              const lineSubtotal = unitPrice * quantity;
+              const lineTotal = lineSubtotal - discount;
 
-            // Navigate back to transactions
-            setTimeout(() => {
-              navigate('/transactions');
-            }, 1000);
+              return {
+                id: item.id || item.productId || Math.random().toString(),
+                variantId: item.productVariantId || item.productId || item.id || '',
+                variant: item.variant ? {
+                  id: item.variant.id || '',
+                  sku: sku,
+                  variantName: variantName,
+                  product: item.variant.product ? {
+                    id: item.variant.product.id || '',
+                    name: productName,
+                  } : undefined,
+                } : undefined,
+                salesPersonId: navigationState?.salesPersonId || currentUserId,
+                quantity: quantity,
+                unitPrice: unitPrice,
+                saleDiscount: discount > 0 ? { amount: discount } : undefined,
+                customDiscount: undefined,
+                lineSubtotal: lineSubtotal,
+                lineDiscount: discount,
+                lineTotal: lineTotal,
+                // Add extended properties for receipt template
+                productName: productName,
+                variantName: variantName,
+                sku: sku,
+              } as any; // Type assertion needed because LineItem doesn't officially have these properties
+            });
+
+            // Convert payments to receipt format
+            const receiptPayments = payments.map((payment) => ({
+              id: payment.id,
+              paymentMethodId: payment.paymentMethodId,
+              paymentMethod: payment.paymentMethod || {
+                id: payment.paymentMethodId,
+                code: 'CASH',
+                name: 'Cash',
+                type: 'Cash' as const,
+                isActive: true,
+              },
+              amount: payment.amount,
+              cardLast4: payment.cardLast4,
+              cardBrand: payment.cardBrand,
+              authorizationCode: payment.authorizationCode,
+              transactionId: payment.transactionId,
+            }));
+
+            // Store order info for navigation after print dialog
+            completedOrderRef.current = {
+              orderNumber,
+              lineItems,
+            };
+
+            // Show print confirmation dialog
+            // Cart will be cleared after print dialog is handled
+            // Navigation will happen after user interacts with the dialog
+            promptPrintReceipt({
+              invoiceNumber,
+              lineItems: receiptLineItems,
+              payments: receiptPayments,
+              customer: navigationState?.customerId ? {
+                id: navigationState.customerId,
+                firstName: '',
+                lastName: '',
+                email: undefined,
+                phone: undefined,
+              } : undefined,
+              cashier: currentUserId,
+              grossTotal,
+              itemDiscount,
+              netTotal,
+              tendered,
+              change,
+            });
           } else {
+            console.error('[Payments] Order creation failed:', result.error);
             show(result.error || 'Failed to complete order', 'error');
             // Reset flag on failure so user can retry
             orderCreatedRef.current = false;
@@ -324,17 +551,37 @@ export function Payments({
         <div className="w-full max-w-6xl h-full overflow-auto">
           <CompactPaymentPanel
             payments={payments}
-            paymentMethods={FALLBACK_PAYMENT_METHODS}
+            paymentMethods={availablePaymentMethods}
             totalAmount={orderTotal}
             amountPaid={amountPaid}
             amountDue={amountDue}
             onAddPayment={handleAddPayment}
             onRemovePayment={handleRemovePayment}
             mode={mode}
-            disabled={isProcessing}
+            disabled={isProcessing || isPaymentMethodsLoading}
           />
         </div>
       </div>
+
+      {/* Print Confirmation Dialog */}
+      <PrintConfirmationDialog
+        isOpen={showPrintDialog}
+        onConfirm={confirmPrint}
+        onCancel={cancelPrint}
+        onSkip={skipPrint}
+        receiptData={
+          receiptData
+            ? {
+                storeName: receiptData.storeName,
+                invoiceNumber: receiptData.invoiceNumber,
+                totalAmount: receiptData.netTotal,
+                amountPaid: receiptData.tendered,
+                change: receiptData.change,
+              }
+            : undefined
+        }
+        isProcessing={isPrinting}
+      />
     </div>
   );
 }

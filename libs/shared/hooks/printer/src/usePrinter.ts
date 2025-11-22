@@ -60,7 +60,10 @@ export function usePrinter({
    * Execute the actual print operation
    */
   const executePrint = useCallback(async () => {
-    if (!currentPrintJob) return;
+    if (!currentPrintJob) {
+      console.warn('[usePrinter] No print job available to execute');
+      return;
+    }
 
     try {
       setIsPrinting(true);
@@ -142,7 +145,25 @@ export function usePrinter({
           setCurrentPrintJob(null);
           onAfterPrint?.();
           return; // Exit early, no need for browser print
-        } catch (err) {
+        } catch (err: any) {
+          // Check if error indicates printer is missing
+          const errorMessage = err?.message || String(err || '').toLowerCase();
+          const failureReason = err?.failureReason || '';
+          const isPrinterMissing = 
+            errorMessage.includes('printer') && 
+            (errorMessage.includes('not found') || 
+             errorMessage.includes('not available') || 
+             errorMessage.includes('missing') ||
+             errorMessage.includes('no printer') ||
+             errorMessage.includes('device not found')) ||
+            failureReason.toLowerCase().includes('printer') ||
+            failureReason.toLowerCase().includes('device');
+          
+          if (isPrinterMissing) {
+            // Re-throw with a clear printer missing error
+            throw new Error('Printer Missing: No printer is connected to your device. Please connect a printer and try again.');
+          }
+          
           console.error('Electron print failed, falling back to browser print:', err);
           // Fall through to browser print
         }

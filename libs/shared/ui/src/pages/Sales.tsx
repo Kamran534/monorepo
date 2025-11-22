@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SalesOrderForm, CreateSalesOrderInput } from '../components/sales/index.js';
+import { SalesOrderForm, CreateSalesOrderInput, CreateSalesOrderResult } from '../components/sales/index.js';
 import { useToast } from '../hooks/useToast.js';
 import {
   useAppDispatch,
@@ -229,7 +229,7 @@ export function Sales({
     try {
       if (!salesOrderRepo) {
         show('Sales order repository not available', 'error');
-        return;
+        return { success: false, error: 'Sales order repository not available' };
       }
 
       // Map the form data to the API format
@@ -282,13 +282,23 @@ export function Sales({
           }
         }
 
-        // Form will be reset by SalesOrderForm component
+        // Return the order result for print receipt
+        return {
+          success: true,
+          order: {
+            id: result.order.id,
+            orderNumber: result.order.orderNumber,
+            invoiceNumber: result.order.invoiceNumber || result.order.orderNumber,
+          },
+        };
       } else {
         show(result.error || 'Failed to create order', 'error');
+        return { success: false, error: result.error || 'Failed to create order' };
       }
     } catch (err: any) {
       console.error('[Sales] Failed to create order:', err);
       show(err.message || 'Failed to create order', 'error');
+      return { success: false, error: err.message || 'Failed to create order' };
     }
   };
 

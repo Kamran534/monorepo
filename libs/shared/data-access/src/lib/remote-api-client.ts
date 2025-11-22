@@ -74,7 +74,7 @@ export class HttpApiClient implements RemoteApiClient {
    */
   async isAvailable(): Promise<boolean> {
     try {
-      console.log(`[HttpApiClient] Checking server availability at: ${this.config.baseUrl}/api/health`);
+      // console.log(`[HttpApiClient] Checking server availability at: ${this.config.baseUrl}/api/health`);
       const controller = new AbortController();
       const timeoutId = setTimeout(
         () => controller.abort(),
@@ -88,7 +88,7 @@ export class HttpApiClient implements RemoteApiClient {
           const nodeFetch = await import('node-fetch');
           fetchFn = (nodeFetch as any).default || nodeFetch;
         } catch {
-          console.warn('[HttpApiClient] fetch not available and node-fetch not found');
+          // console.warn('[HttpApiClient] fetch not available and node-fetch not found');
           return false;
         }
       } else {
@@ -102,11 +102,11 @@ export class HttpApiClient implements RemoteApiClient {
 
       clearTimeout(timeoutId);
       const isAvailable = response.ok;
-      console.log(`[HttpApiClient] Server availability check: ${isAvailable ? 'AVAILABLE' : 'NOT AVAILABLE'} (status: ${response.status})`);
+      // console.log(`[HttpApiClient] Server availability check: ${isAvailable ? 'AVAILABLE' : 'NOT AVAILABLE'} (status: ${response.status})`);
       return isAvailable;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.warn(`[HttpApiClient] Server availability check failed:`, errorMsg);
+      // console.warn(`[HttpApiClient] Server availability check failed:`, errorMsg);
       return false;
     }
   }
@@ -117,12 +117,12 @@ export class HttpApiClient implements RemoteApiClient {
   async initialize(): Promise<void> {
     const available = await this.isAvailable();
     if (!available) {
-      console.warn(
-        `[HttpApiClient] Server not available at ${this.config.baseUrl}`
-      );
+      // console.warn(
+      //   `[HttpApiClient] Server not available at ${this.config.baseUrl}`
+      // );
     }
     this.isReady = true;
-    console.log(`[HttpApiClient] Initialized with base URL: ${this.config.baseUrl}`);
+    // console.log(`[HttpApiClient] Initialized with base URL: ${this.config.baseUrl}`);
   }
 
   /**
@@ -130,7 +130,7 @@ export class HttpApiClient implements RemoteApiClient {
    */
   async close(): Promise<void> {
     this.isReady = false;
-    console.log('[HttpApiClient] Closed');
+    // console.log('[HttpApiClient] Closed');
   }
 
   /**
@@ -149,7 +149,7 @@ export class HttpApiClient implements RemoteApiClient {
    */
   async post<T>(endpoint: string, data?: unknown): Promise<T> {
     const url = this.buildUrl(endpoint);
-    console.log(`[HttpApiClient] POST request to: ${url}`, data ? { dataKeys: Object.keys(data as any) } : 'no data');
+    // console.log(`[HttpApiClient] POST request to: ${url}`, data ? { dataKeys: Object.keys(data as any) } : 'no data');
     return this.request<T>('POST', url, data);
   }
 
@@ -258,7 +258,7 @@ export class HttpApiClient implements RemoteApiClient {
             }
           } catch (parseError) {
             // If parsing fails, use the default error message
-            console.warn('[HttpApiClient] Failed to parse error response:', parseError);
+            // console.warn('[HttpApiClient] Failed to parse error response:', parseError);
           }
           
           const error = new Error(errorMessage);
@@ -276,10 +276,10 @@ export class HttpApiClient implements RemoteApiClient {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 
-        console.warn(
-          `[HttpApiClient] Request failed (attempt ${attempt}/${this.config.retryAttempts}):`,
-          error
-        );
+        // console.warn(
+        //   `[HttpApiClient] Request failed (attempt ${attempt}/${this.config.retryAttempts}):`,
+        //   error
+        // );
 
         // Don't retry on client errors (4xx)
         if (error instanceof Error && error.message.includes('HTTP 4')) {
@@ -316,7 +316,7 @@ export class HttpApiClient implements RemoteApiClient {
       
       if (typeof fetch === 'undefined') {
         // Try to use node-fetch as fallback
-        console.warn('[HttpApiClient] fetch is not available, attempting to use node-fetch...');
+        // console.warn('[HttpApiClient] fetch is not available, attempting to use node-fetch...');
         try {
           const nodeFetch = await import('node-fetch');
           fetchFn = (nodeFetch as any).default || nodeFetch;
@@ -337,13 +337,13 @@ export class HttpApiClient implements RemoteApiClient {
         options.body = JSON.stringify(data);
       }
 
-      console.log(`[HttpApiClient] Making ${method} request to: ${url}`);
+      // console.log(`[HttpApiClient] Making ${method} request to: ${url}`);
       const response = await fetchFn(url, options);
-      console.log(`[HttpApiClient] Response status: ${response.status} ${response.statusText}`);
+      // console.log(`[HttpApiClient] Response status: ${response.status} ${response.statusText}`);
       return response;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`[HttpApiClient] Fetch error for ${method} ${url}:`, errorMsg);
+      // console.error(`[HttpApiClient] Fetch error for ${method} ${url}:`, errorMsg);
       throw error;
     } finally {
       clearTimeout(timeoutId);

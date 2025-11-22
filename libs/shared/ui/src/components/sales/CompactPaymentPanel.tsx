@@ -206,7 +206,7 @@ export function CompactPaymentPanel({
               onChange={(e) => handleManualInput(e.target.value)}
               onKeyDown={handleAmountKeyDown}
               className="absolute inset-y-0 left-0 opacity-0 cursor-text"
-              style={{ width: 'calc(100% - 40px)' }}
+              style={{ width: 'calc(100% - 40px)', pointerEvents: 'auto', zIndex: 1 }}
               aria-label="Payment amount input"
               disabled={disabled}
             />
@@ -214,16 +214,27 @@ export function CompactPaymentPanel({
         </div>
 
         {/* Keypad */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2" style={{ position: 'relative', zIndex: 10 }}>
           {KEYPAD_KEYS.map((key) => (
             <button
               key={key}
-              onClick={() => handleKeypadInput(key)}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleKeypadInput(key);
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
               disabled={disabled}
               className="h-14  text-xl font-semibold hover:opacity-80 transition-opacity"
               style={{
                 backgroundColor: '#d1d5db',
                 color: '#111827',
+                pointerEvents: disabled ? 'none' : 'auto',
+                cursor: disabled ? 'not-allowed' : 'pointer',
               }}
             >
               {key}
@@ -233,12 +244,23 @@ export function CompactPaymentPanel({
 
         {/* Pay Button */}
         <button
-          onClick={handleAddPaymentInternal}
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleAddPaymentInternal();
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           disabled={disabled || !selectedMethodId || !paymentAmount}
           className="w-full h-12 cursor-pointer text-sm font-semibold uppercase tracking-wide hover:opacity-90 transition-opacity flex items-center justify-center"
           style={{
             backgroundColor: '#ea580c',
             color: '#ffffff',
+            pointerEvents: (disabled || !selectedMethodId || !paymentAmount) ? 'none' : 'auto',
+            cursor: (disabled || !selectedMethodId || !paymentAmount) ? 'not-allowed' : 'pointer',
           }}
         >
           Pay
@@ -251,14 +273,27 @@ export function CompactPaymentPanel({
           Denominations
         </p>
 
-          <div className="flex flex-wrap gap-2 max-w-[280px] ml-24">
+          <div className="flex flex-wrap gap-2 max-w-[280px] ml-24" style={{ position: 'relative', zIndex: 10 }}>
           {DENOMINATIONS.map((value) => (
             <button
               key={value}
-              onClick={() => handleDenomination(value)}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDenomination(value);
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
               disabled={disabled}
               className="w-32 h-32 text-white text-base font-semibold hover:opacity-90 transition-opacity flex items-end justify-start pb-3 pl-3"
-                style={{ backgroundColor: '#ea580c' }}
+              style={{ 
+                backgroundColor: '#ea580c',
+                pointerEvents: disabled ? 'none' : 'auto',
+                cursor: disabled ? 'not-allowed' : 'pointer',
+              }}
             >
               {formatAmount(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </button>

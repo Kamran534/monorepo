@@ -68,8 +68,8 @@ export class DataSourceManager implements IDataSourceManager {
    * Starts periodic connectivity checks
    */
   async initialize(): Promise<void> {
-    console.log('[DataSourceManager] Initializing...');
-    console.log(`[DataSourceManager] Server URL: ${this.connectionState.serverUrl}`);
+    // console.log('[DataSourceManager] Initializing...');
+    // console.log(`[DataSourceManager] Server URL: ${this.connectionState.serverUrl}`);
 
     // Perform initial connectivity check
     await this.checkConnectivity();
@@ -83,9 +83,9 @@ export class DataSourceManager implements IDataSourceManager {
                        this.connectionState.status === ConnectionStatus.OFFLINE ? '🔴' : '🟡';
     const sourceEmoji = this.connectionState.dataSource === DataSource.SERVER ? '🌐' : '💾';
     
-    console.log(
-      `[DataSourceManager] Initialized - ${statusEmoji} Status: ${this.connectionState.status}, ${sourceEmoji} Using: ${this.connectionState.dataSource}`
-    );
+    // console.log(
+    //   `[DataSourceManager] Initialized - ${statusEmoji} Status: ${this.connectionState.status}, ${sourceEmoji} Using: ${this.connectionState.dataSource}`
+    // );
   }
 
   /**
@@ -113,7 +113,7 @@ export class DataSourceManager implements IDataSourceManager {
    * Manually switch data source
    */
   switchDataSource(source: DataSource): void {
-    console.log(`[DataSourceManager] Manually switching to ${source}`);
+    // console.log(`[DataSourceManager] Manually switching to ${source}`);
 
     const previousSource = this.connectionState.dataSource;
 
@@ -130,7 +130,7 @@ export class DataSourceManager implements IDataSourceManager {
    * Enable or disable automatic switching based on connectivity
    */
   setAutoSwitch(enabled: boolean): void {
-    console.log(`[DataSourceManager] Auto-switch ${enabled ? 'enabled' : 'disabled'}`);
+    // console.log(`[DataSourceManager] Auto-switch ${enabled ? 'enabled' : 'disabled'}`);
     this.autoSwitchEnabled = enabled;
   }
 
@@ -160,7 +160,7 @@ export class DataSourceManager implements IDataSourceManager {
    * Clean up resources
    */
   destroy(): void {
-    console.log('[DataSourceManager] Destroying...');
+    // console.log('[DataSourceManager] Destroying...');
     this.connectivityChecker.destroy();
     this.listeners.clear();
   }
@@ -193,9 +193,9 @@ export class DataSourceManager implements IDataSourceManager {
         this.updateConnectionState({
           dataSource: preferredSource,
         });
-        console.log(
-          `[DataSourceManager] Auto-switched to ${preferredSource} (${newStatus})`
-        );
+        // console.log(
+        //   `[DataSourceManager] Auto-switched to ${preferredSource} (${newStatus})`
+        // );
       }
     }
 
@@ -213,15 +213,15 @@ export class DataSourceManager implements IDataSourceManager {
                          newStatus === ConnectionStatus.OFFLINE ? '🔴' : '🟡';
       const sourceEmoji = this.connectionState.dataSource === DataSource.SERVER ? '🌐' : '💾';
       
-      console.log(
-        `[DataSourceManager] ${statusEmoji} Connection: ${previousStatus} → ${newStatus} | ${sourceEmoji} Data Source: ${previousSource} → ${this.connectionState.dataSource}`
-      );
-      if (result.latency) {
-        console.log(`[DataSourceManager] Server latency: ${result.latency}ms`);
-      }
-      if (result.error && !result.isOnline) {
-        console.log(`[DataSourceManager] Error: ${result.error}`);
-      }
+      // console.log(
+      //   `[DataSourceManager] ${statusEmoji} Connection: ${previousStatus} → ${newStatus} | ${sourceEmoji} Data Source: ${previousSource} → ${this.connectionState.dataSource}`
+      // );
+      // if (result.latency) {
+      //   console.log(`[DataSourceManager] Server latency: ${result.latency}ms`);
+      // }
+      // if (result.error && !result.isOnline) {
+      //   console.log(`[DataSourceManager] Error: ${result.error}`);
+      // }
     }
   }
 
@@ -244,7 +244,7 @@ export class DataSourceManager implements IDataSourceManager {
       try {
         callback(state);
       } catch (error) {
-        console.error('[DataSourceManager] Error in listener callback:', error);
+        // console.error('[DataSourceManager] Error in listener callback:', error);
       }
     });
   }

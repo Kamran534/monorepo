@@ -26,3 +26,8 @@ export * from './PaymentPanel.js';
 export * from './CompactPaymentPanel.js';
 export * from './ParkedOrderSearch.js';
 export * from './SalesOrderForm.js';
+export type { CreateSalesOrderResult } from './SalesOrderForm.js';
+export * from './PrintConfirmationDialog.js';
+export * from './ReceiptTemplate.js';
+export * from './usePrintReceipt.js';
+export * from './PaymentWithPrintDialog.js';
