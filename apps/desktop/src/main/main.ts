@@ -1217,6 +1217,49 @@ function setupIpcHandlers(): void {
     }
   });
 
+  ipcMain.handle('order:get-by-number', async (_event, orderNumber: string) => {
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+      if (!orderNumber) {
+        throw new Error('Order number is required');
+      }
+
+      const { SalesOrderRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+      const repository = new SalesOrderRepository(localDb, apiClient);
+      const result = await repository.getOrderByNumber(orderNumber);
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to load order',
+      };
+    }
+  });
+
+  ipcMain.handle('order:get-variant-details', async (_event, variantId: string) => {
+    try {
+      if (!dataAccessService) {
+        throw new Error('DataAccessService not initialized');
+      }
+      if (!variantId) {
+        throw new Error('Variant ID is required');
+      }
+
+      const { SalesOrderRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+      const repository = new SalesOrderRepository(localDb, apiClient);
+      const result = await repository.getVariantDetails(variantId);
+      return result;
+    } catch (error) {
+      return null;
+    }
+  });
+
   // === Order Handlers ===
 
   ipcMain.handle('order:create', async (_event, orderData) => {
@@ -1536,7 +1579,9 @@ function setupIpcHandlers(): void {
   ipcMain.handle('save-pdf', async (event, options) => {
     try {
       const { htmlContent, orderId } = options;
+      console.log('[IPC] save-pdf called with orderId:', orderId);
       if (!htmlContent || !orderId) {
+        console.error('[IPC] save-pdf missing required fields:', { hasHtmlContent: !!htmlContent, hasOrderId: !!orderId });
         throw new Error('htmlContent and orderId are required');
       }
 
@@ -1555,7 +1600,8 @@ function setupIpcHandlers(): void {
       // Wait for content to be ready
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Generate PDF
+      // Generate PDF for thermal printer (80mm width)
+      console.log('[IPC] Generating PDF...');
       const pdfData = await pdfWindow.webContents.printToPDF({
         printBackground: true,
         margins: {
@@ -1564,17 +1610,35 @@ function setupIpcHandlers(): void {
           left: 0,
           right: 0,
         },
-        pageSize: 'A4',
+        pageSize: {
+          width: 226.77, // 80mm in points (80mm * 2.83465 points/mm)
+          height: 841.89, // 297mm in points (297mm * 2.83465 points/mm) - standard thermal roll length
+        },
       });
 
       pdfWindow.close();
-
-      // Create directory structure: assets/bills/YYYY-MM-DD/
-      const date = new Date();
-      const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
       
-      // Find project root directory
+      if (!pdfData || pdfData.length === 0) {
+        console.error('[IPC] PDF data is empty or invalid');
+        return {
+          success: false,
+          error: 'PDF generation failed - no data generated',
+        };
+      }
+      
+      console.log('[IPC] PDF generated successfully, size:', pdfData.length, 'bytes');
+
+      // Create directory structure: apps/desktop/assets/bills/YYYY-MM-DD/
+      const date = new Date();
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`; // YYYY-MM-DD
+      
+      // Find monorepo root directory
       let projectRoot = __dirname;
+      const fs = require('fs');
+      
       if (app.isPackaged) {
         // In production, use app directory
         projectRoot = process.resourcesPath ? join(process.resourcesPath, '..') : app.getAppPath();
@@ -1582,32 +1646,92 @@ function setupIpcHandlers(): void {
         // In development, find monorepo root
         // From dist/main/services -> dist/main -> dist -> apps/desktop -> monorepo
         let currentDir = __dirname; // dist/main/services
-        while (currentDir !== '/' && currentDir !== '\\') {
+        let found = false;
+        while (currentDir !== '/' && currentDir !== '\\' && !found) {
           const parentDir = join(currentDir, '..');
-          if (require('fs').existsSync(join(parentDir, 'package.json'))) {
-            projectRoot = parentDir;
-            break;
+          const packageJsonPath = join(parentDir, 'package.json');
+          if (fs.existsSync(packageJsonPath)) {
+            // Check if this is the monorepo root by looking for apps/desktop
+            const appsDesktopPath = join(parentDir, 'apps', 'desktop');
+            if (fs.existsSync(appsDesktopPath)) {
+              projectRoot = parentDir;
+              found = true;
+              break;
+            }
           }
           currentDir = parentDir;
         }
+        
+        // Fallback: if we didn't find monorepo root, try to find apps/desktop
+        if (!found) {
+          currentDir = __dirname;
+          while (currentDir !== '/' && currentDir !== '\\') {
+            const parentDir = join(currentDir, '..');
+            const appsDesktopPath = join(parentDir, 'apps', 'desktop');
+            if (fs.existsSync(appsDesktopPath)) {
+              projectRoot = parentDir;
+              break;
+            }
+            currentDir = parentDir;
+          }
+        }
       }
       
-      // Create assets/bills/date directory in project root
-      const billsDir = join(projectRoot, 'assets', 'bills', dateStr);
+      // Create apps/desktop/assets/bills/date directory
+      const billsDir = join(projectRoot, 'apps', 'desktop', 'assets', 'bills', dateStr);
       
       // Ensure directory exists
-      const fs = require('fs');
       if (!fs.existsSync(billsDir)) {
         fs.mkdirSync(billsDir, { recursive: true });
       }
 
+      // Sanitize orderId for filename (remove invalid characters)
+      const sanitizedOrderId = String(orderId)
+        .replace(/[<>:"/\\|?*]/g, '_') // Replace invalid filename characters
+        .replace(/\s+/g, '_') // Replace spaces with underscores
+        .substring(0, 255); // Limit length
+      
       // Save PDF file with order ID as filename
-      const pdfPath = join(billsDir, `${orderId}.pdf`);
-      fs.writeFileSync(pdfPath, pdfData);
-
-      return { success: true, path: pdfPath };
+      const pdfPath = join(billsDir, `${sanitizedOrderId}.pdf`);
+      
+      // Ensure the directory exists before writing
+      if (!fs.existsSync(billsDir)) {
+        console.log('[IPC] Creating bills directory:', billsDir);
+        fs.mkdirSync(billsDir, { recursive: true });
+      }
+      
+      console.log('[IPC] Project root:', projectRoot);
+      console.log('[IPC] Bills directory:', billsDir);
+      console.log('[IPC] Order ID (original):', orderId);
+      console.log('[IPC] Order ID (sanitized):', sanitizedOrderId);
+      console.log('[IPC] Writing PDF to:', pdfPath);
+      console.log('[IPC] PDF data size:', pdfData.length, 'bytes');
+      
+      try {
+        fs.writeFileSync(pdfPath, pdfData);
+        
+        // Verify the file was written
+        if (fs.existsSync(pdfPath)) {
+          const stats = fs.statSync(pdfPath);
+          console.log('[IPC] PDF saved successfully to:', pdfPath);
+          console.log('[IPC] File size:', stats.size, 'bytes');
+          return { success: true, path: pdfPath };
+        } else {
+          console.error('[IPC] PDF file was not created after write:', pdfPath);
+          return {
+            success: false,
+            error: 'PDF file was not created',
+          };
+        }
+      } catch (writeError) {
+        console.error('[IPC] Error writing PDF file:', writeError);
+        return {
+          success: false,
+          error: writeError instanceof Error ? writeError.message : 'Failed to write PDF file',
+        };
+      }
     } catch (error) {
-      // console.error('[IPC] save-pdf error:', error);
+      console.error('[IPC] save-pdf error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to save PDF',

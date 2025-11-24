@@ -95,6 +95,42 @@ export interface SalesOrder {
   };
 }
 
+export interface OrderRecallCustomer {
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+}
+
+export interface OrderRecallLineItem {
+  id: string;
+  orderId: string;
+  variantId: string;
+  productId?: string;
+  salesPersonId?: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  variantName?: string;
+  productName?: string;
+  sku?: string;
+}
+
+export interface OrderRecallData {
+  order: SalesOrder;
+  lineItems: OrderRecallLineItem[];
+  customer?: OrderRecallCustomer;
+}
+
+export interface OrderRecallResult {
+  success: boolean;
+  data?: OrderRecallData;
+  error?: string;
+}
+
 export interface CreateOrderResult {
   success: boolean;
   order?: SalesOrder;
@@ -149,6 +185,147 @@ export class SalesOrderRepository {
     }
   }
 
+  async getOrderByNumber(orderNumber: string): Promise<OrderRecallResult> {
+    try {
+      const normalized = orderNumber?.trim().replace(/\//g, '-').toUpperCase();
+      if (!normalized) {
+        return { success: false, error: 'Invalid order number' };
+      }
+
+      const orderRows = await this.localDb.query<any>(
+        'SELECT * FROM SaleOrder WHERE UPPER(orderNumber) = ? LIMIT 1',
+        [normalized],
+      );
+
+      if (orderRows.length === 0) {
+        return { success: false, error: `Order ${orderNumber} not found` };
+      }
+
+      const order = this.mapOrderFromDb(orderRows[0]);
+
+      let customer: OrderRecallCustomer | undefined;
+      if (order.customerId) {
+        const customerResults = await this.localDb.query<any>(
+          `SELECT 
+            c.id,
+            c.firstName,
+            c.lastName,
+            c.email,
+            c.phone,
+            ca.street1,
+            ca.street2,
+            ca.city,
+            ca.state,
+            ca.postalCode
+          FROM Customer c
+          LEFT JOIN CustomerAddress ca ON ca.customerId = c.id AND ca.isDefault = 1
+          WHERE c.id = ?
+          LIMIT 1`,
+          [order.customerId],
+        );
+        if (customerResults.length > 0) {
+          const row = customerResults[0];
+          const addressParts = [row.street1, row.street2, row.city, row.state, row.postalCode]
+            .map((part: string | null) => (part ?? '').trim())
+            .filter((part: string) => part.length > 0);
+          customer = {
+            id: row.id,
+            firstName: row.firstName ?? undefined,
+            lastName: row.lastName ?? undefined,
+            email: row.email ?? undefined,
+            phone: row.phone ?? undefined,
+            address: addressParts.join(', ') || undefined,
+          };
+        }
+      }
+
+      const lineItemRows = await this.localDb.query<any>(
+        `SELECT
+          oli.*,
+          pv.sku,
+          pv.variantName,
+          pv.productId,
+          p.name as productName
+        FROM OrderLineItem oli
+        LEFT JOIN ProductVariant pv ON oli.variantId = pv.id
+        LEFT JOIN Product p ON pv.productId = p.id
+        WHERE oli.orderId = ?`,
+        [order.id],
+      );
+
+      const lineItems: OrderRecallLineItem[] = lineItemRows.map((row: any) => ({
+        id: row.id,
+        orderId: row.orderId,
+        variantId: row.variantId,
+        productId: row.productId || undefined,
+        salesPersonId: row.salesPersonId || undefined,
+        quantity: row.quantity,
+        unitPrice: row.unitPrice,
+        lineTotal: row.lineTotal,
+        variantName: row.variantName || undefined,
+        productName: row.productName || undefined,
+        sku: row.sku || undefined,
+      }));
+
+      return {
+        success: true,
+        data: {
+          order,
+          lineItems,
+          customer,
+        },
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to load order',
+      };
+    }
+  }
+
+  async getVariantDetails(variantId: string): Promise<{
+    variantId: string;
+    productId?: string;
+    variantName?: string;
+    productName?: string;
+    sku?: string;
+  } | null> {
+    if (!variantId) {
+      return null;
+    }
+
+    try {
+      const rows = await this.localDb.query<any>(
+        `SELECT
+          pv.id,
+          pv.productId,
+          pv.variantName,
+          pv.sku,
+          p.name as productName
+        FROM ProductVariant pv
+        LEFT JOIN Product p ON pv.productId = p.id
+        WHERE pv.id = ?
+        LIMIT 1`,
+        [variantId],
+      );
+
+      if (!rows.length) {
+        return null;
+      }
+
+      const row = rows[0];
+      return {
+        variantId: row.id,
+        productId: row.productId || undefined,
+        variantName: row.variantName || undefined,
+        productName: row.productName || undefined,
+        sku: row.sku || undefined,
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
   /**
    * Create a new sales order with line items and payments
    */
@@ -160,6 +337,15 @@ export class SalesOrderRepository {
         ...data,
         payments,
       };
+
+      // Validate line-level salesperson if required by store config
+      const lineItemValidation = await this.validateLineItemSalesPerson(normalizedData.lineItems);
+      if (!lineItemValidation.isValid) {
+        return {
+          success: false,
+          error: lineItemValidation.error,
+        };
+      }
 
       // Calculate order totals
       const calculatedTotals = this.calculateOrderTotals(normalizedData);
@@ -644,6 +830,59 @@ export class SalesOrderRepository {
       taxAmount,
       totalAmount: Math.max(0, totalAmount),
     };
+  }
+
+  /**
+   * Validate line-level salesperson assignment based on store config
+   */
+  private async validateLineItemSalesPerson(lineItems: OrderLineItemInput[]): Promise<{ isValid: boolean; error?: string }> {
+    try {
+      // Fetch store config to check if line-level salesperson is required
+      const storeConfig = await this.getStoreConfig();
+
+      if (!storeConfig || !storeConfig.requireLineItemSalesPerson) {
+        // If config not found or not required, validation passes
+        return { isValid: true };
+      }
+
+      // Check if all line items have salesPersonId
+      const missingLineItems = lineItems.filter((item, index) => !item.salesPersonId);
+
+      if (missingLineItems.length > 0) {
+        return {
+          isValid: false,
+          error: `Salesperson is required for all line items. ${missingLineItems.length} line item(s) missing salesperson assignment.`,
+        };
+      }
+
+      return { isValid: true };
+    } catch (error) {
+      // If error fetching config, allow order to proceed (fail-open approach)
+      console.warn('[SalesOrderRepository] Error validating line-level salesperson:', error);
+      return { isValid: true };
+    }
+  }
+
+  /**
+   * Get store configuration
+   */
+  private async getStoreConfig(): Promise<{ requireLineItemSalesPerson: boolean } | null> {
+    try {
+      const result = await this.localDb.query<{ requireLineItemSalesPerson: number | boolean }>(
+        'SELECT requireLineItemSalesPerson FROM StoreConfig LIMIT 1'
+      );
+
+      if (result && result.length > 0) {
+        // SQLite stores boolean as 0/1, convert to boolean
+        const requireLineItemSalesPerson = result[0].requireLineItemSalesPerson === 1 || result[0].requireLineItemSalesPerson === true;
+        return { requireLineItemSalesPerson };
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('[SalesOrderRepository] Error fetching store config:', error);
+      return null;
+    }
   }
 
   /**

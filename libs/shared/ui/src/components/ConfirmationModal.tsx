@@ -4,9 +4,10 @@
  * A reusable confirmation dialog modal for confirming actions
  */
 
-import React from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import type { ComponentProps } from '../types.js';
+import { SidePanel } from './SidePanel.js';
 
 export interface ConfirmationModalProps extends ComponentProps {
   isOpen: boolean;
@@ -36,15 +37,26 @@ export function ConfirmationModal({
   variant = 'warning',
   isLoading = false,
   className = '',
-  style,
 }: ConfirmationModalProps) {
-  if (!isOpen) return null;
-
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget && !isLoading) {
+  const handleClose = useCallback(() => {
+    if (!isLoading) {
       onClose();
     }
-  };
+  }, [isLoading, onClose]);
+
+  useEffect(() => {
+    if (!isOpen || isLoading) return;
+
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        onConfirm();
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isLoading, isOpen, onConfirm]);
 
   const getVariantStyles = () => {
     switch (variant) {
@@ -77,95 +89,93 @@ export function ConfirmationModal({
 
   const variantStyles = getVariantStyles();
 
-  return (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center ${className}`}
-      style={{
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        ...style,
-      }}
-      onClick={handleBackdropClick}
-    >
+  const headerContent = (
+    <div className="flex items-start gap-3">
       <div
-        className="rounded-lg shadow-xl w-full max-w-md mx-4 border"
+        className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
         style={{
-          backgroundColor: 'var(--color-bg-primary)',
-          borderColor: 'var(--color-border-light)',
-          color: 'var(--color-text-primary)',
+          backgroundColor: 'var(--color-bg-secondary)',
+          color: variantStyles.iconColor,
         }}
-        onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div
-          className="px-6 py-4 border-b flex items-center justify-between"
-          style={{ borderColor: 'var(--color-border-light)' }}
-        >
-          <div className="flex items-center gap-3">
-            <AlertTriangle
-              className="w-6 h-6"
-              style={{ color: variantStyles.iconColor }}
-            />
-            <h2 className="text-xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-              {title}
-            </h2>
-          </div>
+        <AlertTriangle className="w-5 h-5" />
+      </div>
+      <div className="flex-1 flex flex-col gap-1">
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+            {title}
+          </h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isLoading}
-            className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+            className="text-gray-400 hover:text-gray-100 transition-colors disabled:opacity-50"
             aria-label="Close"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Body */}
-        <div className="px-6 py-4">
-          <p className="text-sm md:text-base" style={{ color: 'var(--color-text-secondary)' }}>
-            {message}
-          </p>
-        </div>
-
-        {/* Footer */}
-        <div
-          className="px-6 py-4 border-t flex items-center justify-end gap-3"
-          style={{ borderColor: 'var(--color-border-light)' }}
-        >
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-            style={{
-              backgroundColor: 'var(--color-bg-secondary)',
-              color: 'var(--color-text-primary)',
-              border: '1px solid var(--color-border-light)',
-            }}
-          >
-            {cancelText}
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isLoading}
-            className="px-6 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              backgroundColor: isLoading ? 'var(--color-bg-secondary)' : variantStyles.confirmButtonBg,
-            }}
-            onMouseEnter={(e) => {
-              if (!isLoading) {
-                e.currentTarget.style.backgroundColor = variantStyles.confirmButtonHover;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isLoading) {
-                e.currentTarget.style.backgroundColor = variantStyles.confirmButtonBg;
-              }
-            }}
-          >
-            {isLoading ? 'Processing...' : confirmText}
-          </button>
-        </div>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+          {message}
+        </p>
       </div>
     </div>
+  );
+
+  const footerContent = (
+    <div className="flex flex-col gap-3">
+      <button
+        onClick={onConfirm}
+        disabled={isLoading}
+        className="w-full px-4 py-3 text-sm font-semibold text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{
+          backgroundColor: isLoading ? 'var(--color-bg-secondary)' : variantStyles.confirmButtonBg,
+        }}
+        onMouseEnter={(e) => {
+          if (!isLoading) {
+            e.currentTarget.style.backgroundColor = variantStyles.confirmButtonHover;
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isLoading) {
+            e.currentTarget.style.backgroundColor = variantStyles.confirmButtonBg;
+          }
+        }}
+      >
+        {isLoading ? 'Processing...' : confirmText}
+      </button>
+      <button
+        onClick={handleClose}
+        disabled={isLoading}
+        className="w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 border"
+        style={{
+          backgroundColor: 'var(--color-bg-secondary)',
+          color: 'var(--color-text-primary)',
+          borderColor: 'var(--color-border-light)',
+        }}
+      >
+        {cancelText}
+      </button>
+    </div>
+  );
+
+  return (
+    <SidePanel
+      isOpen={isOpen}
+      onClose={handleClose}
+      width="320px"
+      showBackdrop
+      className={className}
+      header={headerContent}
+      footer={footerContent}
+    >
+      <div className="flex flex-col gap-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+        <p className="leading-relaxed">{message}</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>Press Enter to confirm immediately.</li>
+          <li>Press Esc or use the Cancel button to keep working.</li>
+        </ul>
+      </div>
+    </SidePanel>
   );
 }
 

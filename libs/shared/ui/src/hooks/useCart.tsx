@@ -5,6 +5,7 @@ export type CartContextValue = {
   items: LineItem[];
   addItem: (item: Omit<LineItem, 'id' | 'total'> & { id?: string }, showToast?: (message: string, type: 'success' | 'error' | 'info') => void) => void;
   setItemQuantity: (id: string, quantity: number, showToast?: (message: string, type: 'success' | 'error' | 'info') => void) => void;
+  updateItem: (id: string, patch: Partial<LineItem>) => void;
   removeItem: (id: string) => void;
   clear: () => void;
 };
@@ -57,6 +58,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           price: existing.price, // keep existing price
           total: existing.price * newQuantity,
           availableQuantity: availableQty, // Update available quantity
+          salesPersonId: existing.salesPersonId || (item as any).salesPersonId, // Preserve salesperson
           isReturn: existing.isReturn || (item as any).isReturn || false, // Preserve return flag
         };
         return updated;
@@ -72,28 +74,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         showToast?.(`Only ${availableQty} item(s) available in stock. Added ${availableQty} instead.`, 'info');
         const id = item.id ?? Math.random().toString(36).slice(2, 9);
         const total = price * availableQty;
-        return [...prev, { 
-          id, 
-          name: item.name, 
-          price, 
-          quantity: availableQty, 
+        return [...prev, {
+          id,
+          name: item.name,
+          price,
+          quantity: availableQty,
           total,
           productId: item.productId,
           productVariantId: item.productVariantId,
+          salesPersonId: (item as any).salesPersonId, // Preserve salesperson
           availableQuantity: availableQty,
         }];
       }
 
       const id = item.id ?? Math.random().toString(36).slice(2, 9);
       const total = price * qtyToAdd;
-      return [...prev, { 
-        id, 
-        name: item.name, 
-        price, 
-        quantity: qtyToAdd, 
+      return [...prev, {
+        id,
+        name: item.name,
+        price,
+        quantity: qtyToAdd,
         total,
         productId: item.productId,
         productVariantId: item.productVariantId,
+        salesPersonId: (item as any).salesPersonId, // Preserve salesperson
         availableQuantity: availableQty,
         isReturn: (item as any).isReturn || false, // Preserve return flag
       }];
@@ -125,13 +129,21 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const updateItem = useCallback((id: string, patch: Partial<LineItem>) => {
+    setItems(prev =>
+      prev.map(li =>
+        li.id === id ? { ...li, ...patch } : li
+      )
+    );
+  }, []);
+
   const removeItem = useCallback((id: string) => {
     setItems(prev => prev.filter(li => li.id !== id));
   }, []);
 
   const clear = useCallback(() => setItems([]), []);
 
-  const value = useMemo<CartContextValue>(() => ({ items, addItem, setItemQuantity, removeItem, clear }), [items, addItem, setItemQuantity, removeItem, clear]);
+  const value = useMemo<CartContextValue>(() => ({ items, addItem, setItemQuantity, updateItem, removeItem, clear }), [items, addItem, setItemQuantity, updateItem, removeItem, clear]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

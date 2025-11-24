@@ -1,7 +1,24 @@
 import React from 'react';
-import { Payment, PaymentMethod } from './PaymentPanel.js';
+import { Payment } from './PaymentPanel.js';
 import { LineItem } from './LineItemEditor.js';
 import { Customer } from './CustomerSelector.js';
+import { ReceiptQrCode, renderReceiptQrCodeSVG } from '../barcode/ReceiptQrCode.js';
+
+const shortenProductName = (name: string, maxWords = 2) => {
+  if (!name) return '';
+  const trimmed = name.trim();
+  if (!trimmed) return '';
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) {
+    return trimmed;
+  }
+  return words.slice(0, maxWords).join(' ');
+};
+
+const normalizeReceiptCodeValue = (value?: string | null) => {
+  if (!value) return '';
+  return value.replace(/\//g, '-');
+};
 
 export interface ReceiptData {
   // Store info
@@ -12,6 +29,8 @@ export interface ReceiptData {
 
   // Invoice details
   invoiceNumber: string;
+  orderNumber?: string;
+  orderId?: string;
   dateTime: string;
   cashier?: string;
 
@@ -48,6 +67,8 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
     storeUrl,
     posNumber,
     invoiceNumber,
+    orderNumber,
+    orderId,
     dateTime,
     cashier,
     customer,
@@ -65,6 +86,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
       'Thanks for visiting us',
     ],
   } = data;
+  const qrValue = normalizeReceiptCodeValue(orderNumber || orderId || invoiceNumber);
 
   return (
     <div
@@ -221,7 +243,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
         <div style={{ width: '50px', textAlign: 'center' }}>Price</div>
         <div style={{ width: '30px', textAlign: 'center' }}>Qty</div>
         <div style={{ width: '40px', textAlign: 'center' }}>Disc%</div>
-        <div style={{ width: '30px', textAlign: 'center' }}>C Disc</div>
+        <div style={{ width: '30px', textAlign: 'center' }}>C.Disc</div>
         <div style={{ width: '60px', textAlign: 'right' }}>Net Amt</div>
       </div>
 
@@ -234,6 +256,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
         const productName = (item as any).productName || item.variant?.product?.name || 'Item';
         const variantName = (item as any).variantName || item.variant?.variantName;
         const sku = (item as any).sku || item.variant?.sku;
+        const shortenedProductName = shortenProductName(productName);
 
         return (
           <div key={item.id || index} style={{ marginBottom: '3mm' }}>
@@ -246,7 +269,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
               }}
             >
               <div style={{ flex: '2', fontWeight: 'bold', wordBreak: 'break-word' }}>
-                {productName} {variantName && `- ${variantName}`}
+                {shortenedProductName} {variantName && `- ${variantName}`}
               </div>
               <div style={{ width: '50px', textAlign: 'center' }}>
                 {item.unitPrice.toFixed(0)}
@@ -375,6 +398,8 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
         }}
       />
 
+
+
       {/* Footer Text */}
       {footerText.map((line, index) => {
         const isLastLine = index === footerText.length - 1;
@@ -405,6 +430,8 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
  * Generate receipt HTML string for printing
  */
 export function generateReceiptHTML(data: ReceiptData): string {
+  const qrValue = normalizeReceiptCodeValue(data.orderNumber || data.orderId || data.invoiceNumber);
+  const barcodeMarkup = qrValue ? renderReceiptQrCodeSVG(qrValue) : '';
   const receiptElement = document.createElement('div');
   const root = document.createElement('div');
   receiptElement.appendChild(root);
@@ -448,7 +475,7 @@ export function generateReceiptHTML(data: ReceiptData): string {
           <div style="width: 50px; text-align: center;">Price</div>
           <div style="width: 30px; text-align: center;">Qty</div>
           <div style="width: 40px; text-align: center;">Disc%</div>
-          <div style="width: 30px; text-align: center;">C Disc</div>
+          <div style="width: 30px; text-align: center;">C.Disc</div>
           <div style="width: 60px; text-align: right;">Net Amt</div>
         </div>
         ${data.lineItems.map(item => {
@@ -458,10 +485,11 @@ export function generateReceiptHTML(data: ReceiptData): string {
           const productName = (item as any).productName || item.variant?.product?.name || 'Item';
           const variantName = (item as any).variantName || item.variant?.variantName;
           const sku = (item as any).sku || item.variant?.sku;
+          const shortenedProductName = shortenProductName(productName);
           return `
             <div style="margin-bottom: 3mm;">
               <div class="flex" style="font-size: 11px;">
-                <div style="flex: 2; font-weight: bold; word-break: break-word;">${productName}${variantName ? ` - ${variantName}` : ''}</div>
+                <div style="flex: 2; font-weight: bold; word-break: break-word;">${shortenedProductName}${variantName ? ` - ${variantName}` : ''}</div>
                 <div style="width: 50px; text-align: center;">${item.unitPrice.toFixed(0)}</div>
                 <div style="width: 30px; text-align: center;">${item.quantity}</div>
                 <div style="width: 40px; text-align: center;">${discountPercent > 0 ? `${discountPercent}%` : '0%'}</div>
@@ -504,6 +532,18 @@ export function generateReceiptHTML(data: ReceiptData): string {
           </div>
         </div>
         <div class="separator"></div>
+        ${
+          barcodeMarkup
+            ? `
+        <div style="margin-bottom: 3mm;">
+          <div style="text-align: center; font-size: 10px; margin-bottom: 1mm;">Scan to view order</div>
+          <div style="width: 120px; margin: 0 auto;">
+            ${barcodeMarkup}
+          </div>
+        </div>
+        `
+            : ''
+        }
         ${(data.footerText || [
           'ALLOW REFUND',
           'EXCHANGE WITH IN 7 DAYS',

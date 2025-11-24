@@ -135,6 +135,8 @@ export function Orders({ salesOrderRepo }: OrdersProps = {}) {
       storeUrl: 'http://www.tradeunleashed.com',
       posNumber: 'TRADE UNLEASHED',
       invoiceNumber: selectedOrder.orderNumber || selectedOrder.id,
+      orderNumber: selectedOrder.orderNumber || selectedOrder.id,
+      orderId: selectedOrder.id,
       dateTime: dateTime,
       cashier: cashierName,
       customer,

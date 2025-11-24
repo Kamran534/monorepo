@@ -19,6 +19,9 @@ export type { TransactionDiscountPanelProps } from './TransactionDiscountPanel.j
 export { TransactionAdjustmentPanel } from './TransactionAdjustmentPanel.js';
 export type { TransactionAdjustmentPanelProps } from './TransactionAdjustmentPanel.js';
 
+export { TransactionGiftCardPanel } from './TransactionGiftCardPanel.js';
+export type { TransactionGiftCardPanelProps } from './TransactionGiftCardPanel.js';
+
 export { TransactionVerticalNav } from './TransactionVerticalNav.js';
 export type { TransactionVerticalNavProps } from './TransactionVerticalNav.js';
 

@@ -9,7 +9,7 @@ import { AdjustmentPanel, OrderAdjustment } from './AdjustmentPanel.js';
 import { OrderSummary, OrderTotals } from './OrderSummary.js';
 import { PaymentPanel, PaymentMethod, Payment } from './PaymentPanel.js';
 import { ParkedOrderSearch } from './ParkedOrderSearch.js';
-import { ConfirmationModal } from '@monorepo/shared-ui';
+import { ConfirmationModal, useToast } from '@monorepo/shared-ui';
 import { useCurrency } from '@monorepo/shared-hooks-currency';
 import { usePrintReceipt } from './usePrintReceipt.js';
 import { PrintConfirmationDialog } from './PrintConfirmationDialog.js';
@@ -133,6 +133,7 @@ export function SalesOrderForm({
   const [currentParkedOrderId, setCurrentParkedOrderId] = useState<string | null>(null);
   const [showParkConfirm, setShowParkConfirm] = useState(false);
   const { formatAmount } = useCurrency({ defaultCurrency: 'PKR' });
+  const { show } = useToast();
 
   // Print receipt hook
   const {
@@ -325,6 +326,8 @@ export function SalesOrderForm({
       // Show print confirmation dialog
       promptPrintReceipt({
         invoiceNumber: result.order.invoiceNumber || result.order.orderNumber || result.order.id,
+        orderNumber: result.order.orderNumber || result.order.invoiceNumber || result.order.id,
+        orderId: result.order.id,
         lineItems: lineItems,
         payments: payments,
         customer: selectedCustomer || undefined,
@@ -665,7 +668,7 @@ export function SalesOrderForm({
                 <button
                   onClick={() => {
                     if (lineItems.length === 0) {
-                      showToast?.('Add at least one line item before parking.', 'warning');
+                      show('Add at least one line item before parking.', 'info');
                       return;
                     }
                     setShowParkConfirm(true);

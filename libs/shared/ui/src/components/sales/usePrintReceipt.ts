@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { usePrinter } from '@monorepo/shared-hooks-printer';
 import { ReceiptData, generateReceiptHTML } from './ReceiptTemplate.js';
 import { LineItem } from './LineItemEditor.js';
@@ -18,6 +18,8 @@ export interface UsePrintReceiptOptions {
 
 export interface PrintReceiptInput {
   invoiceNumber: string;
+  orderNumber?: string;
+  orderId?: string;
   lineItems: LineItem[];
   payments: Payment[];
   customer?: Customer;
@@ -45,6 +47,8 @@ export function usePrintReceipt({
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   const [currentReceiptData, setCurrentReceiptData] = useState<ReceiptData | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  // Use ref to store receipt data immediately (for synchronous access)
+  const receiptDataRef = useRef<ReceiptData | null>(null);
 
   const printer = usePrinter({
     defaultPrinterType: 'thermal',
@@ -84,6 +88,8 @@ export function usePrintReceipt({
       storeUrl,
       posNumber,
       invoiceNumber: input.invoiceNumber,
+      orderNumber: input.orderNumber ?? input.invoiceNumber,
+      orderId: input.orderId ?? input.invoiceNumber,
       dateTime,
       cashier: input.cashier,
       customer: input.customer,
@@ -97,15 +103,22 @@ export function usePrintReceipt({
       footerText: input.footerText,
     };
 
+    // Store in ref immediately for synchronous access
+    receiptDataRef.current = receiptData;
     setCurrentReceiptData(receiptData);
     setShowPrintDialog(true);
+    
+    // Return a promise that resolves when data is set (for immediate printing)
+    return Promise.resolve(receiptData);
   }, [storeName, storeNameArabic, storeUrl, posNumber]);
 
   /**
    * Confirm and execute print
    */
   const confirmPrint = useCallback(async () => {
-    if (!currentReceiptData) {
+    // Use ref data if state data is not available yet (handles timing issues)
+    const receiptData = currentReceiptData || receiptDataRef.current;
+    if (!receiptData) {
       console.error('No receipt data available');
       return;
     }
@@ -116,7 +129,7 @@ export function usePrintReceipt({
       setIsPrinting(true);
       
       // Generate receipt HTML
-      const receiptHTML = generateReceiptHTML(currentReceiptData);
+      const receiptHTML = generateReceiptHTML(receiptData);
 
       if (!receiptHTML || receiptHTML.trim().length === 0) {
         throw new Error('Failed to generate receipt HTML');
@@ -129,12 +142,20 @@ export function usePrintReceipt({
       if (isElectron && (window as any).electronAPI?.savePDF) {
         try {
           // Auto-save PDF without system dialog
-          const orderId = currentReceiptData.invoiceNumber || `order-${Date.now()}`;
-          await (window as any).electronAPI.savePDF({
+          const orderId =
+            receiptData.orderNumber ||
+            receiptData.orderId ||
+            receiptData.invoiceNumber ||
+            `order-${Date.now()}`;
+          const pdfResult = await (window as any).electronAPI.savePDF({
             htmlContent: receiptHTML,
             orderId: orderId,
           });
-          // console.log('[usePrintReceipt] PDF saved successfully');
+          if (pdfResult?.success) {
+            console.log('[usePrintReceipt] PDF saved successfully to:', pdfResult.path);
+          } else {
+            console.error('[usePrintReceipt] PDF save failed:', pdfResult?.error);
+          }
         } catch (pdfError) {
           // Log but don't fail the print if PDF save fails
           console.error('[usePrintReceipt] Failed to save PDF:', pdfError);
@@ -166,6 +187,7 @@ export function usePrintReceipt({
           // Just complete the process silently
           console.error('[usePrintReceipt] Electron print error (silent):', err);
           setIsPrinting(false);
+          receiptDataRef.current = null;
           setCurrentReceiptData(null);
           onPrintSuccess?.();
           return;
@@ -175,7 +197,11 @@ export function usePrintReceipt({
       // For web browser - use same flow as desktop: save PDF first, then print
       if (!isElectron) {
         try {
-          const orderId = currentReceiptData.invoiceNumber || `order-${Date.now()}`;
+          const orderId =
+            receiptData.orderNumber ||
+            receiptData.orderId ||
+            receiptData.invoiceNumber ||
+            `order-${Date.now()}`;
           const date = new Date().toISOString().split('T')[0];
           const filename = `${orderId}.pdf`; // Same filename format as desktop: orderId.pdf
 
@@ -318,7 +344,7 @@ export function usePrintReceipt({
                 const store = transaction.objectStore('bills');
                 store.put({
                   orderId: orderId,
-                  invoiceNumber: currentReceiptData.invoiceNumber,
+                  invoiceNumber: receiptData.invoiceNumber,
                   date: date,
                   filename: filename,
                   savedAt: new Date().toISOString(),

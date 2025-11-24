@@ -2,6 +2,8 @@ import React from 'react';
 import { Package, CreditCard, ChevronDown, ChevronRight } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
 import { useCurrency } from '@monorepo/shared-hooks-currency';
+import type { SalesPerson as SalesPersonData } from '../SalesPersonModal.js';
+import type { Payment as TransactionPaymentEntry } from '../sales/CompactPaymentPanel.js';
 
 export interface LineItem {
   id: string;
@@ -11,6 +13,7 @@ export interface LineItem {
   total: number;
   productId?: string; // Product ID for inventory tracking
   productVariantId?: string; // Variant ID for inventory tracking
+  salesPersonId?: string; // Sales person assigned to this line item
   availableQuantity?: number; // Available stock quantity
   isReturn?: boolean; // Flag to indicate if this is a return item
 }
@@ -43,8 +46,14 @@ export interface TransactionLinesProps extends ComponentProps {
   billingSummary?: BillingSummary;
   /** Optional order-level sales person name to show in line details */
   salesPersonName?: string | null;
+  /** Highlight specific line items that are missing salesperson assignment */
+  linesMissingSalesPerson?: string[];
   /** Payment methods to display in the Payments tab */
   paymentMethods?: PaymentMethod[];
+  /** Payments that have been collected (e.g., from the cash/card screen) */
+  payments?: TransactionPaymentEntry[];
+  /** Available sales persons for per-line assignment */
+  salesPersons?: SalesPersonData[];
 }
 
 /**
@@ -61,7 +70,10 @@ export function TransactionLines({
   onTabChange,
   billingSummary,
   salesPersonName,
+  linesMissingSalesPerson = [],
   paymentMethods = [],
+  payments = [],
+  salesPersons = [],
   className = '',
 }: TransactionLinesProps) {
   const [expandedItemId, setExpandedItemId] = React.useState<string | null>(null);
@@ -71,6 +83,71 @@ export function TransactionLines({
     [formatAmount],
   );
   const paymentCurrencyLabel = React.useMemo(() => (currency === 'PKR' ? 'Rs' : currency), [currency]);
+  type PaymentSummary = { key: string; method: PaymentMethod; amount: number };
+  const paymentSummaries = React.useMemo<PaymentSummary[]>(() => {
+    const baseSummaries: PaymentSummary[] = paymentMethods.map((method) => ({
+      key: method.id,
+      method,
+      amount: 0,
+    }));
+    const summariesById = new Map(baseSummaries.map((summary) => [summary.method.id, summary]));
+    const summariesByCode = new Map(
+      baseSummaries
+        .filter((summary) => summary.method.code)
+        .map((summary) => [summary.method.code!.toUpperCase(), summary])
+    );
+    const extras: PaymentSummary[] = [];
+
+    payments.forEach((payment) => {
+      const normalizedCode = payment.paymentMethod?.code?.toUpperCase();
+      const normalizedMethodId = payment.paymentMethod?.id;
+      let summary =
+        (payment.paymentMethodId && summariesById.get(payment.paymentMethodId)) ||
+        (normalizedMethodId && summariesById.get(normalizedMethodId)) ||
+        (normalizedCode && summariesByCode.get(normalizedCode));
+
+      if (summary) {
+        summary.amount += payment.amount;
+        return;
+      }
+
+      const fallbackMethod: PaymentMethod = payment.paymentMethod ?? {
+        id: payment.paymentMethodId,
+        code: payment.paymentMethod?.code ?? payment.paymentMethodId,
+        name: payment.paymentMethod?.name ?? payment.paymentMethodId ?? 'Payment',
+        type: payment.paymentMethod?.type ?? 'Misc',
+        isActive: true,
+      };
+
+      const existingExtra = extras.find((extra) => {
+        const extraCode = extra.method.code?.toUpperCase();
+        return (
+          extra.method.id === fallbackMethod.id ||
+          (!!extraCode && !!fallbackMethod.code && extraCode === fallbackMethod.code.toUpperCase())
+        );
+      });
+
+      if (existingExtra) {
+        existingExtra.amount += payment.amount;
+      } else {
+        extras.push({
+          key: `extra-${payment.id}`,
+          method: fallbackMethod,
+          amount: payment.amount,
+        });
+      }
+    });
+
+    return [...baseSummaries, ...extras];
+  }, [paymentMethods, payments]);
+  const getLineSalesPersonName = React.useCallback(
+    (salesPersonId?: string) => {
+      if (!salesPersonId) return null;
+      const match = salesPersons.find((sp) => sp.id === salesPersonId);
+      return match?.name ?? null;
+    },
+    [salesPersons]
+  );
 
   // Calculate subtotal: regular items add, return items subtract (since their total is positive but represents a credit)
   const fallbackSubtotal = lineItems.reduce((sum, item) => {
@@ -168,7 +245,7 @@ export function TransactionLines({
         `}</style>
         {activeTab === 'payments' ? (
           // Payments tab: Show payment methods
-          paymentMethods.length === 0 ? (
+          paymentSummaries.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full">
               <CreditCard className="w-8 h-8" style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
               <p className="mt-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
@@ -182,7 +259,7 @@ export function TransactionLines({
             <div className="p-2 md:p-4 space-y-1.5 md:space-y-2 h-full">
               {/* Header Row */}
               <div
-                className="grid grid-cols-2 gap-2 px-3 py-1 rounded text-[10px] md:text-xs font-semibold uppercase tracking-wide sticky top-0 z-10"
+                className="grid grid-cols-[1.3fr,0.5fr,0.7fr] gap-2 px-3 py-1 rounded text-[10px] md:text-xs font-semibold uppercase tracking-wide sticky top-0 z-10"
                 style={{
                   backgroundColor: 'var(--color-bg-card)',
                   color: 'var(--color-text-secondary)',
@@ -190,14 +267,15 @@ export function TransactionLines({
                 }}
               >
                 <span className="text-left">Method Name</span>
-                <span className="text-right">Currency</span>
+                <span className="text-center">Currency</span>
+                <span className="text-right">Paid</span>
               </div>
 
               {/* Payment Methods List */}
-              {paymentMethods.map((method) => (
+              {paymentSummaries.map((summary) => (
                 <div
-                  key={method.id}
-                  className="grid grid-cols-2 gap-2 px-3 py-2 rounded transition-all"
+                  key={summary.key}
+                  className="grid grid-cols-[1.3fr,0.5fr,0.7fr] gap-2 px-3 py-2 rounded transition-all"
                   style={{
                     backgroundColor: 'var(--color-bg-card)',
                     border: '1px solid var(--color-border-light)',
@@ -205,15 +283,28 @@ export function TransactionLines({
                 >
                   <div className="flex flex-col">
                     <span className="text-xs md:text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                      {method.name}
+                      {summary.method.name}
                     </span>
                     <span className="text-[10px] md:text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                      {method.code}
+                      {summary.method.code}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <span className="text-xs md:text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                      {paymentCurrencyLabel}
                     </span>
                   </div>
                   <div className="flex items-center justify-end">
-                    <span className="text-xs md:text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                      {paymentCurrencyLabel}
+                    <span
+                      className="text-xs md:text-sm font-semibold"
+                      style={{
+                        color:
+                          summary.amount > 0
+                            ? 'var(--color-accent-blue)'
+                            : 'var(--color-text-secondary)',
+                      }}
+                    >
+                      {formatAmount(summary.amount, { showSymbol: false })}
                     </span>
                   </div>
                 </div>
@@ -254,6 +345,7 @@ export function TransactionLines({
                 {lineItems.map((item) => {
                   const isSelected = selectedItem === item.id;
                   const isExpanded = expandedItemId === item.id;
+                  const isMissingSalesPerson = linesMissingSalesPerson.includes(item.id);
                   const formattedPrice = formatCurrency(Math.abs(item.price));
                   const formattedTotal = formatCurrency(Math.abs(item.total));
                   return (
@@ -270,7 +362,12 @@ export function TransactionLines({
                           color: isSelected
                             ? 'var(--color-text-light)'
                             : 'var(--color-text-primary)',
-                          border: '1px solid var(--color-border-light)',
+                          border: isMissingSalesPerson
+                            ? '1px solid var(--color-error)'
+                            : '1px solid var(--color-border-light)',
+                          boxShadow: isMissingSalesPerson
+                            ? '0 0 0 1px rgba(239, 68, 68, 0.35)'
+                            : 'none',
                         }}
                       >
                         <div className="flex items-center gap-2 md:gap-3 min-w-0">
@@ -296,6 +393,19 @@ export function TransactionLines({
                             <div className="font-medium text-xs md:text-sm truncate">
                               {item.name}
                             </div>
+                            {isMissingSalesPerson && (
+                              <div
+                                className="text-[10px] font-semibold uppercase tracking-wide"
+                                style={{ color: 'var(--color-error)' }}
+                              >
+                                Assign sales person
+                              </div>
+                            )}
+                            {/* {getLineSalesPersonName(item.salesPersonId) && (
+                              <div className="text-[11px] text-[var(--color-text-secondary)] truncate">
+                                {getLineSalesPersonName(item.salesPersonId)}
+                              </div>
+                            )} */}
                           </div>
                         </div>
                         <div className="flex items-center justify-center font-mono text-xs md:text-sm">
@@ -352,7 +462,7 @@ export function TransactionLines({
                             </div>
                             <div>
                               <span className="font-semibold">Sales rep:</span>{' '}
-                              <span>{salesPersonName || '-'}</span>
+                              <span>{getLineSalesPersonName(item.salesPersonId) || salesPersonName || '-'}</span>
                             </div>
                             <div>
                               <span className="font-semibold">Original price:</span>{' '}

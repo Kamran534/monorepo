@@ -1083,6 +1083,7 @@ CREATE TABLE IF NOT EXISTS StoreConfig (
     allowExchangeGreaterAmount INTEGER DEFAULT 1,
     allowExchangeLowerAmount INTEGER DEFAULT 0,
     restockFeePercentage REAL DEFAULT 0 CHECK(restockFeePercentage >= 0 AND restockFeePercentage <= 100),
+    requireLineItemSalesPerson INTEGER DEFAULT 0,
     taxId TEXT,
     registrationNumber TEXT,
     contactEmail TEXT,

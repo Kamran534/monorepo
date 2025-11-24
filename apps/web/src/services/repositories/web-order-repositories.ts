@@ -50,6 +50,39 @@ export class WebSalesOrderRepository {
       };
     }
   }
+
+  async getOrderByNumber(orderNumber: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const repo = this.getRepository();
+      const result = await repo.getOrderByNumber(orderNumber);
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to load order',
+      };
+    }
+  }
+
+  async getVariantDetails(variantId: string): Promise<{
+    variantId: string;
+    productId?: string;
+    variantName?: string;
+    productName?: string;
+    sku?: string;
+  } | null> {
+    try {
+      const repo = this.getRepository();
+      const result = await repo.getVariantDetails(variantId);
+      return result;
+    } catch {
+      return null;
+    }
+  }
 }
 
 /**

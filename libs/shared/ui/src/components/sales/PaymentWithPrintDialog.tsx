@@ -110,6 +110,8 @@ export function PaymentWithPrintDialog({
 
           promptPrintReceipt({
             invoiceNumber,
+            orderNumber: invoiceNumber,
+            orderId: invoiceNumber,
             lineItems: [], // Should be passed from parent
             payments: [...payments, { ...payment, id: Date.now().toString() }],
             customer,

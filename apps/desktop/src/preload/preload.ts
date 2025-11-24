@@ -134,6 +134,12 @@ try {
         // console.log('[Preload] order.getAll called');
         return ipcRenderer.invoke('order:get-all', options);
       },
+      getByNumber: (orderNumber: string) => {
+        return ipcRenderer.invoke('order:get-by-number', orderNumber);
+      },
+      getVariantDetails: (variantId: string) => {
+        return ipcRenderer.invoke('order:get-variant-details', variantId);
+      },
       park: (orderData: any) => {
         // console.log('[Preload] order.park called');
         return ipcRenderer.invoke('order:park', orderData);

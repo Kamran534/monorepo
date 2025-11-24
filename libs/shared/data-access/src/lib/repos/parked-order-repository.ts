@@ -394,6 +394,7 @@ export class ParkedOrderRepository {
           oli.*,
           pv.sku,
           pv.variantName,
+          pv.productId,
           pv.image,
           p.name as productName
         FROM OrderLineItem oli
@@ -407,6 +408,7 @@ export class ParkedOrderRepository {
         id: row.id,
         orderId: row.orderId,
         variantId: row.variantId,
+        productId: row.productId || undefined,
         salesPersonId: row.salesPersonId,
         quantity: row.quantity,
         unitPrice: row.unitPrice,

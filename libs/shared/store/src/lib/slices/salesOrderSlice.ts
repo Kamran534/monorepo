@@ -184,6 +184,14 @@ export interface CreateOrderResult {
 export interface SalesOrderRepository {
   getOrders(options?: GetOrdersOptions): Promise<GetOrdersResult>;
   getOrderById(id: string): Promise<{ success: boolean; order?: SalesOrder; error?: string }>;
+  getOrderByNumber(orderNumber: string): Promise<{ success: boolean; data?: any; error?: string }>;
+  getVariantDetails?(variantId: string): Promise<{
+    variantId: string;
+    productId?: string;
+    variantName?: string;
+    productName?: string;
+    sku?: string;
+  } | null>;
   createOrder(data: CreateSalesOrderInput): Promise<CreateOrderResult>;
   updateOrderStatus(id: string, status: string): Promise<{ success: boolean; error?: string }>;
   validateCoupon(couponCode: string, customerId?: string): Promise<CouponValidationResult>;

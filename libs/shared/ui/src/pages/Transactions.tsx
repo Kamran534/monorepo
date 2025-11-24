@@ -8,8 +8,8 @@ import {
   TransactionDiscountPanel,
   TransactionAdjustmentPanel,
   TransactionCouponPanel,
+  TransactionGiftCardPanel,
   Invoice,
-  CouponPrompt,
   PreviewPrompt,
   ParkedOrderSearch,
   CompactPaymentPanel,
@@ -79,6 +79,20 @@ import {
 const TAX_RATE = 0.03;
 const AUTO_IDB_DB_NAME = 'transactions-autoconfig';
 const AUTO_IDB_DB_VERSION = 1;
+const LAST_PAYMENT_SESSION_KEY = 'transactions-last-payment-session';
+
+const buildPaymentSessionKey = (items: Array<{ id: string }>, total: number) => {
+  if (!items || items.length === 0) {
+    return null;
+  }
+  const itemIds = [...items].map((item) => item.id).sort().join(',');
+  const normalizedTotal = Number.isFinite(total) ? total : 0;
+  return `payment-session-${itemIds}-${normalizedTotal}`;
+};
+
+type SalesPersonSelectionTarget =
+  | { type: 'order' }
+  | { type: 'line'; lineId: string };
 
 const AUTO_IDB_SCHEMA: IndexedDBSchema = {
   stores: {
@@ -191,7 +205,7 @@ export function Transactions({
   const [isQuantityPanelOpen, setIsQuantityPanelOpen] = useState(false);
   const [isCouponPanelOpen, setIsCouponPanelOpen] = useState(false);
   const [isDiscountPanelOpen, setIsDiscountPanelOpen] = useState(false);
-  const [isGiftCardModalOpen, setIsGiftCardModalOpen] = useState(false);
+  const [isGiftCardPanelOpen, setIsGiftCardPanelOpen] = useState(false);
   const [isAdjustmentPanelOpen, setIsAdjustmentPanelOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isVoidConfirmationOpen, setIsVoidConfirmationOpen] = useState(false);
@@ -204,9 +218,220 @@ export function Transactions({
   const [giftCardNumberInput, setGiftCardNumberInput] = useState('');
   const [giftCardValueInput, setGiftCardValueInput] = useState('');
   const [giftCardData, setGiftCardData] = useState<{ cardNumber: string; discount: number } | null>(null);
+  const [requireLineItemSalesPerson, setRequireLineItemSalesPerson] = useState(false);
   const [adjustmentAmountInput, setAdjustmentAmountInput] = useState('');
   const [adjustmentReasonInput, setAdjustmentReasonInput] = useState('');
   const [appliedAdjustment, setAppliedAdjustment] = useState<{ amount: number; reason?: string } | null>(null);
+  const salesOrderRepoRef = useRef<SalesOrderRepository | null>(null);
+  const { items: lineItems, setItemQuantity, removeItem, addItem, updateItem } = useCart();
+  const { customer, setCustomer, clearCustomer } = useTransactionCustomer();
+  const { show } = useToast();
+  const { formatAmount, setCurrency } = useCurrency({ defaultCurrency: 'PKR' });
+  const { formatDateTime } = useAppDateTime();
+  // Product catalog data to resolve names for recalled orders
+  const fallbackProducts = useMemo<Product[]>(() => [
+    { id: '81328', productNumber: '81328', name: 'Brown Leopardprint Sunglasses', price: '$130.00', image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
+    { id: '81300', productNumber: '81300', name: 'Brown Leather Travel Bag', price: '$89.99', rating: 3.8, reviewCount: 195, image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop' },
+    { id: '81302', productNumber: '81302', name: 'Brown Snakeskin Bag', price: '$95.00', rating: 3.8, reviewCount: 192, image: 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400&h=400&fit=crop' },
+    { id: '81333', productNumber: '81333', name: 'Silver Stunner Sunglasses', price: '$42.00', rating: 3.7, reviewCount: 192, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
+    { id: '81327', productNumber: '81327', name: 'Black Wireframe Sunglasses', price: '$120.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1518288774672-b94e8088736b?w=400&h=400&fit=crop' },
+    { id: '81329', productNumber: '81329', name: 'Black Thick Rimmed Sunglasses', price: '$48.00', rating: 3.8, reviewCount: 193, image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
+    { id: '81330', productNumber: '81330', name: 'Brown Aviator Sunglasses', price: '$150.00', rating: 3.9, reviewCount: 195, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
+    { id: '81331', productNumber: '81331', name: 'Pink Thick Rimmed Sunglasses', price: '$52.00', rating: 3.7, reviewCount: 188, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
+    { id: '81319', productNumber: '81319', name: 'Brown Glove & Scarf Set', price: '$35.99', image: 'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=400&h=400&fit=crop' },
+    { id: '81323', productNumber: '81323', name: 'Grey Cotton Gloves', price: '$28.50', rating: 3.8, reviewCount: 192, image: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop' },
+    { id: '81320', productNumber: '81320', name: 'Brown Leather Gloves', price: '$38.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
+    { id: '81321', productNumber: '81321', name: 'Black Cotton Gloves', price: '$32.00', image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
+  ], []);
+  const [productList, setProductList] = useState<Product[]>(fallbackProducts);
+  const variantNameCacheRef = useRef<Map<string, { name?: string | null; productId?: string | null }>>(new Map());
+  const productNameCacheRef = useRef<Map<string, string>>(new Map());
+  const partialPaymentsHydratedAtRef = useRef<number>(0);
+
+  const cacheVariantMapping = useCallback(
+    (variantId?: string | null, productId?: string | null, name?: string | null) => {
+      if (productId && name) {
+        productNameCacheRef.current.set(productId, name);
+      }
+      if (variantId) {
+        const existing = variantNameCacheRef.current.get(variantId) ?? {};
+        variantNameCacheRef.current.set(variantId, {
+          name: name ?? existing.name ?? null,
+          productId: productId ?? existing.productId ?? null,
+        });
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!productRepository) {
+      setProductList(fallbackProducts);
+      return;
+    }
+
+    const loadProducts = async () => {
+      try {
+        const result = await productRepository.getAllProducts({ page: 1, limit: 12 });
+        if (!isMounted) return;
+        const mapped = (result.products ?? []).map((product: StoreProduct): Product => ({
+          id: product.id,
+          productNumber: product.productNumber,
+          name: product.name,
+          price: product.price,
+          image: product.image,
+          rating: product.rating,
+          reviewCount: product.reviewCount,
+        }));
+        if (mapped.length > 0) {
+          setProductList(mapped);
+        } else {
+          setProductList(fallbackProducts);
+        }
+      } catch (error) {
+        if (isMounted) {
+          show('Unable to load products. Showing defaults.', 'error');
+          setProductList(fallbackProducts);
+        }
+      }
+    };
+
+    void loadProducts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [productRepository, fallbackProducts, show]);
+
+  const resolveNameFromCatalog = useCallback(
+    (variantId?: string | null, fallbackProductId?: string | null) => {
+      const normalizedVariantId = variantId ?? undefined;
+      let normalizedProductId = fallbackProductId ?? undefined;
+
+      if (!normalizedVariantId && !normalizedProductId) {
+        return null;
+      }
+
+      if (normalizedVariantId) {
+        const cachedVariant = variantNameCacheRef.current.get(normalizedVariantId);
+        if (cachedVariant?.name) {
+          return cachedVariant.name;
+        }
+        if (!normalizedProductId && cachedVariant?.productId) {
+          normalizedProductId = cachedVariant.productId ?? undefined;
+        }
+      }
+
+      if (normalizedProductId) {
+        const cachedProductName = productNameCacheRef.current.get(normalizedProductId);
+        if (cachedProductName) {
+          cacheVariantMapping(normalizedVariantId, normalizedProductId, cachedProductName);
+          return cachedProductName;
+        }
+      }
+
+      const localProduct = productList.find((product) => {
+        const productId = (product as any).productId || product.id;
+        return product.id === normalizedVariantId || productId === normalizedProductId;
+      });
+
+      if (localProduct) {
+        const derivedProductId = (localProduct as any).productId || localProduct.id;
+        cacheVariantMapping(normalizedVariantId, derivedProductId, localProduct.name);
+        return localProduct.name;
+      }
+
+      return null;
+    },
+    [productList, cacheVariantMapping],
+  );
+
+  const prefetchVariantNames = useCallback(
+    async (
+      items: Array<{ variantId?: string | null; productId?: string | null; productVariantId?: string | null }>,
+    ) => {
+      const repoWithLookups = productRepository as unknown as {
+        getVariantById?: (
+          variantId: string,
+        ) => Promise<{ name?: string; variantName?: string; sku?: string; productId?: string; product?: { id?: string; name?: string } } | null>;
+        getProductById?: (productId: string) => Promise<{ name?: string | null } | null>;
+      };
+      const salesOrderRepo = salesOrderRepoRef.current;
+
+      const variantIdsToFetch = new Set<string>();
+      const productIdsToFetch = new Set<string>();
+
+      items.forEach((item) => {
+        const variantId = item.variantId ?? item.productVariantId ?? undefined;
+        const productId = item.productId ?? undefined;
+        const existingName = resolveNameFromCatalog(variantId, productId);
+
+        if (!existingName) {
+          if (
+            variantId &&
+            (typeof repoWithLookups?.getVariantById === 'function' ||
+              typeof salesOrderRepo?.getVariantDetails === 'function')
+          ) {
+            variantIdsToFetch.add(variantId);
+          } else if (productId && typeof repoWithLookups?.getProductById === 'function') {
+            productIdsToFetch.add(productId);
+          }
+        }
+      });
+
+      await Promise.all(
+        Array.from(variantIdsToFetch).map(async (variantId) => {
+          try {
+            let variant = await repoWithLookups?.getVariantById?.(variantId);
+            if (variant) {
+              const derivedProductId = variant.productId || variant.product?.id;
+              const variantName = variant.name || variant.variantName || variant.sku || null;
+              if (variantName || derivedProductId) {
+                cacheVariantMapping(variantId, derivedProductId, variantName);
+              }
+
+              if (!variantName && derivedProductId && typeof repoWithLookups?.getProductById === 'function') {
+                const product = await repoWithLookups.getProductById?.(derivedProductId);
+                if (product?.name) {
+                  cacheVariantMapping(variantId, derivedProductId, product.name);
+                }
+              }
+            } else if (salesOrderRepo?.getVariantDetails) {
+              const details = await salesOrderRepo.getVariantDetails(variantId);
+              if (details) {
+                const variantName =
+                  details.variantName ||
+                  details.productName ||
+                  details.sku ||
+                  null;
+                cacheVariantMapping(variantId, details.productId, variantName);
+              }
+            }
+          } catch (error) {
+            // Ignore lookup errors, we'll fall back to default names later
+          }
+        }),
+      );
+
+      await Promise.all(
+        Array.from(productIdsToFetch)
+          .filter((productId) => !productNameCacheRef.current.has(productId))
+          .map(async (productId) => {
+            try {
+              const product = await repoWithLookups?.getProductById?.(productId);
+              if (product?.name) {
+                cacheVariantMapping(undefined, productId, product.name);
+              }
+            } catch (error) {
+              // Ignore lookup errors
+            }
+          }),
+      );
+    },
+    [productRepository, resolveNameFromCatalog, cacheVariantMapping],
+  );
   useEffect(() => {
     manualBarcodeModeRef.current = isManualBarcodeMode;
   }, [isManualBarcodeMode]);
@@ -227,12 +452,10 @@ export function Transactions({
   const [salesPersonsLoading, setSalesPersonsLoading] = useState(false);
   const [assignedSalesPerson, setAssignedSalesPerson] = useState<SalesPersonData | null>(null);
   const salesPersonModal = useSalesPersonModal({
-    onSelect: (person) => {
-      setAssignedSalesPerson(person);
-      show(`Sales rep set to ${person.name}`, 'success');
-    },
     enabled: true,
   });
+  const [salesPersonSelectionTarget, setSalesPersonSelectionTarget] = useState<SalesPersonSelectionTarget>({ type: 'order' });
+  const [missingSalesPersonLineIds, setMissingSalesPersonLineIds] = useState<string[]>([]);
 
   // Save activeTab to localStorage when it changes
   const setActiveTab = (tab: 'lines' | 'payments') => {
@@ -245,12 +468,6 @@ export function Transactions({
     setActiveSectionState(section);
     localStorage.setItem('transactions-activeSection', section);
   };
-  const { items: lineItems, setItemQuantity, removeItem, addItem } = useCart();
-  const { customer, setCustomer, clearCustomer } = useTransactionCustomer();
-  const { show } = useToast();
-  const { formatAmount, setCurrency } = useCurrency({ defaultCurrency: 'PKR' });
-  const { formatDateTime } = useAppDateTime();
-
   // Print receipt hook
   const {
     showPrintDialog,
@@ -325,19 +542,30 @@ export function Transactions({
         console.log('[Transactions] Payment methods seeding complete');
 
         try {
-          const storeConfigs = await dbClient.query<Array<{ defaultCurrency?: string }>>('StoreConfig');
-          const dbCurrency = (storeConfigs[0] as { defaultCurrency?: string } | undefined)?.defaultCurrency;
-          if (dbCurrency) {
-            setCurrency(dbCurrency as Currency);
-            console.log('[Transactions] Applied currency from StoreConfig:', dbCurrency);
+          const storeConfigs = await dbClient.query<{
+            defaultCurrency?: string;
+            requireLineItemSalesPerson?: number | boolean;
+          }>('StoreConfig');
+          const storeConfigRecord = storeConfigs[0];
+          if (storeConfigRecord) {
+            if (storeConfigRecord.defaultCurrency) {
+              setCurrency(storeConfigRecord.defaultCurrency as Currency);
+              // console.log('[Transactions] Applied currency from StoreConfig:', storeConfigRecord.defaultCurrency);
+            }
+            if (typeof storeConfigRecord.requireLineItemSalesPerson !== 'undefined') {
+              const requireFlag =
+                storeConfigRecord.requireLineItemSalesPerson === true ||
+                storeConfigRecord.requireLineItemSalesPerson === 1;
+              setRequireLineItemSalesPerson(requireFlag);
+            }
           }
         } catch (currencyError) {
-          console.warn('[Transactions] Failed to load currency from StoreConfig:', currencyError);
+          // console.warn('[Transactions] Failed to load currency from StoreConfig:', currencyError);
         }
 
         const apiClient = new HttpApiClient();
         await apiClient.initialize().catch((err) => {
-          console.warn('[Transactions] API client initialization warning:', err);
+          // console.warn('[Transactions] API client initialization warning:', err);
         });
 
         if (!isActive) return;
@@ -350,7 +578,7 @@ export function Transactions({
         });
       } catch (err) {
         if (!isActive) return;
-        console.error('[Transactions] Failed to auto-configure repositories:', err);
+        // console.error('[Transactions] Failed to auto-configure repositories:', err);
       }
     };
 
@@ -365,6 +593,9 @@ export function Transactions({
     () => salesOrderRepo ?? autoRepos.salesOrderRepo,
     [salesOrderRepo, autoRepos.salesOrderRepo]
   );
+  useEffect(() => {
+    salesOrderRepoRef.current = effectiveSalesOrderRepo ?? null;
+  }, [effectiveSalesOrderRepo]);
   const effectiveParkedOrderRepo = useMemo(
     () => parkedOrderRepo ?? autoRepos.parkedOrderRepo,
     [parkedOrderRepo, autoRepos.parkedOrderRepo]
@@ -401,7 +632,7 @@ export function Transactions({
         show(result.error, 'error');
       }
     } catch (error: any) {
-      console.error('[Transactions] Failed to load sales persons:', error);
+      // console.error('[Transactions] Failed to load sales persons:', error);
       show(error?.message || 'Failed to load sales reps', 'error');
     } finally {
       setSalesPersonsLoading(false);
@@ -438,13 +669,28 @@ export function Transactions({
   }, [assignedSalesPerson, salesPersons]);
 
   useEffect(() => {
-    // Sync assignedSalesPerson to modal - clear if null
+    if (salesPersonSelectionTarget.type !== 'order') {
+      return;
+    }
     if (assignedSalesPerson) {
       salesPersonModal.setSelectedPerson(assignedSalesPerson);
     } else {
       salesPersonModal.setSelectedPerson(null);
     }
-  }, [assignedSalesPerson, salesPersonModal]);
+  }, [assignedSalesPerson, salesPersonModal, salesPersonSelectionTarget.type]);
+
+  useEffect(() => {
+    if (!missingSalesPersonLineIds.length) {
+      return;
+    }
+    const unresolved = missingSalesPersonLineIds.filter((lineId) => {
+      const line = lineItems.find((item) => item.id === lineId);
+      return line && !line.salesPersonId;
+    });
+    if (unresolved.length !== missingSalesPersonLineIds.length) {
+      setMissingSalesPersonLineIds(unresolved);
+    }
+  }, [lineItems, missingSalesPersonLineIds]);
 
 
   // Keyboard shortcuts
@@ -454,10 +700,10 @@ export function Transactions({
     setIsDiscountPanelOpen(true);
   }, [appliedDiscount]);
 
-  const openGiftCardModal = useCallback(() => {
+  const openGiftCardPanel = useCallback(() => {
     setGiftCardNumberInput(giftCardData?.cardNumber ?? '');
     setGiftCardValueInput(giftCardData ? String(giftCardData.discount) : '');
-    setIsGiftCardModalOpen(true);
+    setIsGiftCardPanelOpen(true);
   }, [giftCardData]);
 
   const openAdjustmentPanel = useCallback(() => {
@@ -470,7 +716,7 @@ export function Transactions({
 
   const handleSearchParkedOrders = useCallback(async (searchTerm: string) => {
     if (!effectiveParkedOrderRepo) {
-      console.warn('[Transactions] ParkedOrderRepository not available');
+      // console.warn('[Transactions] ParkedOrderRepository not available');
       return;
     }
 
@@ -484,11 +730,11 @@ export function Transactions({
       if (result.success) {
         setParkedOrders(result.parkedOrders || []);
       } else {
-        console.error('[Transactions] Failed to search parked orders:', result.error);
+        // console.error('[Transactions] Failed to search parked orders:', result.error);
         setParkedOrders([]);
       }
     } catch (err: any) {
-      console.error('[Transactions] Error searching parked orders:', err);
+      // console.error('[Transactions] Error searching parked orders:', err);
       setParkedOrders([]);
     } finally {
       setLoadingParkedOrders(false);
@@ -511,6 +757,210 @@ export function Transactions({
     setIsParkedOrdersModalOpen(false);
   };
 
+  const formatCustomerDisplayName = (
+    input?: { name?: string | null; firstName?: string | null; lastName?: string | null } | null,
+  ) => {
+    if (!input) return '';
+    if (input.name?.trim()) return input.name.trim();
+    return `${input.firstName ?? ''} ${input.lastName ?? ''}`.trim();
+  };
+
+  const hydrateTransactionFromOrder = useCallback(
+    async ({
+      order,
+      orderLineItems,
+      customerData,
+    }: {
+      order: any;
+      orderLineItems: Array<{
+        id?: string;
+        variantId?: string;
+        productId?: string;
+        salesPersonId?: string | null;
+        quantity: number;
+        unitPrice: number;
+        lineTotal?: number;
+        variantName?: string | null;
+        productName?: string | null;
+      }>;
+      customerData?:
+        | {
+            id?: string | null;
+            name?: string | null;
+            firstName?: string | null;
+            lastName?: string | null;
+            email?: string | null;
+            phone?: string | null;
+            address?: string | null;
+          }
+        | null;
+    }) => {
+      lineItems.forEach((item) => removeItem(item.id));
+      setPaymentEntries([]);
+      clearCustomer();
+      setAppliedDiscount(null);
+      setGiftCardData(null);
+      setAppliedAdjustment(null);
+
+      for (const item of orderLineItems) {
+        let resolvedName =
+          item.productName ||
+          item.variantName ||
+          (item as any).name ||
+          ((item as any).sku ? `Item ${(item as any).sku}` : '');
+
+        if (!resolvedName) {
+          const catalogName = resolveNameFromCatalog(item.variantId, item.productId);
+          resolvedName = catalogName || '';
+        }
+
+        if (!resolvedName) {
+          const repoWithLookups = productRepository as unknown as {
+            getVariantById?: (variantId: string) => Promise<{
+              name?: string;
+              variantName?: string;
+              sku?: string;
+              productId?: string;
+              product?: { id?: string; name?: string };
+            } | null>;
+          };
+
+          if (item.variantId) {
+            let variantName: string | null = null;
+            if (typeof repoWithLookups?.getVariantById === 'function') {
+              try {
+                const variant = await repoWithLookups.getVariantById(item.variantId);
+                if (variant) {
+                  variantName =
+                    variant.name ||
+                    variant.variantName ||
+                    variant.product?.name ||
+                    variant.sku ||
+                    null;
+                  if (!item.productId) {
+                    (item as any).productId = variant.productId || variant.product?.id;
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            if (!variantName && salesOrderRepoRef.current?.getVariantDetails) {
+              try {
+                const variantDetails = await salesOrderRepoRef.current.getVariantDetails(item.variantId);
+                if (variantDetails) {
+                  variantName =
+                    variantDetails.variantName ||
+                    variantDetails.productName ||
+                    variantDetails.sku ||
+                    null;
+                  if (!item.productId) {
+                    (item as any).productId = variantDetails.productId;
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            if (variantName) {
+              resolvedName = variantName;
+            }
+          }
+        }
+
+        if (!resolvedName) {
+          resolvedName = 'Unknown item';
+        }
+
+        cacheVariantMapping(item.variantId, item.productId, resolvedName);
+
+        addItem({
+          id: item.id || item.variantId || createTempId(),
+          name: resolvedName,
+          price: item.unitPrice,
+          quantity: item.quantity,
+          productId: item.productId || item.variantId || item.id,
+          salesPersonId: item.salesPersonId || undefined,
+        });
+      }
+
+      const resolveCustomerName = (input?: {
+        name?: string | null;
+        firstName?: string | null;
+        lastName?: string | null;
+      }) => {
+        if (!input) return '';
+        if (input.name?.trim()) return input.name.trim();
+        return `${input.firstName ?? ''} ${input.lastName ?? ''}`.trim();
+      };
+
+      const customerName =
+        formatCustomerDisplayName(customerData) ||
+        formatCustomerDisplayName(
+          order.customer
+            ? { firstName: order.customer.firstName, lastName: order.customer.lastName }
+            : undefined,
+        ) ||
+        (order.customerId ? `Customer ${order.customerId}` : '');
+
+      if (customerName) {
+        setCustomer({
+          id: customerData?.id || order.customer?.id || order.customerId || '',
+          name: customerName,
+          email: customerData?.email || order.customer?.email || '',
+          phone: customerData?.phone || order.customer?.phone || '',
+          address: customerData?.address || order.customer?.address || '',
+        });
+      } else {
+        clearCustomer();
+      }
+
+      if (order.salesPersonId) {
+        const matchedPerson = salesPersons.find((person) => person.id === order.salesPersonId);
+        if (matchedPerson) {
+          setAssignedSalesPerson(matchedPerson);
+        } else {
+          setAssignedSalesPerson({
+            id: order.salesPersonId,
+            code: (order as any).salesPersonCode || order.salesPersonId.slice(0, 6),
+            name: (order as any).salesPersonName || 'Assigned rep',
+          });
+        }
+      }
+
+      if (order.discountAmount && order.discountAmount > 0) {
+        setAppliedDiscount({ type: 'amount', value: order.discountAmount });
+      }
+      if (order.adjustmentAmount && order.adjustmentAmount !== 0) {
+        setAppliedAdjustment({ amount: order.adjustmentAmount, reason: order.adjustmentReason });
+      }
+
+      setSelectedItem('');
+      setActiveTab('lines');
+    },
+    [
+      addItem,
+      cacheVariantMapping,
+      clearCustomer,
+      lineItems,
+      productRepository,
+      removeItem,
+      resolveNameFromCatalog,
+      salesPersons,
+      salesOrderRepoRef,
+      setActiveTab,
+      setAppliedAdjustment,
+      setAppliedDiscount,
+      setAssignedSalesPerson,
+      setCustomer,
+      setGiftCardData,
+      setPaymentEntries,
+      setSelectedItem,
+    ],
+  );
+
   const loadParkedOrderData = async (parkedOrderId: string, orderId: string) => {
     if (!effectiveParkedOrderRepo) {
       show('Parked orders not available', 'error');
@@ -521,88 +971,54 @@ export function Transactions({
       const result = await effectiveParkedOrderRepo.loadParkedOrder(parkedOrderId);
 
       if (result.success && result.data) {
-        // Clear current transaction
-        lineItems.forEach(item => removeItem(item.id));
-        clearCustomer();
-        setAppliedDiscount(null);
-        setGiftCardData(null);
-        setAppliedAdjustment(null);
-
-        // Load parked order data
         const { order, lineItems: parkedLineItems, customer: parkedCustomer } = result.data;
 
-        // Add line items to cart
-        parkedLineItems.forEach(item => {
-          addItem({
-            id: item.id,
-            name: item.variantName || 'Unknown',
-            price: item.unitPrice,
-            quantity: item.quantity,
-            productId: item.variantId,
-          });
+        await prefetchVariantNames(
+          parkedLineItems.map((item) => ({
+            variantId: item.variantId,
+            productId: (item as any).productId,
+          })),
+        );
+
+        await hydrateTransactionFromOrder({
+          order,
+          orderLineItems: parkedLineItems,
+          customerData: parkedCustomer
+            ? {
+                id: parkedCustomer.id,
+                firstName: parkedCustomer.firstName,
+                lastName: parkedCustomer.lastName,
+                email: parkedCustomer.email,
+                phone: parkedCustomer.phone,
+                address: parkedCustomer.address,
+              }
+            : undefined,
         });
 
-        // Set customer (mandatory for transactions)
-        const normalizedCustomer: TransactionCustomer | null = parkedCustomer
-          ? {
-              id: parkedCustomer.id,
-              name: `${parkedCustomer.firstName ?? ''} ${parkedCustomer.lastName ?? ''}`.trim() || 'Walk-in Customer',
-              email: parkedCustomer.email ?? '',
-              phone: parkedCustomer.phone ?? '',
-              address: parkedCustomer.address ?? '',
-            }
-          : order.customerId
-            ? {
-                id: order.customerId,
-                name: `Customer ${order.customerId}`,
-                email: '',
-                phone: '',
-                address: '',
-              }
-            : null;
-
-        if (normalizedCustomer) {
-          setCustomer(normalizedCustomer);
-        } else {
-          show('Parked order is missing customer information', 'error');
-          return;
-        }
-
-        if (order.salesPersonId) {
-          const matchedPerson = salesPersons.find((person) => person.id === order.salesPersonId);
-          if (matchedPerson) {
-            setAssignedSalesPerson(matchedPerson);
-          } else {
-            setAssignedSalesPerson({
-              id: order.salesPersonId,
-              code: (order as any).salesPersonCode || order.salesPersonId.slice(0, 6),
-              name: (order as any).salesPersonName || 'Assigned rep',
-            });
-          }
-        }
-
-        // Set discounts and adjustments
-        if (order.discountAmount && order.discountAmount > 0) {
-          setAppliedDiscount({ type: 'amount', value: order.discountAmount });
-        }
-        if (order.adjustmentAmount && order.adjustmentAmount !== 0) {
-          setAppliedAdjustment({ amount: order.adjustmentAmount, reason: order.adjustmentReason });
-        }
-
-        // Track this parked order ID
         setCurrentParkedOrderId(parkedOrderId);
 
         // Close modal and show success
         handleCloseParkedOrdersModal();
+        const customerName =
+          formatCustomerDisplayName({
+            firstName: parkedCustomer?.firstName ?? undefined,
+            lastName: parkedCustomer?.lastName ?? undefined,
+          }) ||
+          formatCustomerDisplayName(
+            order.customer
+              ? { firstName: order.customer.firstName, lastName: order.customer.lastName }
+              : undefined,
+          ) ||
+          'Walk-in Customer';
         show(
-          `Resumed ${order.orderNumber} for ${normalizedCustomer.name}`,
+          `Resumed ${order.orderNumber} for ${customerName}`,
           'success'
         );
       } else {
         show(result.error || 'Failed to load parked order', 'error');
       }
     } catch (err: any) {
-      console.error('[Transactions] Error loading parked order:', err);
+      // console.error('[Transactions] Error loading parked order:', err);
       show(err.message || 'Failed to load parked order', 'error');
     }
   };
@@ -651,7 +1067,7 @@ export function Transactions({
         customerId: customer?.id,
         lineItems: lineItems.map((item) => ({
           variantId: item.productVariantId || item.productId || item.id,
-          salesPersonId,
+          salesPersonId: item.salesPersonId || undefined,
           quantity: item.quantity,
           unitPrice: item.price,
         })),
@@ -710,7 +1126,7 @@ export function Transactions({
         'success'
       );
     } catch (error: any) {
-      console.error('[Transactions] Failed to park transaction:', error);
+      // console.error('[Transactions] Failed to park transaction:', error);
       show(error.message || 'Failed to park order.', 'error');
     }
   }, [
@@ -754,7 +1170,7 @@ export function Transactions({
         show(result.error || 'Failed to delete parked order', 'error');
       }
     } catch (err: any) {
-      console.error('[Transactions] Error deleting parked order:', err);
+      // console.error('[Transactions] Error deleting parked order:', err);
       show(err.message || 'Failed to delete parked order', 'error');
     }
   };
@@ -781,7 +1197,7 @@ export function Transactions({
           customerId: customer?.id,
           lineItems: lineItems.map((item) => ({
             variantId: item.productId || item.id,
-            salesPersonId,
+            salesPersonId: item.salesPersonId || undefined,
             quantity: item.quantity,
             unitPrice: item.price,
           })),
@@ -830,7 +1246,7 @@ export function Transactions({
         show(parkResult.error || 'Failed to park order', 'error');
       }
     } catch (err: any) {
-      console.error('[Transactions] Failed to park order:', err);
+      // console.error('[Transactions] Failed to park order:', err);
       show(err.message || 'Failed to park order', 'error');
     }
   };
@@ -869,7 +1285,7 @@ export function Transactions({
         key: 'c',
         ctrl: true,
         shift: true,
-        action: openGiftCardModal,
+        action: openGiftCardPanel,
         description: 'Gift card prompt',
       },
       {
@@ -896,69 +1312,71 @@ export function Transactions({
     ],
   });
 
+  const openSalesPersonModal = useCallback(
+    (target: SalesPersonSelectionTarget) => {
+      setSalesPersonSelectionTarget(target);
 
-  // Products data for Products tab
-  const fallbackProducts = useMemo<Product[]>(() => [
-    { id: '81328', productNumber: '81328', name: 'Brown Leopardprint Sunglasses', price: '$130.00', image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
-    { id: '81300', productNumber: '81300', name: 'Brown Leather Travel Bag', price: '$89.99', rating: 3.8, reviewCount: 195, image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop' },
-    { id: '81302', productNumber: '81302', name: 'Brown Snakeskin Bag', price: '$95.00', rating: 3.8, reviewCount: 192, image: 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400&h=400&fit=crop' },
-    { id: '81333', productNumber: '81333', name: 'Silver Stunner Sunglasses', price: '$42.00', rating: 3.7, reviewCount: 192, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
-    { id: '81327', productNumber: '81327', name: 'Black Wireframe Sunglasses', price: '$120.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
-    { id: '81329', productNumber: '81329', name: 'Black Thick Rimmed Sunglasses', price: '$48.00', rating: 3.8, reviewCount: 193, image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop' },
-    { id: '81330', productNumber: '81330', name: 'Brown Aviator Sunglasses', price: '$150.00', rating: 3.9, reviewCount: 195, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
-    { id: '81331', productNumber: '81331', name: 'Pink Thick Rimmed Sunglasses', price: '$52.00', rating: 3.7, reviewCount: 188, image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop' },
-    { id: '81319', productNumber: '81319', name: 'Brown Glove & Scarf Set', price: '$35.99', image: 'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=400&h=400&fit=crop' },
-    { id: '81323', productNumber: '81323', name: 'Grey Cotton Gloves', price: '$28.50', rating: 3.8, reviewCount: 192, image: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop' },
-    { id: '81320', productNumber: '81320', name: 'Brown Leather Gloves', price: '$38.00', rating: 3.8, reviewCount: 190, image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
-    { id: '81321', productNumber: '81321', name: 'Black Cotton Gloves', price: '$32.00', image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop' },
-  ], []);
-  const [productList, setProductList] = useState<Product[]>(fallbackProducts);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    if (!productRepository) {
-      setProductList(fallbackProducts);
-      return;
-    }
-
-    const loadProducts = async () => {
-      try {
-        const result = await productRepository.getAllProducts({ page: 1, limit: 12 });
-        if (!isMounted) return;
-        const mapped = (result.products ?? []).map((product: StoreProduct): Product => ({
-          id: product.id,
-          productNumber: product.productNumber,
-          name: product.name,
-          price: product.price,
-          image: product.image,
-          rating: product.rating,
-          reviewCount: product.reviewCount,
-        }));
-        if (mapped.length > 0) {
-          setProductList(mapped);
-        } else {
-          setProductList(fallbackProducts);
-        }
-      } catch (error) {
-        console.error('[Transactions] Failed to load products:', error);
-        if (isMounted) {
-          show('Unable to load products. Showing defaults.', 'error');
-          setProductList(fallbackProducts);
-        }
+      if (salesPersons.length === 0 && !salesPersonsLoading && effectiveSalesPersonRepo) {
+        void loadSalesPersons();
       }
-    };
 
-    void loadProducts();
+      if (target.type === 'line') {
+        const line = lineItems.find((li) => li.id === target.lineId);
+        if (line?.salesPersonId) {
+          const match = salesPersons.find((sp) => sp.id === line.salesPersonId);
+          salesPersonModal.setSelectedPerson(match ?? null);
+        } else {
+          salesPersonModal.setSelectedPerson(null);
+        }
+      } else if (assignedSalesPerson) {
+        salesPersonModal.setSelectedPerson(assignedSalesPerson);
+      } else {
+        salesPersonModal.setSelectedPerson(null);
+      }
 
-    return () => {
-      isMounted = false;
-    };
-  }, [productRepository, fallbackProducts, show]);
+      salesPersonModal.open();
+    },
+    [
+      assignedSalesPerson,
+      effectiveSalesPersonRepo,
+      lineItems,
+      loadSalesPersons,
+      salesPersonModal,
+      salesPersons,
+      salesPersonsLoading,
+    ],
+  );
+  const handleSalesPersonSelection = useCallback(
+    (person: SalesPersonData) => {
+      if (salesPersonSelectionTarget?.type === 'line') {
+        updateItem(salesPersonSelectionTarget.lineId, { salesPersonId: person.id });
+        show(`Sales rep set to ${person.name} for line`, 'success');
+      } else {
+        setAssignedSalesPerson(person);
+        show(`Sales rep set to ${person.name}`, 'success');
+      }
+      salesPersonModal.setSelectedPerson(person);
+      setSalesPersonSelectionTarget({ type: 'order' });
+    },
+    [salesPersonSelectionTarget, setAssignedSalesPerson, show, salesPersonModal, updateItem]
+  );
+
+  const handleCloseSalesPersonModal = useCallback(() => {
+    setSalesPersonSelectionTarget({ type: 'order' });
+    salesPersonModal.close();
+  }, [salesPersonModal]);
+
+  const salesPersonModalSubtitle =
+    salesPersonSelectionTarget.type === 'line'
+      ? 'Assign to selected line item'
+      : 'Assign to entire transaction';
+
+  const sanitizeBarcodeValue = (value: string) => value?.trim().replace(/\//g, '-');
 
   const handleProductClick = (product: Product) => {
     navigate(`/products/${product.id}`);
   };
+
   const handleAddProduct = (product: Product) => {
     const price = parsePriceValue(product.price ?? null) ?? 0;
     // Add product to cart with default quantity of 1
@@ -968,9 +1386,106 @@ export function Transactions({
       price,
       quantity: 1,
       productId: product.id,
+      salesPersonId: assignedSalesPerson?.id ?? undefined,
     });
     setActiveTab('lines');
   };
+  const recallTransactionByOrderCode = useCallback(
+    async (orderCode: string) => {
+      if (!effectiveParkedOrderRepo) {
+        show('Order recall is unavailable. Please try again later.', 'error');
+        return;
+      }
+
+      const normalizedCode = orderCode.toUpperCase();
+      const normalize = (value?: string | null) =>
+        (value ? value.replace(/\//g, '-').toUpperCase() : '');
+      const findMatch = (orders?: ParkedOrderListItem[] | null) =>
+        orders?.find(
+          (parked) =>
+            normalize(parked.orderNumber) === normalizedCode ||
+            normalize(parked.orderId) === normalizedCode,
+        );
+
+      let target = findMatch(parkedOrders);
+
+      if (!target) {
+        setLoadingParkedOrders(true);
+        try {
+          const searchResult = await effectiveParkedOrderRepo.searchParkedOrders({
+            searchTerm: orderCode,
+            useServer: true,
+          });
+          if (searchResult.success) {
+            setParkedOrders(searchResult.parkedOrders || []);
+            target = findMatch(searchResult.parkedOrders);
+          } else {
+            show(searchResult.error || 'Failed to search orders', 'error');
+            return;
+          }
+        } catch (error: any) {
+          show(error?.message || 'Failed to search orders', 'error');
+          return;
+        } finally {
+          setLoadingParkedOrders(false);
+        }
+      }
+
+      if (target) {
+        await loadParkedOrderData(target.id, target.orderId);
+        show(`Order ${target.orderNumber || orderCode} loaded`, 'success');
+        return;
+      }
+
+      if (!effectiveSalesOrderRepo || typeof effectiveSalesOrderRepo.getOrderByNumber !== 'function') {
+        show(`No order found for ${orderCode}`, 'error');
+        return;
+      }
+
+      try {
+        const recallResult = await effectiveSalesOrderRepo.getOrderByNumber(orderCode);
+        if (recallResult.success && recallResult.data) {
+          await prefetchVariantNames(
+            recallResult.data.lineItems.map((item) => ({
+              variantId: item.variantId,
+              productId: (item as any).productId,
+            })),
+          );
+          await hydrateTransactionFromOrder({
+            order: recallResult.data.order,
+            orderLineItems: recallResult.data.lineItems,
+            customerData: {
+              id: recallResult.data.customer?.id,
+              firstName: recallResult.data.customer?.firstName,
+              lastName: recallResult.data.customer?.lastName,
+              name: recallResult.data.customer?.name,
+              email: recallResult.data.customer?.email,
+              phone: recallResult.data.customer?.phone,
+              address: recallResult.data.customer?.address,
+            },
+          });
+          setCurrentParkedOrderId(null);
+          show(`Order ${recallResult.data.order.orderNumber || orderCode} loaded`, 'success');
+        } else {
+          show(recallResult.error || `No order found for ${orderCode}`, 'error');
+        }
+      } catch (error: any) {
+        show(error?.message || `Failed to load order ${orderCode}`, 'error');
+      }
+    },
+    [
+      effectiveParkedOrderRepo,
+      effectiveSalesOrderRepo,
+      hydrateTransactionFromOrder,
+      loadParkedOrderData,
+      prefetchVariantNames,
+      parkedOrders,
+      setCurrentParkedOrderId,
+      setParkedOrders,
+      setLoadingParkedOrders,
+      show,
+    ],
+  );
 
   // Track last scanned barcode to prevent duplicates
   const lastScanRef = useRef<{ barcode: string; timestamp: number } | null>(null);
@@ -978,51 +1493,65 @@ export function Transactions({
 
   // Barcode scanner handler - lookup product and add to cart
   const handleBarcodeScan = useCallback(async (barcode: string) => {
-    console.log('[Transactions] 🔍 Handler called, isProcessing:', isProcessingRef.current);
+    // console.log('[Transactions] 🔍 Handler called, isProcessing:', isProcessingRef.current);
 
     // Prevent concurrent calls (React Strict Mode can cause double renders)
     if (isProcessingRef.current) {
-      console.log('[Transactions] ⚠️ Already processing a scan, ignoring duplicate call');
+      // console.log('[Transactions] ⚠️ Already processing a scan, ignoring duplicate call');
       return;
     }
     isProcessingRef.current = true;
-    console.log('[Transactions] 🔒 Processing lock SET');
+    // console.log('[Transactions] 🔒 Processing lock SET');
 
     try {
+    const sanitizedBarcode = sanitizeBarcodeValue(barcode);
+    if (!sanitizedBarcode) {
+      return;
+    }
+    const normalizedBarcode = sanitizedBarcode.toUpperCase();
     const scanTimestamp = Date.now();
-    console.log('[Transactions] ========== BARCODE SCAN START ==========');
-    console.log('[Transactions] Barcode scanned:', barcode);
-    console.log('[Transactions] Scan timestamp:', scanTimestamp);
-    console.log('[Transactions] Last scan:', lastScanRef.current);
-    console.log('[Transactions] Stack trace:', new Error().stack);
+    // console.log('[Transactions] ========== BARCODE SCAN START ==========');
+    // console.log('[Transactions] Barcode scanned:', sanitizedBarcode);
+    // console.log('[Transactions] Scan timestamp:', scanTimestamp);
+    // console.log('[Transactions] Last scan:', lastScanRef.current);
+    // console.log('[Transactions] Stack trace:', new Error().stack);
 
     // Debounce: Ignore if same barcode scanned within 500ms
     const now = Date.now();
     if (lastScanRef.current &&
-        lastScanRef.current.barcode === barcode &&
+        lastScanRef.current.barcode === sanitizedBarcode &&
         now - lastScanRef.current.timestamp < 500) {
-      console.log('[Transactions] ❌ Duplicate scan ignored (debounced) - time diff:', now - lastScanRef.current.timestamp, 'ms');
+      // console.log('[Transactions] ❌ Duplicate scan ignored (debounced) - time diff:', now - lastScanRef.current.timestamp, 'ms');
       return;
     }
-    lastScanRef.current = { barcode, timestamp: now };
-    console.log('[Transactions] ✅ Scan accepted, updated lastScanRef');
+    lastScanRef.current = { barcode: sanitizedBarcode, timestamp: now };
+    // console.log('[Transactions] ✅ Scan accepted, updated lastScanRef');
+
+    if (normalizedBarcode.startsWith('ORD-') || normalizedBarcode.startsWith('INV-')) {
+      await recallTransactionByOrderCode(sanitizedBarcode);
+      return;
+    }
+    if (normalizedBarcode.startsWith('SYS-')) {
+      show('System barcode detected. This code requires manual handling.', 'info');
+      return;
+    }
 
     // If we have electronAPI (desktop), use barcode lookup first (most accurate)
     if (typeof window !== 'undefined' && (window as any).electronAPI?.product?.lookupByBarcode) {
       try {
-        console.log('[Transactions] 📞 About to call lookupByBarcode');
-        const result = await (window as any).electronAPI.product.lookupByBarcode(barcode);
-        console.log('[Transactions] 📥 Received barcode lookup result:', result);
+        // console.log('[Transactions] 📞 About to call lookupByBarcode');
+        const result = await (window as any).electronAPI.product.lookupByBarcode(sanitizedBarcode);
+        // console.log('[Transactions] 📥 Received barcode lookup result:', result);
 
         if (result.success && result.product) {
           const product = result.product;
-          console.log('[Transactions] ✅ Product found:', product);
-          console.log('[Transactions] Adding to cart with:', {
-            productId: product.productId,
-            productVariantId: product.variantId,
-            name: product.name,
-            price: product.price,
-          });
+          // console.log('[Transactions] ✅ Product found:', product);
+          // console.log('[Transactions] Adding to cart with:', {
+          //   productId: product.productId,
+          //   productVariantId: product.variantId,
+          //   name: product.name,
+          //   price: product.price,
+          // });
           // Add to cart using the looked up product with default quantity of 1
           // Use productId as the item id for proper duplicate detection
           // Only pass availableQuantity if it's a valid positive number, otherwise undefined (unlimited)
@@ -1036,27 +1565,28 @@ export function Transactions({
             quantity: 1,
             productVariantId: product.variantId,
             availableQuantity: availableQty,
+            salesPersonId: assignedSalesPerson?.id ?? undefined,
           }, show);
-          console.log('[Transactions] ✅ addItem called');
+          // console.log('[Transactions] ✅ addItem called');
           setActiveTab('lines');
           show(`Added ${product.name} to cart`, 'success');
-          console.log('[Transactions] ========== BARCODE SCAN END ==========');
+          // console.log('[Transactions] ========== BARCODE SCAN END ==========');
           return;
         }
         // If desktop lookup failed, log the error but continue to fallback search
-        console.log('[Transactions] Desktop barcode lookup returned no results, trying fallback search');
+        // console.log('[Transactions] Desktop barcode lookup returned no results, trying fallback search');
       } catch (error) {
-        console.error('[Transactions] Barcode lookup error:', error);
+        // console.error('[Transactions] Barcode lookup error:', error);
         // Continue to fallback search
       }
     }
 
     // Fallback: try to find in current product list (for web or if desktop lookup failed)
     const localProduct = productList.find(p =>
-      p.id === barcode ||
-      (p as any).productNumber === barcode ||
-      (p as any).productCode === barcode ||
-      (p as any).sku === barcode
+      p.id === sanitizedBarcode ||
+      (p as any).productNumber === sanitizedBarcode ||
+      (p as any).productCode === sanitizedBarcode ||
+      (p as any).sku === sanitizedBarcode
     );
 
     if (localProduct) {
@@ -1066,19 +1596,19 @@ export function Transactions({
     }
 
     // No product found
-    show(`Product not found for barcode: ${barcode}`, 'error');
+    show(`Product not found for barcode: ${sanitizedBarcode}`, 'error');
     } finally {
       // Always reset processing flag
       isProcessingRef.current = false;
-      console.log('[Transactions] Processing flag reset');
+      // console.log('[Transactions] Processing flag reset');
     }
-  }, [productList, addItem, show, handleAddProduct, setActiveTab]);
+  }, [productList, addItem, show, handleAddProduct, setActiveTab, assignedSalesPerson?.id]);
 
   // Initialize barcode scanner
   useBarcodeScanner({
     onScan: handleBarcodeScan,
     onError: (error: string) => {
-      console.error('[Transactions] Barcode scanner error:', error);
+      // console.error('[Transactions] Barcode scanner error:', error);
     },
     minLength: 3,
     maxLength: 200,
@@ -1173,7 +1703,7 @@ export function Transactions({
           finalValue = result.toString();
         }
       } catch (error) {
-        console.error('[Transactions] Multiplication error:', error);
+        // console.error('[Transactions] Multiplication error:', error);
       }
     }
 
@@ -1238,6 +1768,26 @@ export function Transactions({
     };
   }, [lineItems, appliedDiscount, giftCardData, appliedAdjustment]);
 
+  const paymentSessionKey = useMemo(
+    () => buildPaymentSessionKey(lineItems, orderTotals.total),
+    [lineItems, orderTotals.total],
+  );
+
+  const clearPaymentSessionTracking = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      const lastSessionKey = window.sessionStorage.getItem(LAST_PAYMENT_SESSION_KEY);
+      if (lastSessionKey) {
+        window.sessionStorage.removeItem(lastSessionKey);
+      }
+      window.sessionStorage.removeItem(LAST_PAYMENT_SESSION_KEY);
+    } catch (error) {
+      // Silently ignore storage errors
+    }
+  }, []);
+
   const loadPaymentMethods = useCallback(async () => {
     if (!effectivePaymentMethodRepo) {
       setAvailablePaymentMethods(FALLBACK_PAYMENT_METHODS);
@@ -1262,7 +1812,7 @@ export function Transactions({
         setAvailablePaymentMethods(FALLBACK_PAYMENT_METHODS);
       }
     } catch (error) {
-      console.error('[Transactions] Failed to load payment methods:', error);
+      // console.error('[Transactions] Failed to load payment methods:', error);
       setAvailablePaymentMethods(FALLBACK_PAYMENT_METHODS);
     } finally {
       setIsPaymentMethodsLoading(false);
@@ -1284,7 +1834,7 @@ export function Transactions({
         customerId: customer?.id,
         lineItems: lineItems.map((item) => ({
           variantId: item.productId || item.id,
-          salesPersonId,
+          salesPersonId: item.salesPersonId || salesPersonId,
           quantity: item.quantity,
           unitPrice: item.price,
         })),
@@ -1326,13 +1876,15 @@ export function Transactions({
     setPaymentEntries([]);
     setPaymentDialogError(null);
     setCurrentParkedOrderId(null);
-  }, [clearCustomer, lineItems, removeItem]);
+    clearPaymentSessionTracking();
+    partialPaymentsHydratedAtRef.current = 0;
+  }, [clearCustomer, clearPaymentSessionTracking, lineItems, removeItem]);
 
   // Check for order completion from Payments page and reset state
   useEffect(() => {
     const navigationState = location.state as { orderCompleted?: boolean; orderNumber?: string } | null;
     if (navigationState?.orderCompleted) {
-      console.log('[Transactions] Order completed, resetting transaction state...');
+      // console.log('[Transactions] Order completed, resetting transaction state...');
       // Reset transaction state (cart should already be cleared by Payments page)
       // But ensure all other state is reset
       // Note: Don't clear cart here as it's already cleared in Payments page
@@ -1348,6 +1900,8 @@ export function Transactions({
       setPaymentEntries([]);
       setPaymentDialogError(null);
       setCurrentParkedOrderId(null);
+      clearPaymentSessionTracking();
+      partialPaymentsHydratedAtRef.current = 0;
       // Clear navigation state to prevent resetting on every render
       window.history.replaceState({}, document.title);
       
@@ -1356,7 +1910,61 @@ export function Transactions({
         show(`Order ${navigationState.orderNumber} completed successfully!`, 'success');
       }
     }
-  }, [location.state, clearCustomer, show]);
+  }, [location.state, clearCustomer, clearPaymentSessionTracking, show]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (!paymentSessionKey) {
+      return;
+    }
+
+    const lastSessionKey = window.sessionStorage.getItem(LAST_PAYMENT_SESSION_KEY);
+    if (lastSessionKey !== paymentSessionKey) {
+      return;
+    }
+
+    try {
+      const raw = window.sessionStorage.getItem(paymentSessionKey);
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw) as {
+        payments?: PaymentCollectionEntry[];
+        updatedAt?: number;
+        total?: number;
+      };
+      if (!Array.isArray(parsed.payments) || parsed.payments.length === 0) {
+        return;
+      }
+      const updatedAt = typeof parsed.updatedAt === 'number' ? parsed.updatedAt : 0;
+      if (updatedAt && updatedAt <= partialPaymentsHydratedAtRef.current) {
+        return;
+      }
+
+      const totalPaid = parsed.payments.reduce(
+        (sum, payment) => sum + Number(payment.amount ?? 0),
+        0,
+      );
+      const remainingBalance = Number((orderTotals.total - totalPaid).toFixed(2));
+      if (remainingBalance <= 0.01) {
+        partialPaymentsHydratedAtRef.current = updatedAt || Date.now();
+        return;
+      }
+
+      const sanitizedPayments = parsed.payments.map((payment, index) => ({
+        ...payment,
+        id: payment.id ?? `session-${index}-${createTempId()}`,
+      }));
+
+      setPaymentEntries(sanitizedPayments);
+      setActiveTab('payments');
+      partialPaymentsHydratedAtRef.current = updatedAt || Date.now();
+    } catch (error) {
+      console.error('[Transactions] Failed to hydrate partial payments from session storage:', error);
+    }
+  }, [orderTotals.total, paymentSessionKey, setActiveTab, setPaymentEntries]);
 
   const handleVoidTransaction = useCallback(() => {
     if (lineItems.length > 0 || customer) {
@@ -1388,22 +1996,22 @@ export function Transactions({
       const orderData = buildOrderInput(payments);
 
       try {
-        console.log('[Transactions] Calling createOrder with data:', {
-          lineItemsCount: orderData.lineItems.length,
-          paymentsCount: orderData.payments.length,
-          locationId: orderData.locationId,
-          cashierId: orderData.cashierId,
-        });
+        // console.log('[Transactions] Calling createOrder with data:', {
+          // lineItemsCount: orderData.lineItems.length,
+        //   paymentsCount: orderData.payments.length,
+        //   locationId: orderData.locationId,
+        //   cashierId: orderData.cashierId,
+        // });
         const result = await repo.createOrder(orderData);
-        console.log('[Transactions] createOrder result:', {
-          success: result.success,
-          hasOrder: !!result.order,
-          orderNumber: result.order?.orderNumber,
-          error: result.error,
-        });
+        // console.log('[Transactions] createOrder result:', {
+        //   success: result.success,
+        //   hasOrder: !!result.order,
+        //   orderNumber: result.order?.orderNumber,
+        //   error: result.error,
+        // });
 
         if (result.success && result.order) {
-          console.log('[Transactions] Order completed successfully, clearing transaction state...');
+          // console.log('[Transactions] Order completed successfully, clearing transaction state...');
           show(`Order completed! Order #: ${result.order.orderNumber}`, 'success');
 
           if (currentParkedOrderId && effectiveParkedOrderRepo) {
@@ -1412,7 +2020,7 @@ export function Transactions({
               setCurrentParkedOrderId(null);
               handleSearchParkedOrders('');
             } catch (err) {
-              console.error('[Transactions] Failed to complete parked order:', err);
+              // console.error('[Transactions] Failed to complete parked order:', err);
             }
           }
 
@@ -1470,6 +2078,8 @@ export function Transactions({
           const invoiceNumber = (result.order as any).invoiceNumber || result.order.orderNumber || result.order.id;
           promptPrintReceipt({
             invoiceNumber,
+            orderNumber: result.order.orderNumber || invoiceNumber,
+            orderId: result.order.id,
             lineItems: receiptLineItems,
             payments: receiptPayments,
             customer: customer ? {
@@ -1490,17 +2100,17 @@ export function Transactions({
           // Reset state after a short delay to allow print dialog to show
           setTimeout(() => {
             resetTransactionState();
-            console.log('[Transactions] Transaction state cleared');
+            // console.log('[Transactions] Transaction state cleared');
           }, 500);
 
           return true;
         }
 
-        console.error('[Transactions] Order creation failed:', result.error);
+        // console.error('[Transactions] Order creation failed:', result.error);
         show(result.error || 'Failed to complete order', 'error');
         return false;
     } catch (err: any) {
-      console.error('[Transactions] Failed to complete order:', err);
+      // console.error('[Transactions] Failed to complete order:', err);
       show(err.message || 'Failed to complete order', 'error');
         return false;
       }
@@ -1566,6 +2176,32 @@ export function Transactions({
         show('Cannot complete empty order', 'error');
         return;
       }
+
+      const missingLineSalesPersonIds = lineItems
+        .filter((item) => !item.salesPersonId)
+        .map((item) => item.id);
+
+      if (missingLineSalesPersonIds.length > 0) {
+        setMissingSalesPersonLineIds(missingLineSalesPersonIds);
+        show(
+          `Assign a sales person to the highlighted line item${missingLineSalesPersonIds.length > 1 ? 's' : ''} before taking payment.`,
+          'error'
+        );
+        setActiveTab('lines');
+        return;
+      }
+
+      setMissingSalesPersonLineIds([]);
+      if (typeof window !== 'undefined') {
+        try {
+          const sessionKey = buildPaymentSessionKey(lineItems, orderTotals.total);
+          if (sessionKey) {
+            window.sessionStorage.setItem(LAST_PAYMENT_SESSION_KEY, sessionKey);
+          }
+        } catch {
+          // Ignore storage errors
+        }
+      }
       // Pass order data via navigation state
       navigate(`/payments?mode=${mode}`, {
         state: {
@@ -1583,13 +2219,15 @@ export function Transactions({
           salesPersonId: assignedSalesPerson?.id ?? undefined,
           salesPersonName: assignedSalesPerson?.name, // Pass sales person name
           customerId: customer?.id,
-          customer: customer ? { // Pass full customer details
-            id: customer.id,
-            name: customer.name,
-            email: customer.email,
-            phone: customer.phone,
-            address: customer.address,
-          } : undefined,
+          customer: customer
+            ? {
+                id: customer.id,
+                name: customer.name,
+                email: customer.email,
+                phone: customer.phone,
+                address: customer.address,
+              }
+            : undefined,
           parkedOrderId: currentParkedOrderId, // Pass parked order ID if resuming
         },
       });
@@ -1602,10 +2240,10 @@ export function Transactions({
       appliedDiscount,
       giftCardData,
       appliedAdjustment,
-      currentUserId,
-      assignedSalesPerson,
       customer,
       currentParkedOrderId,
+      setActiveTab,
+      setMissingSalesPersonLineIds,
     ]
   );
 
@@ -1668,7 +2306,7 @@ export function Transactions({
       return;
     }
     setGiftCardData({ cardNumber: giftCardNumberInput.trim(), discount: parsed });
-    setIsGiftCardModalOpen(false);
+    setIsGiftCardPanelOpen(false);
     show('Gift card applied', 'success');
   };
 
@@ -1725,6 +2363,13 @@ export function Transactions({
     }
     show('Coupon removed', 'info');
   }, [discountSource, show]);
+
+  const handleClearGiftCard = useCallback(() => {
+    setGiftCardData(null);
+    setGiftCardNumberInput('');
+    setGiftCardValueInput('');
+    show('Gift card removed', 'info');
+  }, [show]);
 
   const handleClearDiscount = useCallback(() => {
     if (discountSource === 'coupon' && appliedCoupon) {
@@ -1807,7 +2452,7 @@ export function Transactions({
       color: 'bg-gray-700',
       square: true,
       rectangular: true,
-      onClick: openGiftCardModal,
+      onClick: openGiftCardPanel,
     },
     {
       id: 'transaction-options',
@@ -1844,11 +2489,11 @@ export function Transactions({
       color: 'bg-green-700',
       square: true,
       onClick: () => {
-        // Ensure sales persons are loaded before opening modal
-        if (salesPersons.length === 0 && !salesPersonsLoading && effectiveSalesPersonRepo) {
-          void loadSalesPersons();
-        }
-        salesPersonModal.open();
+        openSalesPersonModal(
+          selectedItem
+            ? { type: 'line', lineId: selectedItem }
+            : { type: 'order' }
+        );
       },
     },
     {
@@ -1990,6 +2635,9 @@ export function Transactions({
               null
             }
             paymentMethods={availablePaymentMethods}
+            salesPersons={salesPersons}
+            payments={paymentEntries}
+            linesMissingSalesPerson={missingSalesPersonLineIds}
           />
         </div>
 
@@ -2289,17 +2937,14 @@ export function Transactions({
         </div>
       )}
 
-      <CouponPrompt
-        isOpen={isGiftCardModalOpen}
-        code={giftCardNumberInput}
-        value={giftCardValueInput}
-        current={giftCardData ? { code: giftCardData.cardNumber, discount: giftCardData.discount } : null}
-        onCodeChange={setGiftCardNumberInput}
-        onValueChange={setGiftCardValueInput}
+      <TransactionGiftCardPanel
+        isOpen={isGiftCardPanelOpen}
+        onClose={() => setIsGiftCardPanelOpen(false)}
+        cardNumber={giftCardNumberInput}
+        appliedGiftCard={giftCardData}
+        onCardNumberChange={setGiftCardNumberInput}
         onApply={handleApplyGiftCard}
-        onClose={() => setIsGiftCardModalOpen(false)}
-        title="Gift Card"
-        codeLabel="Card Number"
+        onClear={giftCardData ? handleClearGiftCard : undefined}
       />
 
       <PreviewPrompt
@@ -2355,12 +3000,12 @@ export function Transactions({
       {/* Sales Person Modal - Ctrl+Shift+I to open */}
       <SalesPersonModal
         isOpen={salesPersonModal.isOpen}
-        onClose={salesPersonModal.close}
-        onSelect={salesPersonModal.handleSelect}
+        onClose={handleCloseSalesPersonModal}
+        onSelect={handleSalesPersonSelection}
         salesPersons={salesPersons}
         selectedId={salesPersonModal.selectedPerson?.id}
         isLoading={salesPersonsLoading}
-        subtitle="On transaction"
+        subtitle={salesPersonModalSubtitle}
       />
 
       {/* Print Confirmation Dialog */}

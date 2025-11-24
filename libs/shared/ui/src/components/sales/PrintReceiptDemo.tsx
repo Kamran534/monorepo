@@ -79,6 +79,8 @@ export function PrintReceiptDemo() {
   const handleTestPrint = () => {
     promptPrintReceipt({
       invoiceNumber: '22140',
+      orderNumber: 'ORD-22140',
+      orderId: 'DEMO-22140',
       lineItems: sampleLineItems,
       payments: samplePayments,
       cashier: 'Hamza',

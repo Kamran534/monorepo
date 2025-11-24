@@ -66,7 +66,7 @@ export function TransactionVerticalNav({
               backgroundColor: isActive
                 ? 'var(--color-bg-hover)'
                 : 'transparent',
-              borderLeft: isActive ? '2px solid var(--color-primary-500)' : '2px solid transparent',
+              borderRight: isActive ? '2px solid var(--color-primary-500)' : '2px solid transparent',
             }}
           >
             {/* Icon */}

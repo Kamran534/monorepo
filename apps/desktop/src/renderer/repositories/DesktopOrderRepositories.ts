@@ -65,6 +65,54 @@ export class DesktopSalesOrderRepository implements SalesOrderRepository {
       };
     }
   }
+
+  async getOrderByNumber(orderNumber: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      if (
+        typeof window === 'undefined' ||
+        !window.electronAPI ||
+        !window.electronAPI.order ||
+        !window.electronAPI.order.getByNumber
+      ) {
+        throw new Error('Electron API not available');
+      }
+
+      const result = await window.electronAPI.order.getByNumber(orderNumber);
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to load order',
+      };
+    }
+  }
+
+  async getVariantDetails(variantId: string): Promise<{
+    variantId: string;
+    productId?: string;
+    variantName?: string;
+    productName?: string;
+    sku?: string;
+  } | null> {
+    try {
+      if (
+        typeof window === 'undefined' ||
+        !window.electronAPI ||
+        !window.electronAPI.order ||
+        !window.electronAPI.order.getVariantDetails
+      ) {
+        throw new Error('Electron API not available');
+      }
+
+      return await window.electronAPI.order.getVariantDetails(variantId);
+    } catch (error) {
+      return null;
+    }
+  }
 }
 
 /**

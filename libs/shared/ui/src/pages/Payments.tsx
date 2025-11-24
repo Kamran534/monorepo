@@ -7,10 +7,21 @@ import {
   useCart,
   useToast,
   usePrintReceipt,
-  PrintConfirmationDialog,
 } from '../index.js';
 import type { SalesOrderRepository, ParkedOrderRepository, PaymentMethodRepository } from '@monorepo/shared-data-access';
 import { useCurrency } from '@monorepo/shared-hooks-currency';
+import {
+  useAppDispatch,
+  useAppSelector,
+  fetchCustomers,
+  selectCustomers,
+  selectCustomersLoading,
+  createCustomer,
+  type Customer as StoreCustomer,
+} from '@monorepo/shared-store';
+import { SidePanel } from '../components/SidePanel.js';
+import type { Customer as ReceiptCustomer } from '../components/sales/CustomerSelector.js';
+import { Phone, User, Mail, Printer, Search } from 'lucide-react';
 
 // Simple fallback methods – in a real app these would come from the repo
 const FALLBACK_PAYMENT_METHODS: PaymentPanelMethod[] = [
@@ -32,6 +43,14 @@ const FALLBACK_PAYMENT_METHODS: PaymentPanelMethod[] = [
 
 const DEFAULT_TAX_RATE = 0.03;
 const PAYMENT_TOLERANCE = 0.01;
+
+type CapturedCustomer = {
+  id?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+};
+type CompletionStep = 'phone' | 'name' | 'email' | 'summary';
 
 export interface PaymentsProps {
   salesOrderRepo?: SalesOrderRepository;
@@ -56,32 +75,34 @@ export function Payments({
     (amount: number) => formatAmount(amount),
     [formatAmount],
   );
+  const dispatch = useAppDispatch();
+  const customers = useAppSelector(selectCustomers);
+  const customersLoading = useAppSelector(selectCustomersLoading);
 
   // Print receipt hook
   const {
-    showPrintDialog,
-    isPrinting,
-    receiptData,
     promptPrintReceipt,
     confirmPrint: originalConfirmPrint,
-    cancelPrint: originalCancelPrint,
-    skipPrint: originalSkipPrint,
   } = usePrintReceipt({
      storeName: 'Trade Unleashed',
      storeNameArabic: 'التجارة المنطلِقة',
      storeUrl: 'http://www.tradeUnleashed.com',
      posNumber: 'TRADE UNLEASHED',
     onPrintSuccess: () => {
-      // console.log('[Payments] Receipt printed successfully');
+      console.log('[Payments] Print success, navigating back to transactions');
+      handleReturnToTransactions();
     },
     onPrintError: (error) => {
-      // console.error('[Payments] Print error:', error);
+      console.error('[Payments] Print error:', error);
       const errorMessage = error.message || String(error);
       if (errorMessage.toLowerCase().includes('printer missing')) {
         show('Printer Missing: Please connect a printer to your device and try again.', 'error');
       } else {
         show('Failed to print receipt: ' + errorMessage, 'error');
       }
+      // Still navigate back even if print fails
+      console.log('[Payments] Print failed, but navigating back to transactions');
+      handleReturnToTransactions();
     },
   });
 
@@ -115,6 +136,31 @@ export function Payments({
     };
     parkedOrderId?: string;
   } | null;
+  const [capturedCustomer, setCapturedCustomer] = useState<CapturedCustomer | null>(
+    navigationState?.customer
+      ? {
+          id: navigationState.customer.id,
+          name: navigationState.customer.name,
+          email: navigationState.customer.email,
+          phone: navigationState.customer.phone,
+        }
+      : navigationState?.customerId
+      ? { id: navigationState.customerId }
+      : null,
+  );
+  const [isCompletionPanelOpen, setIsCompletionPanelOpen] = useState(false);
+  const [completionStep, setCompletionStep] = useState<CompletionStep>('summary');
+  const [customerPhoneInput, setCustomerPhoneInput] = useState('');
+  const [customerNameInput, setCustomerNameInput] = useState('');
+  const [customerEmailInput, setCustomerEmailInput] = useState('');
+  const [flowError, setFlowError] = useState<string | null>(null);
+  const phoneKeypadKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'backspace', '0', 'clear'] as const;
+  const completionTitles: Record<CompletionStep, string> = {
+    summary: 'Order ready to print',
+    phone: 'Add customer phone',
+    name: 'Customer name',
+    email: 'Customer email',
+  };
 
   const { items: cartItems, removeItem } = useCart();
 
@@ -161,8 +207,9 @@ export function Payments({
 
   // Handler to navigate back to transactions and clear state
   const handleReturnToTransactions = useCallback(() => {
-    if (completedOrderRef.current) {
-      const { orderNumber, lineItems: completedLineItems } = completedOrderRef.current;
+    const orderData = completedOrderRef.current;
+    const orderNumber = orderData?.orderNumber || 'Unknown';
+    const completedLineItems = orderData?.lineItems || lineItems;
       
       // Clear session storage if not already cleared
       try {
@@ -171,11 +218,9 @@ export function Payments({
         // console.error('[Payments] Failed to clear session storage:', error);
       }
 
-      // Clear cart items AFTER print dialog is handled
-      // Use the current lineItems from state (which might be from navigationState or cart)
-      const itemsToClear = completedLineItems || lineItems;
-      if (itemsToClear && itemsToClear.length > 0) {
-        itemsToClear.forEach((item: any) => {
+    // Clear cart items
+    if (completedLineItems && completedLineItems.length > 0) {
+      completedLineItems.forEach((item: any) => {
           try {
             if (item.id) {
               removeItem(item.id);
@@ -196,27 +241,8 @@ export function Payments({
 
       // Reset ref
       completedOrderRef.current = null;
-    }
   }, [navigate, sessionKey, removeItem, lineItems]);
 
-  // Wrapper for confirm print - navigate after printing
-  const confirmPrint = useCallback(async () => {
-    await originalConfirmPrint();
-    // Navigate after print is complete
-    handleReturnToTransactions();
-  }, [originalConfirmPrint, handleReturnToTransactions]);
-
-  // Wrapper for cancel print - navigate immediately
-  const cancelPrint = useCallback(() => {
-    originalCancelPrint();
-    handleReturnToTransactions();
-  }, [originalCancelPrint, handleReturnToTransactions]);
-
-  // Wrapper for skip print - navigate immediately
-  const skipPrint = useCallback(() => {
-    originalSkipPrint();
-    handleReturnToTransactions();
-  }, [originalSkipPrint, handleReturnToTransactions]);
 
   // Load payment state from sessionStorage
   const loadPaymentState = useCallback(() => {
@@ -235,10 +261,48 @@ export function Payments({
   // Initialize payments from sessionStorage or navigation state
   const [payments, setPayments] = useState<PaymentEntry[]>(() => loadPaymentState());
   const [isProcessing, setIsProcessing] = useState(false);
+  const completionFlowStartedRef = React.useRef(false);
   const orderCreatedRef = React.useRef(false);
   const completedOrderRef = React.useRef<{ orderNumber: string; lineItems: any[] } | null>(null);
   const [availablePaymentMethods, setAvailablePaymentMethods] = useState<PaymentPanelMethod[]>(FALLBACK_PAYMENT_METHODS);
   const [isPaymentMethodsLoading, setIsPaymentMethodsLoading] = useState(false);
+  
+  // Refs for auto-focusing input fields
+  const phoneInputRef = React.useRef<HTMLInputElement>(null);
+  const nameInputRef = React.useRef<HTMLInputElement>(null);
+  const emailInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (customers.length > 0 || customersLoading) {
+      return;
+    }
+
+    const loadCustomers = async () => {
+      try {
+        await dispatch(
+          fetchCustomers({
+            options: { useServer: true },
+            forceRefresh: false,
+          }),
+        ).unwrap();
+      } catch (error) {
+        console.error('[Payments] Failed to preload customers:', error);
+      }
+    };
+
+    loadCustomers();
+  }, [customers.length, customersLoading, dispatch]);
+
+  React.useEffect(() => {
+    if (navigationState?.customer && !capturedCustomer) {
+      setCapturedCustomer({
+        id: navigationState.customer.id,
+        name: navigationState.customer.name,
+        email: navigationState.customer.email,
+        phone: navigationState.customer.phone,
+      });
+    }
+  }, [navigationState, capturedCustomer]);
 
   // Load payment methods from repository
   React.useEffect(() => {
@@ -283,12 +347,15 @@ export function Payments({
         sessionKey,
         JSON.stringify({
           payments,
+          total: orderTotal,
+          updatedAt: Date.now(),
+          source: 'payments-page',
         })
       );
     } catch (error) {
       console.error('[Payments] Failed to save payment state:', error);
     }
-  }, [payments, sessionKey]);
+  }, [payments, sessionKey, orderTotal]);
 
   const amountPaid = useMemo(
     () => payments.reduce((sum, p) => sum + p.amount, 0),
@@ -297,6 +364,160 @@ export function Payments({
 
   const amountDue = orderTotal - amountPaid;
   const changeDue = Math.max(0, amountPaid - orderTotal);
+  const phoneSearchValue = customerPhoneInput.replace(/[^\d+]/g, '');
+  const phoneMatches = useMemo(() => {
+    if (!phoneSearchValue) {
+      return [];
+    }
+    return customers
+      .filter((customer) =>
+        (customer.phone || '').replace(/[^\d+]/g, '').includes(phoneSearchValue),
+      )
+      .slice(0, 5);
+  }, [customers, phoneSearchValue]);
+  const activeCustomerDetails = useMemo(() => {
+    if (capturedCustomer) {
+      return capturedCustomer;
+    }
+    if (navigationState?.customer) {
+      return {
+        id: navigationState.customer.id,
+        name: navigationState.customer.name,
+        email: navigationState.customer.email,
+        phone: navigationState.customer.phone,
+      };
+    }
+    if (navigationState?.customerId) {
+      const match = customers.find((customer) => customer.id === navigationState.customerId);
+      if (match) {
+        return {
+          id: match.id,
+          name: match.name,
+          email: match.email,
+          phone: match.phone,
+        };
+      }
+    }
+    return null;
+  }, [capturedCustomer, customers, navigationState]);
+
+  React.useEffect(() => {
+    if (
+      payments.length > 0 &&
+      amountDue <= PAYMENT_TOLERANCE &&
+      salesOrderRepo &&
+      !orderCreatedRef.current
+    ) {
+      if (!completionFlowStartedRef.current) {
+        completionFlowStartedRef.current = true;
+        setFlowError(null);
+        setIsCompletionPanelOpen(true);
+        if (navigationState?.customer || navigationState?.customerId || capturedCustomer) {
+          setCompletionStep('summary');
+        } else {
+          setCompletionStep('phone');
+        }
+      }
+    } else {
+      completionFlowStartedRef.current = false;
+      if (!orderCreatedRef.current) {
+        setIsCompletionPanelOpen(false);
+      }
+    }
+  }, [amountDue, capturedCustomer, navigationState, payments.length, salesOrderRepo]);
+
+  // Auto-focus input fields when panel opens or step changes
+  React.useEffect(() => {
+    if (!isCompletionPanelOpen) return;
+    
+    const focusTimeout = setTimeout(() => {
+      if (completionStep === 'phone' && phoneInputRef.current) {
+        phoneInputRef.current.focus();
+        phoneInputRef.current.select();
+      } else if (completionStep === 'name' && nameInputRef.current) {
+        nameInputRef.current.focus();
+        nameInputRef.current.select();
+      } else if (completionStep === 'email' && emailInputRef.current) {
+        emailInputRef.current.focus();
+        emailInputRef.current.select();
+      }
+    }, 120);
+
+    return () => clearTimeout(focusTimeout);
+  }, [isCompletionPanelOpen, completionStep]);
+
+  const handlePhoneInputChange = useCallback((value: string) => {
+    const sanitized = value.replace(/[^\d+]/g, '');
+    setCustomerPhoneInput(sanitized);
+    setFlowError(null);
+  }, []);
+
+  const handlePhoneKeypadInput = useCallback((value: string) => {
+    setCustomerPhoneInput((prev) => {
+      if (value === 'backspace') {
+        return prev.slice(0, -1);
+      }
+      if (value === 'clear') {
+        return '';
+      }
+      return `${prev}${value}`.replace(/[^\d+]/g, '');
+    });
+    setFlowError(null);
+  }, []);
+
+  const handleSelectSuggestedCustomer = useCallback((customer: StoreCustomer) => {
+    setCapturedCustomer({
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+    });
+    setCustomerPhoneInput(customer.phone || '');
+    setCustomerNameInput(customer.name || '');
+    setCustomerEmailInput(customer.email || '');
+    setCompletionStep('summary');
+    setFlowError(null);
+  }, []);
+
+  const handlePhoneNext = useCallback(() => {
+    if (!customerPhoneInput || phoneSearchValue.length < 5) {
+      setFlowError('Enter at least 5 digits for the phone number.');
+      return;
+    }
+    setCapturedCustomer((prev) => ({
+      ...(prev ?? {}),
+      phone: customerPhoneInput,
+    }));
+    setCompletionStep('name');
+    setFlowError(null);
+  }, [customerPhoneInput, phoneSearchValue]);
+
+  const handleNameNext = useCallback(() => {
+    if (!customerNameInput.trim()) {
+      setFlowError('Enter the customer name to continue.');
+      return;
+    }
+    setCapturedCustomer((prev) => ({
+      ...(prev ?? {}),
+      name: customerNameInput.trim(),
+    }));
+    setCompletionStep('email');
+    setFlowError(null);
+  }, [customerNameInput]);
+
+  const handleEmailNext = useCallback(() => {
+    const trimmed = customerEmailInput.trim();
+    if (trimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setFlowError('Enter a valid email address or leave the field empty.');
+      return;
+    }
+    setCapturedCustomer((prev) => ({
+      ...(prev ?? {}),
+      email: trimmed || undefined,
+    }));
+    setCompletionStep('summary');
+    setFlowError(null);
+  }, [customerEmailInput]);
 
   const handleAddPayment = useCallback(async (payment: Omit<PaymentEntry, 'id'>) => {
     if (isProcessing) return;
@@ -339,20 +560,23 @@ export function Payments({
     setPayments((prev) => prev.filter((p) => p.id !== id));
   };
 
-  // Auto-complete order when fully paid
-  React.useEffect(() => {
-    if (
-      payments.length > 0 &&
-      amountDue <= PAYMENT_TOLERANCE &&
-      !isProcessing &&
-      salesOrderRepo &&
-      !orderCreatedRef.current
-    ) {
-      // Create order completion inline to avoid dependency issues
-      const completeOrder = async () => {
-        // Mark as created immediately to prevent race conditions
+  const finalizeOrder = useCallback(async () => {
+    if (!salesOrderRepo) {
+      show('Sales order service is unavailable. Please try again.', 'error');
+      return;
+    }
+    if (orderCreatedRef.current) {
+      return;
+    }
+    if (amountDue > PAYMENT_TOLERANCE) {
+      show('Collect the remaining balance before completing the order.', 'error');
+      return;
+    }
+
         orderCreatedRef.current = true;
         setIsProcessing(true);
+    setFlowError(null);
+
         try {
           const paymentInputs = payments.map((p) => ({
             paymentMethodId: p.paymentMethodId,
@@ -363,18 +587,99 @@ export function Payments({
             cardBrand: p.cardBrand,
           }));
 
-          // Create the order with all payments in one step
+      let customerId = navigationState?.customerId;
+      let receiptCustomer: ReceiptCustomer | undefined;
+
+      if (navigationState?.customer) {
+        const customerNameParts = navigationState.customer.name.split(' ');
+        receiptCustomer = {
+          id: navigationState.customer.id || navigationState.customerId || 'walk-in-customer',
+          firstName: customerNameParts[0] || '',
+          lastName: customerNameParts.slice(1).join(' ') || '',
+          email: navigationState.customer.email || undefined,
+          phone: navigationState.customer.phone || undefined,
+          customerCode: navigationState.customer.id,
+        };
+      } else if (navigationState?.customerId) {
+        receiptCustomer = {
+          id: navigationState.customerId,
+          firstName: '',
+          lastName: '',
+          email: undefined,
+          phone: undefined,
+          customerCode: navigationState.customerId,
+        };
+      }
+
+      const capturedDetails = capturedCustomer;
+      if (!customerId && capturedDetails?.id) {
+        customerId = capturedDetails.id;
+      }
+
+      if (!receiptCustomer && capturedDetails?.name) {
+        const nameParts = capturedDetails.name.split(' ');
+        receiptCustomer = {
+          id: capturedDetails.id || customerId || 'walk-in-customer',
+          firstName: nameParts[0] || '',
+          lastName: nameParts.slice(1).join(' ') || '',
+          email: capturedDetails.email || undefined,
+          phone: capturedDetails.phone || undefined,
+          customerCode: capturedDetails.id,
+        };
+      }
+
+      if (!customerId && capturedDetails?.name && capturedDetails.phone) {
+        try {
+          const result = await dispatch(
+            createCustomer({
+              data: {
+                name: capturedDetails.name,
+                email: capturedDetails.email || '',
+                phone: capturedDetails.phone,
+                address: '',
+              },
+              options: { useServer: true },
+            }),
+          ).unwrap();
+          if (result.success && result.customer) {
+            customerId = result.customer.id;
+            setCapturedCustomer({
+              id: result.customer.id,
+              name: result.customer.name,
+              email: result.customer.email,
+              phone: result.customer.phone,
+            });
+            const createdNameParts = result.customer.name.split(' ');
+            receiptCustomer = {
+              id: result.customer.id || 'walk-in-customer',
+              firstName: createdNameParts[0] || '',
+              lastName: createdNameParts.slice(1).join(' ') || '',
+              email: result.customer.email || undefined,
+              phone: result.customer.phone || undefined,
+              customerCode: result.customer.id || undefined,
+            };
+          }
+        } catch (error) {
+          console.error('[Payments] Failed to create customer before order completion:', error);
+          orderCreatedRef.current = false;
+          setIsProcessing(false);
+          setFlowError('Failed to save customer details. Please try again.');
+          show('Failed to save customer details. Please try again.', 'error');
+          return;
+        }
+      }
+
           const orderInput = {
             locationId: currentLocationId,
             cashierId: currentUserId,
             salesPersonId: navigationState?.salesPersonId || undefined,
-            customerId: navigationState?.customerId,
+        customerId,
             lineItems: lineItems.map((item: any) => {
               const baseQuantity = Number(item.quantity ?? 1);
               const unitPrice = Math.abs(Number(item.price ?? 0));
               return {
                 variantId: item.productId || item.id,
-                salesPersonId: navigationState?.salesPersonId || undefined,
+                salesPersonId: item.salesPersonId || navigationState?.salesPersonId || undefined,
                 quantity: item.isReturn ? -Math.abs(baseQuantity) : baseQuantity,
                 unitPrice,
               };
@@ -408,34 +713,33 @@ export function Payments({
             isOffline: result.isOffline,
           });
 
-          if (result.success && result.order) {
+      if (!result.success || !result.order) {
+        console.error('[Payments] Order creation failed:', result.error);
+        orderCreatedRef.current = false;
+        show(result.error || 'Failed to complete order', 'error');
+        setIsProcessing(false);
+        return;
+      }
+
             const orderNumber = result.order.orderNumber;
             const invoiceNumber = (result.order as any).invoiceNumber || result.order.orderNumber || result.order.id;
-            // console.log('[Payments] Order completed successfully:', orderNumber);
             show(`Order completed! Order #: ${orderNumber}`, 'success');
 
-            // Complete parked order if this was a resumed order
             if (navigationState?.parkedOrderId && parkedOrderRepo) {
               try {
                 await parkedOrderRepo.completeParkedOrder(navigationState.parkedOrderId);
-                // console.log('[Payments] Parked order completed:', navigationState.parkedOrderId);
               } catch (error) {
-                // console.error('[Payments] Failed to complete parked order:', error);
+          console.error('[Payments] Failed to complete parked order:', error);
               }
             }
 
-            // Calculate receipt totals
             const grossTotal = orderBreakdown.subtotal;
             const itemDiscount = orderBreakdown.discountValue;
             const netTotal = orderTotal;
             const tendered = amountPaid;
             const change = changeDue;
 
-            // Convert line items to receipt format
-            // The receipt template expects LineItem with productName, variantName, sku
-            // We'll map cart items to match this structure
             const receiptLineItems = lineItems.map((item: any) => {
-              // Extract product name from item name
               const productName = item.name || 'Item';
               const variantName = item.variantName || '';
               const sku = item.sku || item.barcode || item.productVariantId || '';
@@ -448,31 +752,33 @@ export function Payments({
               return {
                 id: item.id || item.productId || Math.random().toString(),
                 variantId: item.productVariantId || item.productId || item.id || '',
-                variant: item.variant ? {
+          variant: item.variant
+            ? {
                   id: item.variant.id || '',
-                  sku: sku,
-                  variantName: variantName,
-                  product: item.variant.product ? {
+                sku,
+                variantName,
+                product: item.variant.product
+                  ? {
                     id: item.variant.product.id || '',
                     name: productName,
-                  } : undefined,
-                } : undefined,
+                    }
+                  : undefined,
+              }
+            : undefined,
                 salesPersonId: navigationState?.salesPersonId || undefined,
-                quantity: quantity,
-                unitPrice: unitPrice,
+          quantity,
+          unitPrice,
                 saleDiscount: discount > 0 ? { amount: discount } : undefined,
                 customDiscount: undefined,
-                lineSubtotal: lineSubtotal,
+          lineSubtotal,
                 lineDiscount: discount,
-                lineTotal: lineTotal,
-                // Add extended properties for receipt template
-                productName: productName,
-                variantName: variantName,
-                sku: sku,
-              } as any; // Type assertion needed because LineItem doesn't officially have these properties
-            });
+          lineTotal,
+          productName,
+          variantName,
+          sku,
+        } as any;
+      });
 
-            // Convert payments to receipt format
             const receiptPayments = payments.map((payment) => ({
               id: payment.id,
               paymentMethodId: payment.paymentMethodId,
@@ -490,14 +796,11 @@ export function Payments({
               transactionId: payment.transactionId,
             }));
 
-            // Store order info for navigation after print dialog
             completedOrderRef.current = {
               orderNumber,
               lineItems,
             };
 
-            // Get sales person name from navigation state (assigned in Transactions screen)
-            // Fallback to order result if not available in navigation state
             let salesPersonName = navigationState?.salesPersonName || 'Cashier';
             if (!salesPersonName || salesPersonName === 'Cashier') {
               const orderWithDetails = result.order as any;
@@ -510,34 +813,23 @@ export function Payments({
               }
             }
 
-            // Show print confirmation dialog
-            // Cart will be cleared after print dialog is handled
-            // Navigation will happen after user interacts with the dialog
-            // Use customer details from Transactions screen if available
-            let receiptCustomer = undefined;
-            if (navigationState?.customer) {
-              // Customer was selected in Transactions screen - use full details
-              const customerNameParts = navigationState.customer.name.split(' ');
+      if (!receiptCustomer && capturedDetails) {
+        const nameParts = (capturedDetails.name || '').split(' ');
               receiptCustomer = {
-                id: navigationState.customer.id || navigationState.customerId || '',
-                firstName: customerNameParts[0] || '',
-                lastName: customerNameParts.slice(1).join(' ') || '',
-                email: navigationState.customer.email || undefined,
-                phone: navigationState.customer.phone || undefined,
-              };
-            } else if (navigationState?.customerId) {
-              // Only customerId available - use minimal info
-              receiptCustomer = {
-                id: navigationState.customerId,
-                firstName: '',
-                lastName: '',
-                email: undefined,
-                phone: undefined,
-              };
-            }
+          id: capturedDetails.id || customerId || 'walk-in-customer',
+          firstName: nameParts[0] || '',
+          lastName: nameParts.slice(1).join(' ') || '',
+          email: capturedDetails.email || undefined,
+          phone: capturedDetails.phone || undefined,
+          customerCode: capturedDetails.id,
+        };
+      }
 
-            promptPrintReceipt({
+      // Store receipt data for display in summary
+      const receiptDataForPrint = {
               invoiceNumber,
+              orderNumber: result.order.orderNumber || invoiceNumber,
+              orderId: result.order.id,
               lineItems: receiptLineItems,
               payments: receiptPayments,
               customer: receiptCustomer,
@@ -547,41 +839,77 @@ export function Payments({
               netTotal,
               tendered,
               change,
-            });
-          } else {
-            console.error('[Payments] Order creation failed:', result.error);
-            show(result.error || 'Failed to complete order', 'error');
-            // Reset flag on failure so user can retry
-            orderCreatedRef.current = false;
-          }
-        } catch (error: any) {
-          console.error('[Payments] Failed to complete order:', error);
-          show(error.message || 'Failed to complete order', 'error');
-          // Reset flag on error so user can retry
-          orderCreatedRef.current = false;
-        } finally {
-          setIsProcessing(false);
-        }
       };
 
-      completeOrder();
+      // Close the completion panel immediately
+      setIsCompletionPanelOpen(false);
+      
+      // Prompt print receipt and wait for data to be set, then print directly
+      // The print success/error callbacks will handle navigation back to transactions and reset
+      try {
+        await promptPrintReceipt(receiptDataForPrint);
+        
+        // Wait a bit for React state to update, then print directly
+        // This will complete the order flow: print if printer connected, then navigate back and reset
+        let navigationHandled = false;
+        const ensureNavigation = () => {
+          if (!navigationHandled && completedOrderRef.current) {
+            navigationHandled = true;
+            console.log('[Payments] Ensuring navigation back to transactions');
+            handleReturnToTransactions();
+          }
+        };
+        
+        setTimeout(async () => {
+          try {
+            await originalConfirmPrint();
+            // onPrintSuccess callback will handle navigation and reset
+            // Set a fallback in case callback doesn't fire
+            setTimeout(ensureNavigation, 1000);
+          } catch (error) {
+            console.error('[Payments] Print error:', error);
+            // onPrintError callback will handle navigation and reset even if print fails
+            // Set a fallback in case callback doesn't fire
+            setTimeout(ensureNavigation, 1000);
+          }
+        }, 300);
+        
+        // Ultimate fallback: ensure navigation happens after reasonable timeout
+        setTimeout(ensureNavigation, 5000);
+      } catch (error) {
+        console.error('[Payments] Failed to prompt print receipt:', error);
+        // Still navigate back even if print setup fails
+        setTimeout(() => {
+          handleReturnToTransactions();
+        }, 500);
+      }
+        } catch (error: any) {
+          console.error('[Payments] Failed to complete order:', error);
+          orderCreatedRef.current = false;
+      show(error.message || 'Failed to complete order', 'error');
+        } finally {
+          setIsProcessing(false);
     }
   }, [
-    payments.length,
     amountDue,
-    isProcessing,
-    salesOrderRepo,
+    amountPaid,
+    capturedCustomer,
+    changeDue,
+    dispatch,
+    lineItems,
+    navigationState,
+    orderBreakdown.discountValue,
+    orderBreakdown.subtotal,
+    orderTotal,
+    payments,
     parkedOrderRepo,
+    salesOrderRepo,
     currentLocationId,
     currentUserId,
-    navigationState,
-    lineItems,
     show,
-    removeItem,
-    navigate,
-    sessionKey,
-    payments,
+    promptPrintReceipt,
   ]);
+
 
   return (
     <div className="h-[calc(100vh-var(--navbar-height,71px))] w-full flex flex-col" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
@@ -602,25 +930,314 @@ export function Payments({
         </div>
       </div>
 
-      {/* Print Confirmation Dialog */}
-      <PrintConfirmationDialog
-        isOpen={showPrintDialog}
-        onConfirm={confirmPrint}
-        onCancel={cancelPrint}
-        onSkip={skipPrint}
-        receiptData={
-          receiptData
-            ? {
-                storeName: receiptData.storeName,
-                invoiceNumber: receiptData.invoiceNumber,
-                totalAmount: receiptData.netTotal,
-                amountPaid: receiptData.tendered,
-                change: receiptData.change,
-              }
-            : undefined
-        }
-        isProcessing={isPrinting}
-      />
+      <SidePanel
+        isOpen={isCompletionPanelOpen}
+        onClose={() => undefined}
+        width="320px"
+        title={completionTitles[completionStep]}
+      >
+        {completionStep === 'phone' && (
+          <div className="flex flex-col h-full">
+            <div className="flex-1 overflow-y-auto space-y-3">
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                  Customer phone
+                </label>
+                <div
+                  className="w-full h-12 px-3 flex items-center gap-2 rounded border"
+                  style={{
+                    backgroundColor: 'var(--color-bg-card)',
+                    color: 'var(--color-text-primary)',
+                    borderColor: 'var(--color-border-light)',
+                  }}
+                >
+                  <Phone
+                    className="w-4 h-4"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  />
+                  <input
+                    ref={phoneInputRef}
+                    type="tel"
+                    value={customerPhoneInput}
+                    onChange={(e) => handlePhoneInputChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handlePhoneNext();
+                      } else if (e.key === 'Backspace' && e.shiftKey) {
+                        e.preventDefault();
+                        // No back step from phone, so do nothing
+                      }
+                    }}
+                    className="flex-1 text-lg font-mono bg-transparent outline-none border-none"
+                    style={{ color: 'var(--color-text-primary)' }}
+                    placeholder="+92 300 1234567"
+                  />
+                </div>
+              </div>
+
+              {customersLoading ? (
+                <div className="text-xs text-center py-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  Loading customers...
+                </div>
+              ) : phoneMatches.length > 0 ? (
+                <div
+                  className="border rounded p-2 space-y-2"
+                  style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-card)' }}
+                >
+                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide" style={{ color: 'var(--color-text-secondary)' }}>
+                    <Search className="w-3 h-3" />
+                    Matching customers
+                  </div>
+                  {phoneMatches.map((match) => (
+                    <button
+                      key={`${match.id}-${match.phone}`}
+                      type="button"
+                      onClick={() => handleSelectSuggestedCustomer(match)}
+                      className="w-full text-left rounded px-2 py-1.5 hover:opacity-80 transition-opacity"
+                      style={{ 
+                        color: 'var(--color-text-primary)',
+                        backgroundColor: 'var(--color-bg-secondary)',
+                      }}
+                    >
+                      <div className="text-sm font-medium">{match.name || 'Customer'}</div>
+                      <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                        {match.phone || 'No phone on file'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : customerPhoneInput.trim() ? (
+                <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  No matching customers found. Continue to add new customer.
+                </div>
+              ) : null}
+
+              {flowError && (
+                <div className="text-xs font-medium text-red-500">{flowError}</div>
+              )}
+            </div>
+
+            <div className="flex-shrink-0 pt-3 border-t" style={{ borderColor: 'var(--color-border-light)' }}>
+              <div className="grid grid-cols-3 gap-1.5">
+                {phoneKeypadKeys.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handlePhoneKeypadInput(key)}
+                    className="h-10 rounded text-base font-medium hover:opacity-80 transition-opacity border"
+                    style={{
+                      backgroundColor: 'var(--color-bg-card)',
+                      color: 'var(--color-text-primary)',
+                      borderColor: 'var(--color-border-light)',
+                    }}
+                  >
+                    {key === 'backspace' ? '⌫' : key === 'clear' ? 'Clear' : key}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-center mt-2" style={{ color: 'var(--color-text-secondary)' }}>
+                Press Enter to continue
+              </p>
+            </div>
+          </div>
+        )}
+
+        {completionStep === 'name' && (
+          <div className="flex flex-col h-full">
+            <div className="flex-1 overflow-y-auto space-y-3">
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                  Customer name
+                </label>
+                <div
+                  className="w-full h-12 px-3 flex items-center gap-2 rounded border"
+                  style={{
+                    backgroundColor: 'var(--color-bg-card)',
+                    color: 'var(--color-text-primary)',
+                    borderColor: 'var(--color-border-light)',
+                  }}
+                >
+                  <User
+                    className="w-4 h-4"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  />
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    value={customerNameInput}
+                    onChange={(e) => setCustomerNameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleNameNext();
+                      } else if (e.key === 'Backspace' && e.shiftKey) {
+                        e.preventDefault();
+                        setCompletionStep('phone');
+                      }
+                    }}
+                    className="flex-1 text-lg font-mono bg-transparent outline-none border-none"
+                    style={{ color: 'var(--color-text-primary)' }}
+                    placeholder="Walk-in customer"
+                  />
+                </div>
+              </div>
+
+              {flowError && (
+                <div className="text-xs font-medium text-red-500">{flowError}</div>
+              )}
+            </div>
+
+            <div className="flex-shrink-0 pt-3 border-t" style={{ borderColor: 'var(--color-border-light)' }}>
+              <p className="text-[10px] text-center" style={{ color: 'var(--color-text-secondary)' }}>
+                Press Enter to continue, Shift+Backspace to go back
+              </p>
+            </div>
+          </div>
+        )}
+
+        {completionStep === 'email' && (
+          <div className="flex flex-col h-full">
+            <div className="flex-1 overflow-y-auto space-y-3">
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                  Customer email (optional)
+                </label>
+                <div
+                  className="w-full h-12 px-3 flex items-center gap-2 rounded border"
+                  style={{
+                    backgroundColor: 'var(--color-bg-card)',
+                    color: 'var(--color-text-primary)',
+                    borderColor: 'var(--color-border-light)',
+                  }}
+                >
+                  <Mail
+                    className="w-4 h-4"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  />
+                  <input
+                    ref={emailInputRef}
+                    type="email"
+                    value={customerEmailInput}
+                    onChange={(e) => setCustomerEmailInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleEmailNext();
+                      } else if (e.key === 'Backspace' && e.shiftKey) {
+                        e.preventDefault();
+                        setCompletionStep('name');
+                      }
+                    }}
+                    className="flex-1 text-lg font-mono bg-transparent outline-none border-none"
+                    style={{ color: 'var(--color-text-primary)' }}
+                    placeholder="customer@email.com"
+                  />
+                </div>
+              </div>
+
+              {flowError && (
+                <div className="text-xs font-medium text-red-500">{flowError}</div>
+              )}
+            </div>
+
+            <div className="flex-shrink-0 pt-3 border-t" style={{ borderColor: 'var(--color-border-light)' }}>
+              <p className="text-[10px] text-center" style={{ color: 'var(--color-text-secondary)' }}>
+                Press Enter to continue, Shift+Backspace to go back
+              </p>
+            </div>
+          </div>
+        )}
+
+        {completionStep === 'summary' && (
+          <div className="flex flex-col h-full">
+            <div className="flex-1 overflow-y-auto space-y-3">
+              <div
+                className="border rounded p-3 space-y-2"
+                style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-card)' }}
+              >
+                <div className="flex items-center justify-between text-xs uppercase tracking-wide" style={{ color: 'var(--color-text-secondary)' }}>
+                  <span>Order detail</span>
+                  <span>{lineItems.length} items</span>
+                </div>
+                <div className="space-y-1 text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                  {lineItems.slice(0, 3).map((item: any) => (
+                    <div key={item.id} className="flex items-center justify-between gap-2">
+                      <span className="truncate">{item.name}</span>
+                      <span>
+                        {item.quantity} × {formatCurrency(Number(item.price || 0))}
+                      </span>
+                    </div>
+                  ))}
+                  {lineItems.length > 3 && (
+                    <div className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+                      + {lineItems.length - 3} more item(s)
+                    </div>
+                  )}
+                </div>
+                <div className="pt-2 mt-2 border-t" style={{ borderColor: 'var(--color-border-light)' }}>
+                  <div className="flex items-center justify-between text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(orderBreakdown.subtotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                    <span>Discounts</span>
+                    <span>-{formatCurrency(orderBreakdown.discountValue)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                    <span>Total</span>
+                    <span>{formatCurrency(orderTotal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className="border rounded p-3 space-y-1"
+                style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-card)' }}
+              >
+                <div className="flex items-center justify-between text-xs uppercase tracking-wide" style={{ color: 'var(--color-text-secondary)' }}>
+                  <span>Customer detail</span>
+                  <button
+                    type="button"
+                    onClick={() => setCompletionStep('phone')}
+                    className="text-[11px] underline"
+                    style={{ color: 'var(--color-accent-blue)' }}
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                  {activeCustomerDetails?.name || 'Walk-in customer'}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  {activeCustomerDetails?.phone || 'Phone not provided'}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  {activeCustomerDetails?.email || 'Email not provided'}
+                </div>
+              </div>
+
+              {flowError && (
+                <div className="text-xs font-medium text-red-500">{flowError}</div>
+              )}
+            </div>
+
+            <div className="flex-shrink-0 pt-3 border-t" style={{ borderColor: 'var(--color-border-light)' }}>
+              <button
+                type="button"
+                onClick={finalizeOrder}
+                disabled={isProcessing}
+                className="w-full rounded py-2 font-semibold flex items-center justify-center gap-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: '#ea580c', color: 'white' }}
+              >
+                <Printer className="w-4 h-4" />
+                {isProcessing ? 'Finishing...' : 'Generate Bill'}
+              </button>
+            </div>
+          </div>
+        )}
+      </SidePanel>
+
     </div>
   );
 }
