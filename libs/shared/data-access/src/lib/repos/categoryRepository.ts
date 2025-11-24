@@ -77,7 +77,7 @@ export class CategoryRepository {
 
     // If explicitly disabled, use offline mode directly
     if (useServer === false) {
-      console.log('[CategoryRepository] Server disabled, using offline mode');
+      // console.log('[CategoryRepository] Server disabled, using offline mode');
       return await this.getCategoriesOffline(includeInactive);
     }
 
@@ -86,42 +86,42 @@ export class CategoryRepository {
     
     if (useServer === undefined) {
       // Auto-detect: Try server first, then fallback to offline
-      console.log('[CategoryRepository] Auto-mode: Will try server first, then fallback to offline');
+      // console.log('[CategoryRepository] Auto-mode: Will try server first, then fallback to offline');
       shouldUseServer = true; // Always try server first in auto mode
     } else {
-      console.log('[CategoryRepository] Server usage explicitly set:', useServer);
+      // console.log('[CategoryRepository] Server usage explicitly set:', useServer);
       shouldUseServer = useServer;
     }
 
     // Try online mode if server should be used
     if (shouldUseServer) {
-      console.log('[CategoryRepository] Attempting online mode...');
+      // console.log('[CategoryRepository] Attempting online mode...');
       try {
         const result = await this.getCategoriesOnline(includeInactive);
         if (result.success && result.categories) {
-          console.log('[CategoryRepository] Online mode successful, syncing to local DB...');
+          // console.log('[CategoryRepository] Online mode successful, syncing to local DB...');
           
           // Sync categories to local database for offline access
           try {
             await this.syncCategoriesToLocal(result.categories);
-            console.log('[CategoryRepository] ✓ Categories synced to local DB');
+            // console.log('[CategoryRepository] ✓ Categories synced to local DB');
           } catch (syncError) {
             const errorMsg = syncError instanceof Error ? syncError.message : String(syncError);
-            console.warn('[CategoryRepository] ⚠️ Failed to sync categories to local DB (non-fatal):', errorMsg);
+            // console.warn('[CategoryRepository] ⚠️ Failed to sync categories to local DB (non-fatal):', errorMsg);
             // Don't fail the request if sync fails
           }
           
           return result;
         } else {
-          console.warn('[CategoryRepository] Online mode returned unsuccessful result');
+          // console.warn('[CategoryRepository] Online mode returned unsuccessful result');
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.warn('[CategoryRepository] Online mode failed, trying offline:', errorMsg);
+        // console.warn('[CategoryRepository] Online mode failed, trying offline:', errorMsg);
         // Continue to offline mode below
       }
     } else {
-      console.log('[CategoryRepository] Skipping online mode (server explicitly disabled)');
+      // console.log('[CategoryRepository] Skipping online mode (server explicitly disabled)');
     }
 
     // Fall back to offline mode
@@ -133,18 +133,18 @@ export class CategoryRepository {
    */
   private async getCategoriesOnline(includeInactive: boolean): Promise<GetCategoriesResult> {
     try {
-      console.log('[CategoryRepository] Calling /api/categories');
+      // console.log('[CategoryRepository] Calling /api/categories');
       const response = await this.apiClient.get<{
         success: boolean;
         data: Category[];
         count: number;
       }>(`/api/categories?includeInactive=${includeInactive}`);
       
-      console.log('[CategoryRepository] API response:', {
-        success: response.success,
-        hasData: !!response.data,
-        count: response.count || 0,
-      });
+      // console.log('[CategoryRepository] API response:', {
+      //   success: response.success,
+      //   hasData: !!response.data,
+      //   count: response.count || 0,
+      // });
 
       if (response.success && response.data) {
         return {
@@ -154,14 +154,14 @@ export class CategoryRepository {
         };
       }
 
-      console.warn('[CategoryRepository] Invalid response structure:', response);
+      // console.warn('[CategoryRepository] Invalid response structure:', response);
       return {
         success: false,
         error: 'Invalid response from server',
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error('[CategoryRepository] Online fetch exception:', errorMsg);
+      // console.error('[CategoryRepository] Online fetch exception:', errorMsg);
       return {
         success: false,
         error: errorMsg,
@@ -174,9 +174,9 @@ export class CategoryRepository {
    */
   private async getCategoriesOffline(includeInactive: boolean): Promise<GetCategoriesResult> {
     try {
-      console.log('[CategoryRepository] ========== OFFLINE MODE ==========');
-      console.log('[CategoryRepository] Include inactive:', includeInactive);
-      console.log('[CategoryRepository] Database type:', this.localDb.constructor.name);
+      // console.log('[CategoryRepository] ========== OFFLINE MODE ==========');
+      // console.log('[CategoryRepository] Include inactive:', includeInactive);
+      // console.log('[CategoryRepository] Database type:', this.localDb.constructor.name);
       
       // Query categories from local database
       // For IndexedDB, we need to get all and filter in-memory
@@ -187,10 +187,10 @@ export class CategoryRepository {
       
       if (isIndexedDB) {
         // For IndexedDB: Get all categories and filter in JavaScript
-        console.log('[CategoryRepository] Using IndexedDB - fetching all categories');
+        // console.log('[CategoryRepository] Using IndexedDB - fetching all categories');
         categories = await this.localDb.query<Category>('SELECT * FROM Category');
         
-        console.log('[CategoryRepository] Fetched from IndexedDB:', categories.length);
+        // console.log('[CategoryRepository] Fetched from IndexedDB:', categories.length);
         
         // Filter by isActive if needed
         if (!includeInactive) {
@@ -199,7 +199,7 @@ export class CategoryRepository {
               typeof cat.isActive === 'number' ? cat.isActive === 1 : !!cat.isActive;
             return isActiveValue;
           });
-          console.log('[CategoryRepository] After filtering active:', categories.length);
+          // console.log('[CategoryRepository] After filtering active:', categories.length);
         }
         
         // Sort manually
@@ -217,10 +217,10 @@ export class CategoryRepository {
         );
       }
 
-      console.log('[CategoryRepository] Final query result:', {
-        categoryCount: categories.length,
-        firstCategory: categories[0]?.name,
-      });
+      // console.log('[CategoryRepository] Final query result:', {
+      //   categoryCount: categories.length,
+      //   firstCategory: categories[0]?.name,
+      // });
 
       // Build hierarchy: parent-child relationships
       const categoriesWithHierarchy = await this.buildCategoryHierarchy(categories);
@@ -232,7 +232,7 @@ export class CategoryRepository {
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error('[CategoryRepository] ✗ Offline fetch failed:', errorMsg);
+      // console.error('[CategoryRepository] ✗ Offline fetch failed:', errorMsg);
       return {
         success: false,
         error: errorMsg,
@@ -286,7 +286,7 @@ export class CategoryRepository {
             products: countResult.length > 0 ? countResult[0].count : 0,
           };
         } catch (countError) {
-          console.warn('[CategoryRepository] Failed to get product count for category:', category.id);
+          // console.warn('[CategoryRepository] Failed to get product count for category:', category.id);
           category._count = { products: 0 };
         }
 
@@ -295,7 +295,7 @@ export class CategoryRepository {
 
       return result;
     } catch (error) {
-      console.error('[CategoryRepository] Error building hierarchy:', error);
+      // console.error('[CategoryRepository] Error building hierarchy:', error);
       // Return flat list if hierarchy building fails
       return categories;
     }
@@ -306,7 +306,7 @@ export class CategoryRepository {
    */
   private async syncCategoriesToLocal(categories: Category[]): Promise<void> {
     try {
-      console.log('[CategoryRepository] Syncing', categories.length, 'categories to local DB');
+      // console.log('[CategoryRepository] Syncing', categories.length, 'categories to local DB');
       
       // Check if we're using IndexedDB (web app)
       const isIndexedDB = this.localDb.constructor.name === 'WebIndexedDbClient';
@@ -315,10 +315,10 @@ export class CategoryRepository {
         await this.saveCategoryToLocal(category, isIndexedDB);
       }
       
-      console.log('[CategoryRepository] ✓ Synced', categories.length, 'categories successfully');
+      // console.log('[CategoryRepository] ✓ Synced', categories.length, 'categories successfully');
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error('[CategoryRepository] ✗ Failed to sync categories:', errorMsg);
+      // console.error('[CategoryRepository] ✗ Failed to sync categories:', errorMsg);
       throw error;
     }
   }
@@ -407,7 +407,7 @@ export class CategoryRepository {
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error('[CategoryRepository] ✗ Failed to save category:', category.id, errorMsg);
+      // console.error('[CategoryRepository] ✗ Failed to save category:', category.id, errorMsg);
       throw error;
     }
   }
@@ -432,12 +432,12 @@ export class CategoryRepository {
             const isIndexedDB = this.localDb.constructor.name === 'WebIndexedDbClient';
             await this.saveCategoryToLocal(response.data, isIndexedDB);
           } catch (syncError) {
-            console.warn('[CategoryRepository] Failed to sync category to local DB:', syncError);
+            // console.warn('[CategoryRepository] Failed to sync category to local DB:', syncError);
           }
           return response.data;
         }
       } catch (error) {
-        console.warn('[CategoryRepository] Failed to fetch category from server, trying local:', error);
+        // console.warn('[CategoryRepository] Failed to fetch category from server, trying local:', error);
       }
     }
 
@@ -492,7 +492,7 @@ export class CategoryRepository {
 
       return category;
     } catch (error) {
-      console.error('[CategoryRepository] Failed to get category from local DB:', error);
+      // console.error('[CategoryRepository] Failed to get category from local DB:', error);
       return null;
     }
   }

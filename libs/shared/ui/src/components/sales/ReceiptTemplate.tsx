@@ -59,9 +59,9 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
     tendered,
     change,
     footerText = [
-      'REFUND',
+      'ALLOW REFUND',
       'EXCHANGE WITH IN 7 DAYS',
-      'NO CLAIM IMPORTED & SALE ITMES',
+      'NO CLAIM IMPORTED & SALE ITEMS',
       'Thanks for visiting us',
     ],
   } = data;
@@ -182,7 +182,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
             marginBottom: '3mm',
           }}
         >
-          Customer: {customer.name}
+          Customer: {`${customer.firstName} ${customer.lastName}`.trim()}
         </div>
       )}
 
@@ -229,34 +229,15 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
       {lineItems.map((item, index) => {
         const discountPercent = item.saleDiscount?.percent || 0;
         const customDiscount = item.customDiscount?.amount || 0;
+        
+        // Get product name from variant or extended properties
+        const productName = (item as any).productName || item.variant?.product?.name || 'Item';
+        const variantName = (item as any).variantName || item.variant?.variantName;
+        const sku = (item as any).sku || item.variant?.sku;
 
         return (
           <div key={item.id || index} style={{ marginBottom: '3mm' }}>
-            {/* Product Name and SKU */}
-            <div
-              style={{
-                fontSize: '11px',
-                fontWeight: 'bold',
-                marginBottom: '1mm',
-              }}
-            >
-              {item.productName} {item.variantName && `- ${item.variantName}`}
-            </div>
-
-            {/* SKU */}
-            {item.sku && (
-              <div
-                style={{
-                  fontSize: '10px',
-                  marginBottom: '1mm',
-                  color: '#333',
-                }}
-              >
-                {item.sku}
-              </div>
-            )}
-
-            {/* Item Details Row */}
+            {/* Item Details Row - Product name in first column */}
             <div
               style={{
                 display: 'flex',
@@ -264,7 +245,9 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
                 fontSize: '11px',
               }}
             >
-              <div style={{ flex: '2' }}></div>
+              <div style={{ flex: '2', fontWeight: 'bold', wordBreak: 'break-word' }}>
+                {productName} {variantName && `- ${variantName}`}
+              </div>
               <div style={{ width: '50px', textAlign: 'center' }}>
                 {item.unitPrice.toFixed(0)}
               </div>
@@ -293,22 +276,33 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
         }}
       />
 
-      {/* Totals Section */}
+      {/* Totals Section - Match table column widths */}
       <div style={{ fontSize: '11px', marginBottom: '1mm' }}>
         <div
           style={{
             display: 'flex',
-            justifyContent: 'space-between',
+            fontSize: '11px',
             marginBottom: '1mm',
           }}
         >
-          <div>Total</div>
-          <div>{lineItems.length}</div>
-          <div style={{ textAlign: 'right', minWidth: '80px' }}>
+          <div style={{ flex: '2' }}>Total {lineItems.length}</div>
+          <div style={{ width: '50px', textAlign: 'center' }}></div>
+          <div style={{ width: '30px', textAlign: 'center' }}></div>
+          <div style={{ width: '40px', textAlign: 'center' }}></div>
+          <div style={{ width: '30px', textAlign: 'center' }}></div>
+          <div style={{ width: '60px', textAlign: 'right' }}>
             {grossTotal.toFixed(2)}
           </div>
         </div>
       </div>
+
+      {/* Separator Line */}
+      <div
+        style={{
+          borderTop: '1px dashed #000',
+          margin: '3mm 0',
+        }}
+      />
 
       {/* Financial Summary */}
       <div
@@ -326,7 +320,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
           }}
         >
           <div>Gross Total:</div>
-          <div>Rs {grossTotal.toFixed(2)}</div>
+          <div style={{ textAlign: 'right', minWidth: '80px' }}>Rs {grossTotal.toFixed(2)}</div>
         </div>
 
         <div
@@ -337,7 +331,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
           }}
         >
           <div>Item Discount:</div>
-          <div>-Rs {itemDiscount.toFixed(2)}</div>
+          <div style={{ textAlign: 'right', minWidth: '80px' }}>-Rs {itemDiscount.toFixed(2)}</div>
         </div>
 
         <div
@@ -348,7 +342,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
           }}
         >
           <div>Net Total:</div>
-          <div>Rs {netTotal.toFixed(2)}</div>
+          <div style={{ textAlign: 'right', minWidth: '80px' }}>Rs {netTotal.toFixed(2)}</div>
         </div>
 
         <div
@@ -358,9 +352,8 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
             marginBottom: '1mm',
           }}
         >
-          <div>Tendered:</div>
-          <div>{payments[0]?.paymentMethod?.type || 'Cash'}:</div>
-          <div>Rs {tendered.toFixed(2)}</div>
+          <div>Tendered: {payments[0]?.paymentMethod?.type || 'Cash'}:</div>
+          <div style={{ textAlign: 'right', minWidth: '80px' }}>Rs {tendered.toFixed(2)}</div>
         </div>
 
         <div
@@ -370,7 +363,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
           }}
         >
           <div>Change:</div>
-          <div>Rs {change.toFixed(2)}</div>
+          <div style={{ textAlign: 'right', minWidth: '80px' }}>Rs {change.toFixed(2)}</div>
         </div>
       </div>
 
@@ -383,19 +376,27 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
       />
 
       {/* Footer Text */}
-      {footerText.map((line, index) => (
-        <div
-          key={index}
-          style={{
-            textAlign: 'center',
-            fontSize: '11px',
-            marginBottom: '1mm',
-            fontWeight: index === footerText.length - 1 ? 'bold' : 'normal',
-          }}
-        >
-          {line}
-        </div>
-      ))}
+      {footerText.map((line, index) => {
+        const isLastLine = index === footerText.length - 1;
+        return (
+          <div
+            key={index}
+            style={{
+              textAlign: isLastLine ? 'center' : 'left', // Center-align last line (Thanks for visiting us)
+              fontSize: '11px',
+              marginBottom: '1mm',
+              marginTop: isLastLine ? '3mm' : '0',
+              paddingTop: isLastLine ? '3mm' : '0',
+              paddingBottom: isLastLine ? '3mm' : '0',
+              borderTop: isLastLine ? '1px dashed #000' : 'none',
+              borderBottom: isLastLine ? '1px dashed #000' : 'none',
+              fontWeight: isLastLine ? 'bold' : 'normal',
+            }}
+          >
+            {line}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -439,7 +440,7 @@ export function generateReceiptHTML(data: ReceiptData): string {
         <div class="center" style="font-size: 11px; margin-bottom: 3mm;">${data.dateTime}</div>
         ${data.cashier ? `<div style="font-size: 11px; margin-bottom: 1mm;">Cashier: ${data.cashier}</div>` : ''}
         <div style="font-size: 11px; margin-bottom: 1mm;">Mode of Payment: ${data.payments[0]?.paymentMethod?.type || 'Cash'}</div>
-        ${data.customer ? `<div style="font-size: 11px; margin-bottom: 3mm;">Customer: ${data.customer.name}</div>` : ''}
+        ${data.customer ? `<div style="font-size: 11px; margin-bottom: 3mm;">Customer: ${`${data.customer.firstName} ${data.customer.lastName}`.trim()}</div>` : ''}
         <div class="separator"></div>
         <div class="center" style="font-size: 11px; margin-bottom: 3mm;">------------ Original ------------</div>
         <div class="flex bold" style="font-size: 11px; margin-bottom: 2mm; padding-bottom: 1mm; border-bottom: 1px solid #000;">
@@ -453,12 +454,14 @@ export function generateReceiptHTML(data: ReceiptData): string {
         ${data.lineItems.map(item => {
           const discountPercent = item.saleDiscount?.percent || 0;
           const customDiscount = item.customDiscount?.amount || 0;
+          // Get product name from variant or extended properties
+          const productName = (item as any).productName || item.variant?.product?.name || 'Item';
+          const variantName = (item as any).variantName || item.variant?.variantName;
+          const sku = (item as any).sku || item.variant?.sku;
           return `
             <div style="margin-bottom: 3mm;">
-              <div class="bold" style="font-size: 11px; margin-bottom: 1mm;">${item.productName}${item.variantName ? ` - ${item.variantName}` : ''}</div>
-              ${item.sku ? `<div style="font-size: 10px; margin-bottom: 1mm; color: #333;">${item.sku}</div>` : ''}
               <div class="flex" style="font-size: 11px;">
-                <div style="flex: 2;"></div>
+                <div style="flex: 2; font-weight: bold; word-break: break-word;">${productName}${variantName ? ` - ${variantName}` : ''}</div>
                 <div style="width: 50px; text-align: center;">${item.unitPrice.toFixed(0)}</div>
                 <div style="width: 30px; text-align: center;">${item.quantity}</div>
                 <div style="width: 40px; text-align: center;">${discountPercent > 0 ? `${discountPercent}%` : '0%'}</div>
@@ -470,35 +473,46 @@ export function generateReceiptHTML(data: ReceiptData): string {
         }).join('')}
         <div class="separator"></div>
         <div class="flex" style="font-size: 11px; margin-bottom: 1mm;">
-          <div>Total</div>
-          <div>${data.lineItems.length}</div>
-          <div style="text-align: right; min-width: 80px;">${data.grossTotal.toFixed(2)}</div>
+          <div style="flex: 2;">Total ${data.lineItems.length}</div>
+          <div style="width: 50px; text-align: center;"></div>
+          <div style="width: 30px; text-align: center;"></div>
+          <div style="width: 40px; text-align: center;"></div>
+          <div style="width: 30px; text-align: center;"></div>
+          <div style="width: 60px; text-align: right;">${data.grossTotal.toFixed(2)}</div>
         </div>
+        <div class="separator"></div>
         <div class="bold" style="font-size: 12px; margin-top: 3mm;">
           <div class="flex" style="margin-bottom: 1mm;">
             <div>Gross Total:</div>
-            <div>Rs ${data.grossTotal.toFixed(2)}</div>
+            <div style="text-align: right; min-width: 80px;">Rs ${data.grossTotal.toFixed(2)}</div>
           </div>
           <div class="flex" style="margin-bottom: 1mm;">
             <div>Item Discount:</div>
-            <div>-Rs ${data.itemDiscount.toFixed(2)}</div>
+            <div style="text-align: right; min-width: 80px;">-Rs ${data.itemDiscount.toFixed(2)}</div>
           </div>
           <div class="flex" style="margin-bottom: 3mm;">
             <div>Net Total:</div>
-            <div>Rs ${data.netTotal.toFixed(2)}</div>
+            <div style="text-align: right; min-width: 80px;">Rs ${data.netTotal.toFixed(2)}</div>
           </div>
           <div class="flex" style="margin-bottom: 1mm;">
-            <div>Tendered:</div>
-            <div>${data.payments[0]?.paymentMethod?.type || 'Cash'}:</div>
-            <div>Rs ${data.tendered.toFixed(2)}</div>
+            <div>Tendered: ${data.payments[0]?.paymentMethod?.type || 'Cash'}:</div>
+            <div style="text-align: right; min-width: 80px;">Rs ${data.tendered.toFixed(2)}</div>
           </div>
           <div class="flex">
             <div>Change:</div>
-            <div>Rs ${data.change.toFixed(2)}</div>
+            <div style="text-align: right; min-width: 80px;">Rs ${data.change.toFixed(2)}</div>
           </div>
         </div>
         <div class="separator"></div>
-        ${data.footerText?.map((line, i) => `<div class="center" style="font-size: 11px; margin-bottom: 1mm; ${i === data.footerText!.length - 1 ? 'font-weight: bold;' : ''}">${line}</div>`).join('') || ''}
+        ${(data.footerText || [
+          'ALLOW REFUND',
+          'EXCHANGE WITH IN 7 DAYS',
+          'NO CLAIM IMPORTED & SALE ITEMS',
+          'Thanks for visiting us',
+        ]).map((line, i, arr) => {
+          const isLastLine = i === arr.length - 1;
+          return `<div style="text-align: ${isLastLine ? 'center' : 'left'}; font-size: 11px; margin-bottom: ${isLastLine ? '1mm' : '1mm'}; margin-top: ${isLastLine ? '3mm' : '0'}; padding-top: ${isLastLine ? '3mm' : '0'}; padding-bottom: ${isLastLine ? '3mm' : '0'}; border-top: ${isLastLine ? '1px dashed #000' : 'none'}; border-bottom: ${isLastLine ? '1px dashed #000' : 'none'}; ${isLastLine ? 'font-weight: bold;' : ''}">${line}</div>`;
+        }).join('')}
       </body>
     </html>
   `;

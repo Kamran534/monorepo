@@ -1244,6 +1244,32 @@ function setupIpcHandlers(): void {
     }
   });
 
+  ipcMain.handle('order:get-all', async (_event, options) => {
+    // console.log('[IPC] order:get-all called');
+    try {
+      const { SalesOrderRepository } = await import('@monorepo/shared-data-access');
+      const localDb = dataAccessService.getLocalDb();
+      const apiClient = dataAccessService.getApiClient();
+
+      if (!localDb || !apiClient) {
+        throw new Error('Database or API client not initialized');
+      }
+
+      const salesOrderRepo = new SalesOrderRepository(localDb, apiClient);
+      const result = await salesOrderRepo.getOrders(options);
+
+      // console.log('[IPC] order:get-all result:', { success: result.success, count: result.orders?.length });
+      return result;
+    } catch (error) {
+      // console.error('[IPC] order:get-all error:', error);
+      return {
+        success: false,
+        orders: [],
+        error: error instanceof Error ? error.message : 'Failed to get orders',
+      };
+    }
+  });
+
   ipcMain.handle('order:park', async (_event, orderData) => {
     // console.log('[IPC] order:park called');
     try {
@@ -1427,6 +1453,35 @@ function setupIpcHandlers(): void {
     try {
       // console.log('[Print] Starting silent print...');
       
+      // Check if printers are available before attempting to print
+      // This prevents the "Save as PDF" dialog from appearing when no printer is connected
+      const webContents = event.sender;
+      let printers: Electron.PrinterInfo[] = [];
+      let hasPrinters = false;
+      
+      try {
+        printers = await webContents.getPrintersAsync();
+        // Filter out virtual printers like "Microsoft Print to PDF" and "Save as PDF"
+        const realPrinters = printers.filter(p => 
+          !p.name.toLowerCase().includes('pdf') && 
+          !p.name.toLowerCase().includes('save as') &&
+          !p.name.toLowerCase().includes('microsoft print to pdf')
+        );
+        hasPrinters = realPrinters.length > 0;
+      } catch (printerError) {
+        // If getPrintersAsync fails, assume no printers
+        // console.log('[Print] Could not get printers list');
+        hasPrinters = false;
+      }
+      
+      if (!hasPrinters) {
+        // No real printers available - skip printing entirely
+        // PDF is already saved, so just return success without printing
+        // This prevents Windows from showing "Save as PDF" dialog
+        // console.log('[Print] No real printers available, skipping print (PDF already saved)');
+        return { success: false, printerMissing: true };
+      }
+
       // Create a hidden window for printing
       const printWindow = new BrowserWindow({
         show: false,
@@ -1443,44 +1498,120 @@ function setupIpcHandlers(): void {
       // Wait for content to be ready
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Print silently
+      // Print silently - ensure no dialogs appear
       const printOptions = {
-        silent: options?.silent ?? true,
+        silent: true, // Force silent - no dialogs
         printBackground: options?.printBackground ?? true,
         deviceName: options?.deviceName || '',
+        pages: '', // Print all pages
       };
 
       // console.log('[Print] Printing with options:', printOptions);
 
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve) => {
+        // Attempt silent print - never show dialogs
         printWindow.webContents.print(printOptions, (success, failureReason) => {
           printWindow.close();
           
+          // Always resolve - never reject to prevent any dialogs
           if (success) {
             // console.log('[Print] Print successful');
             resolve({ success: true });
           } else {
-            // console.error('[Print] Print failed:', failureReason);
-            // Check if failure reason indicates printer is missing
-            const failureReasonLower = (failureReason || '').toLowerCase();
-            const isPrinterMissing = 
-              failureReasonLower.includes('printer') ||
-              failureReasonLower.includes('device not found') ||
-              failureReasonLower.includes('no printer') ||
-              failureReasonLower.includes('printer not found') ||
-              failureReasonLower.includes('printer unavailable');
-            
-            if (isPrinterMissing) {
-              reject(new Error('Printer Missing: No printer is connected to your device. Please connect a printer and try again.'));
-            } else {
-              reject(new Error(failureReason || 'Print failed'));
-            }
+            // Print failed - but PDF is already saved, so just resolve silently
+            // Don't show any dialogs or errors
+            // console.log('[Print] Print failed (silent):', failureReason);
+            resolve({ success: false, printerMissing: true });
           }
         });
       });
     } catch (error) {
       // console.error('[IPC] print-content error:', error);
-      throw error;
+      // Don't throw - just return failure to prevent any dialogs
+      return { success: false, printerMissing: true };
+    }
+  });
+
+  // Save PDF handler - automatically save receipt as PDF
+  ipcMain.handle('save-pdf', async (event, options) => {
+    try {
+      const { htmlContent, orderId } = options;
+      if (!htmlContent || !orderId) {
+        throw new Error('htmlContent and orderId are required');
+      }
+
+      // Create a hidden window for PDF generation
+      const pdfWindow = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+        },
+      });
+
+      // Load the HTML content
+      await pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+
+      // Wait for content to be ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Generate PDF
+      const pdfData = await pdfWindow.webContents.printToPDF({
+        printBackground: true,
+        margins: {
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+        },
+        pageSize: 'A4',
+      });
+
+      pdfWindow.close();
+
+      // Create directory structure: assets/bills/YYYY-MM-DD/
+      const date = new Date();
+      const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Find project root directory
+      let projectRoot = __dirname;
+      if (app.isPackaged) {
+        // In production, use app directory
+        projectRoot = process.resourcesPath ? join(process.resourcesPath, '..') : app.getAppPath();
+      } else {
+        // In development, find monorepo root
+        // From dist/main/services -> dist/main -> dist -> apps/desktop -> monorepo
+        let currentDir = __dirname; // dist/main/services
+        while (currentDir !== '/' && currentDir !== '\\') {
+          const parentDir = join(currentDir, '..');
+          if (require('fs').existsSync(join(parentDir, 'package.json'))) {
+            projectRoot = parentDir;
+            break;
+          }
+          currentDir = parentDir;
+        }
+      }
+      
+      // Create assets/bills/date directory in project root
+      const billsDir = join(projectRoot, 'assets', 'bills', dateStr);
+      
+      // Ensure directory exists
+      const fs = require('fs');
+      if (!fs.existsSync(billsDir)) {
+        fs.mkdirSync(billsDir, { recursive: true });
+      }
+
+      // Save PDF file with order ID as filename
+      const pdfPath = join(billsDir, `${orderId}.pdf`);
+      fs.writeFileSync(pdfPath, pdfData);
+
+      return { success: true, path: pdfPath };
+    } catch (error) {
+      // console.error('[IPC] save-pdf error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save PDF',
+      };
     }
   });
 }
@@ -1524,6 +1655,15 @@ async function createWindow() {
 
   // Log console messages from preload and renderer
   win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    // Suppress DevTools Autofill errors (these are harmless Chrome DevTools warnings)
+    if (typeof message === 'string' && (
+      message.includes('Autofill.enable') ||
+      message.includes('Autofill.setAddresses') ||
+      message.includes("'Autofill.enable' wasn't found") ||
+      message.includes("'Autofill.setAddresses' wasn't found")
+    )) {
+      return; // Ignore these DevTools errors
+    }
     const levelStr = ['verbose', 'info', 'warning', 'error'][level] || 'log';
     // console.log(`[Renderer Console:${levelStr}] ${message}`);
   });

@@ -141,8 +141,31 @@ export function TransactionLines({
 
       {/* Content Area */}
       <div
-        className="overflow-y-auto min-h-0 flex-1"
+        className="overflow-y-auto min-h-0 flex-1 transaction-lines-scroll-container"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'var(--color-border-light) var(--color-bg-secondary)',
+        }}
       >
+        <style>{`
+          .transaction-lines-scroll-container::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+          }
+          .transaction-lines-scroll-container::-webkit-scrollbar-track {
+            background: var(--color-bg-secondary);
+            border-radius: 10px;
+          }
+          .transaction-lines-scroll-container::-webkit-scrollbar-thumb {
+            background-color: var(--color-border-light);
+            border-radius: 10px;
+            border: 2px solid var(--color-bg-secondary);
+            transition: background-color 0.2s ease;
+          }
+          .transaction-lines-scroll-container::-webkit-scrollbar-thumb:hover {
+            background-color: var(--color-border-medium);
+          }
+        `}</style>
         {activeTab === 'payments' ? (
           // Payments tab: Show payment methods
           paymentMethods.length === 0 ? (
@@ -213,7 +236,7 @@ export function TransactionLines({
             <div className="p-2 md:p-4 space-y-1.5 md:space-y-2 h-full">
               {/* Header Row */}
               <div
-                className="grid grid-cols-[1.4fr,0.9fr,1.1fr,1.1fr] gap-3 px-3 py-1 rounded text-[10px] md:text-xs font-semibold uppercase tracking-wide sticky top-0 z-10"
+                className="grid grid-cols-[2.2fr,0.8fr,1fr,1fr] gap-3 px-3 py-1 rounded text-[10px] md:text-xs font-semibold uppercase tracking-wide sticky top-0 z-10"
                 style={{
                   backgroundColor: 'var(--color-bg-card)',
                   color: 'var(--color-text-secondary)',
@@ -239,7 +262,7 @@ export function TransactionLines({
                         onClick={() => {
                           onItemSelect?.(item.id);
                         }}
-                        className="grid grid-cols-[1.4fr,0.9fr,1.1fr,1.1fr] gap-3 px-3 py-2 md:py-2.5 rounded cursor-pointer hover:opacity-80"
+                        className="grid grid-cols-[2.2fr,0.8fr,1fr,1fr] gap-3 px-3 py-2 md:py-2.5 rounded cursor-pointer hover:opacity-80"
                         style={{
                           backgroundColor: isSelected
                             ? 'var(--color-accent-blue)'
@@ -269,7 +292,7 @@ export function TransactionLines({
                               <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
                             )}
                           </button>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="font-medium text-xs md:text-sm truncate">
                               {item.name}
                             </div>

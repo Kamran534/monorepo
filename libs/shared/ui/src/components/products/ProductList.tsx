@@ -256,7 +256,32 @@ export function ProductList({
     return (
       <div className={`w-full h-full flex flex-col ${className}`} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
         {/* Grid View */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4">
+        <div 
+          className="flex-1 min-h-0 overflow-y-auto p-4 product-list-grid-scroll-container"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'var(--color-border-light) var(--color-bg-primary)',
+          }}
+        >
+          <style>{`
+            .product-list-grid-scroll-container::-webkit-scrollbar {
+              width: 10px;
+              height: 10px;
+            }
+            .product-list-grid-scroll-container::-webkit-scrollbar-track {
+              background: var(--color-bg-primary);
+              border-radius: 10px;
+            }
+            .product-list-grid-scroll-container::-webkit-scrollbar-thumb {
+              background-color: var(--color-border-light);
+              border-radius: 10px;
+              border: 2px solid var(--color-bg-primary);
+              transition: background-color 0.2s ease;
+            }
+            .product-list-grid-scroll-container::-webkit-scrollbar-thumb:hover {
+              background-color: var(--color-border-medium);
+            }
+          `}</style>
           <div 
             className="grid gap-4"
             style={{
@@ -320,7 +345,32 @@ export function ProductList({
       </div>
 
       {/* Product Rows - Scrollable */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div 
+        className="flex-1 min-h-0 overflow-y-auto product-list-table-scroll-container"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'var(--color-border-light) var(--color-bg-primary)',
+        }}
+      >
+        <style>{`
+          .product-list-table-scroll-container::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+          }
+          .product-list-table-scroll-container::-webkit-scrollbar-track {
+            background: var(--color-bg-primary);
+            border-radius: 10px;
+          }
+          .product-list-table-scroll-container::-webkit-scrollbar-thumb {
+            background-color: var(--color-border-light);
+            border-radius: 10px;
+            border: 2px solid var(--color-bg-primary);
+            transition: background-color 0.2s ease;
+          }
+          .product-list-table-scroll-container::-webkit-scrollbar-thumb:hover {
+            background-color: var(--color-border-medium);
+          }
+        `}</style>
         {products.map((product) => {
           const isSelected = product.id === selectedProductId;
           

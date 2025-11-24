@@ -18,6 +18,10 @@ try {
       // console.log('[Preload] Print called with options:', options);
       return ipcRenderer.invoke('print-content', options);
     },
+    savePDF: (options: { htmlContent: string; orderId: string }) => {
+      // console.log('[Preload] savePDF called');
+      return ipcRenderer.invoke('save-pdf', options);
+    },
     // Connection management API
     connection: {
       getState: () => {
@@ -125,6 +129,10 @@ try {
       create: (orderData: any) => {
         // console.log('[Preload] order.create called');
         return ipcRenderer.invoke('order:create', orderData);
+      },
+      getAll: (options?: { page?: number; limit?: number; locationId?: string; status?: string }) => {
+        // console.log('[Preload] order.getAll called');
+        return ipcRenderer.invoke('order:get-all', options);
       },
       park: (orderData: any) => {
         // console.log('[Preload] order.park called');

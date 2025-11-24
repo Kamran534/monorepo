@@ -9,6 +9,7 @@ import { Sales } from '../pages/Sales';
 import { Payments } from '../pages/Payments';
 import { Login } from '../pages/Login';
 import { ReturnTransaction } from '../pages/ReturnTransaction';
+import { Orders } from '../pages/Orders';
 
 /**
  * Application Routes
@@ -26,6 +27,7 @@ export function AppRoutes() {
       <Route path="/transactions/return" element={<ReturnTransaction />} />
       <Route path="/sales" element={<Sales />} />
       <Route path="/payments" element={<Payments />} />
+      <Route path="/orders" element={<Orders />} />
       <Route path="/login" element={<Login />} />
       <Route path="/customers" element={<Customers />} />
       <Route path="/settings" element={null} />

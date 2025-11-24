@@ -67,9 +67,33 @@ export { SyncService } from './lib/sync/sync-service';
 // Repositories
 export * from './lib/repos';
 export { SalesOrderRepository } from './lib/repos/sales-order-repository';
+export type {
+  SalesOrder,
+  OrderLineItemInput,
+  OrderPaymentInput,
+  CreateSalesOrderInput,
+  CreateOrderResult,
+} from './lib/repos/sales-order-repository';
 export { ParkedOrderRepository } from './lib/repos/parked-order-repository';
+export type {
+  ParkedOrder,
+  ParkedOrderListItem,
+  ParkOrderInput,
+  SearchParkedOrdersOptions,
+  GetParkedOrdersResult,
+  GetParkedOrderResult,
+  ParkOrderResult,
+  LoadParkedOrderData,
+  LoadParkedOrderResult,
+} from './lib/repos/parked-order-repository';
 export { PaymentMethodRepository } from './lib/repos/payment-method-repository';
+export type { PaymentMethod, GetPaymentMethodsOptions, GetPaymentMethodsResult } from './lib/repos/payment-method-repository';
 export { SalesPersonRepository } from './lib/repos/sales-person-repository';
+export type {
+  SalesPerson,
+  GetSalesPersonsOptions,
+  GetSalesPersonsResult,
+} from './lib/repos/sales-person-repository';
 
 // Seed Functions
 export { seedPaymentMethods, verifyPaymentMethods } from './lib/seed/seed-payment-methods';

@@ -67,10 +67,10 @@ export function Payments({
     cancelPrint: originalCancelPrint,
     skipPrint: originalSkipPrint,
   } = usePrintReceipt({
-    storeName: 'AL IMRAN BOUTIQUE',
-    storeNameArabic: 'العمران',
-    storeUrl: 'http://www.alimranboutique.com',
-    posNumber: 'ALIMRAN BOUTIQUE',
+     storeName: 'Trade Unleashed',
+     storeNameArabic: 'التجارة المنطلِقة',
+     storeUrl: 'http://www.tradeUnleashed.com',
+     posNumber: 'TRADE UNLEASHED',
     onPrintSuccess: () => {
       // console.log('[Payments] Receipt printed successfully');
     },
@@ -104,7 +104,15 @@ export function Payments({
     payments?: PaymentEntry[];
     orderId?: string;
     salesPersonId?: string;
+    salesPersonName?: string; // Sales person name from Transactions screen
     customerId?: string;
+    customer?: { // Full customer details from Transactions screen
+      id?: string;
+      name: string;
+      email: string;
+      phone: string;
+      address: string;
+    };
     parkedOrderId?: string;
   } | null;
 
@@ -359,14 +367,14 @@ export function Payments({
           const orderInput = {
             locationId: currentLocationId,
             cashierId: currentUserId,
-            salesPersonId: navigationState?.salesPersonId || currentUserId,
+            salesPersonId: navigationState?.salesPersonId || undefined,
             customerId: navigationState?.customerId,
             lineItems: lineItems.map((item: any) => {
               const baseQuantity = Number(item.quantity ?? 1);
               const unitPrice = Math.abs(Number(item.price ?? 0));
               return {
                 variantId: item.productId || item.id,
-                salesPersonId: navigationState?.salesPersonId || currentUserId,
+                salesPersonId: navigationState?.salesPersonId || undefined,
                 quantity: item.isReturn ? -Math.abs(baseQuantity) : baseQuantity,
                 unitPrice,
               };
@@ -449,7 +457,7 @@ export function Payments({
                     name: productName,
                   } : undefined,
                 } : undefined,
-                salesPersonId: navigationState?.salesPersonId || currentUserId,
+                salesPersonId: navigationState?.salesPersonId || undefined,
                 quantity: quantity,
                 unitPrice: unitPrice,
                 saleDiscount: discount > 0 ? { amount: discount } : undefined,
@@ -488,21 +496,52 @@ export function Payments({
               lineItems,
             };
 
+            // Get sales person name from navigation state (assigned in Transactions screen)
+            // Fallback to order result if not available in navigation state
+            let salesPersonName = navigationState?.salesPersonName || 'Cashier';
+            if (!salesPersonName || salesPersonName === 'Cashier') {
+              const orderWithDetails = result.order as any;
+              if (orderWithDetails?.salesPerson) {
+                if (orderWithDetails.salesPerson.name) {
+                  salesPersonName = orderWithDetails.salesPerson.name;
+                } else if (orderWithDetails.salesPerson.firstName || orderWithDetails.salesPerson.lastName) {
+                  salesPersonName = `${orderWithDetails.salesPerson.firstName || ''} ${orderWithDetails.salesPerson.lastName || ''}`.trim();
+                }
+              }
+            }
+
             // Show print confirmation dialog
             // Cart will be cleared after print dialog is handled
             // Navigation will happen after user interacts with the dialog
-            promptPrintReceipt({
-              invoiceNumber,
-              lineItems: receiptLineItems,
-              payments: receiptPayments,
-              customer: navigationState?.customerId ? {
+            // Use customer details from Transactions screen if available
+            let receiptCustomer = undefined;
+            if (navigationState?.customer) {
+              // Customer was selected in Transactions screen - use full details
+              const customerNameParts = navigationState.customer.name.split(' ');
+              receiptCustomer = {
+                id: navigationState.customer.id || navigationState.customerId || '',
+                firstName: customerNameParts[0] || '',
+                lastName: customerNameParts.slice(1).join(' ') || '',
+                email: navigationState.customer.email || undefined,
+                phone: navigationState.customer.phone || undefined,
+              };
+            } else if (navigationState?.customerId) {
+              // Only customerId available - use minimal info
+              receiptCustomer = {
                 id: navigationState.customerId,
                 firstName: '',
                 lastName: '',
                 email: undefined,
                 phone: undefined,
-              } : undefined,
-              cashier: currentUserId,
+              };
+            }
+
+            promptPrintReceipt({
+              invoiceNumber,
+              lineItems: receiptLineItems,
+              payments: receiptPayments,
+              customer: receiptCustomer,
+              cashier: salesPersonName,
               grossTotal,
               itemDiscount,
               netTotal,

@@ -57,9 +57,15 @@ export function PrintReceiptDemo() {
     {
       id: '1',
       variantId: 'var-1',
-      sku: '30014291',
-      productName: 'MARIA B',
-      variantName: '3608 M',
+      variant: {
+        id: 'var-1',
+        sku: '30014291',
+        variantName: '3608 M',
+        product: {
+          id: 'prod-1',
+          name: 'MARIA B',
+        },
+      },
       quantity: 1,
       unitPrice: 18900,
       saleDiscount: { percent: 0 },
@@ -67,7 +73,7 @@ export function PrintReceiptDemo() {
       lineSubtotal: 18900,
       lineDiscount: 90,
       lineTotal: 18990,
-    },
+    } as LineItem,
   ];
 
   const handleTestPrint = () => {

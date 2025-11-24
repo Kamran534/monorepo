@@ -152,9 +152,32 @@ export function Layout({
         {/* Page Content */}
         <main 
           ref={mainContentRef}
-          className="flex-1 overflow-x-auto overflow-y-auto horizontal-scroll-container" 
-          style={{ backgroundColor: 'var(--color-bg-primary)' }}
+          className="flex-1 overflow-x-auto overflow-y-auto horizontal-scroll-container dashboard-main-scroll-container" 
+          style={{ 
+            backgroundColor: 'var(--color-bg-primary)',
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'var(--color-border-light) var(--color-bg-primary)',
+          }}
         >
+          <style>{`
+            .dashboard-main-scroll-container::-webkit-scrollbar {
+              width: 10px;
+              height: 10px;
+            }
+            .dashboard-main-scroll-container::-webkit-scrollbar-track {
+              background: var(--color-bg-primary);
+              border-radius: 10px;
+            }
+            .dashboard-main-scroll-container::-webkit-scrollbar-thumb {
+              background-color: var(--color-border-light);
+              border-radius: 10px;
+              border: 2px solid var(--color-bg-primary);
+              transition: background-color 0.2s ease;
+            }
+            .dashboard-main-scroll-container::-webkit-scrollbar-thumb:hover {
+              background-color: var(--color-border-medium);
+            }
+          `}</style>
           <div className="px-4 lg:px-4 py-3 lg:py-3" style={{ color: 'var(--color-text-primary)' }}>{children}</div>
         </main>
       </div>

@@ -33,10 +33,35 @@ export class DesktopSalesOrderRepository implements SalesOrderRepository {
       const result = await window.electronAPI.order.create(data);
       return result;
     } catch (error) {
-      console.error('[DesktopSalesOrderRepository] Error creating order:', error);
+      // console.error('[DesktopSalesOrderRepository] Error creating order:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create order',
+      };
+    }
+  }
+
+  async getOrders(options?: { page?: number; limit?: number; locationId?: string; status?: string }): Promise<{
+    success: boolean;
+    orders?: SalesOrder[];
+    total?: number;
+    page?: number;
+    totalPages?: number;
+    error?: string;
+    isOffline?: boolean;
+  }> {
+    try {
+      if (typeof window === 'undefined' || !window.electronAPI || !window.electronAPI.order) {
+        throw new Error('Electron API not available');
+      }
+
+      const result = await window.electronAPI.order.getAll(options);
+      return result;
+    } catch (error) {
+      // console.error('[DesktopSalesOrderRepository] Error getting orders:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get orders',
       };
     }
   }
@@ -59,7 +84,7 @@ export class DesktopParkedOrderRepository implements ParkedOrderRepository {
       const result = await window.electronAPI.order.park(data);
       return result;
     } catch (error) {
-      console.error('[DesktopParkedOrderRepository] Error parking order:', error);
+      // console.error('[DesktopParkedOrderRepository] Error parking order:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to park order',
@@ -80,7 +105,7 @@ export class DesktopParkedOrderRepository implements ParkedOrderRepository {
       const result = await window.electronAPI.order.searchParked(searchParams);
       return result;
     } catch (error) {
-      console.error('[DesktopParkedOrderRepository] Error searching parked orders:', error);
+      // console.error('[DesktopParkedOrderRepository] Error searching parked orders:', error);
       return {
         success: false,
         orders: [],
@@ -102,7 +127,7 @@ export class DesktopParkedOrderRepository implements ParkedOrderRepository {
       const result = await window.electronAPI.order.loadParked(parkNumber);
       return result;
     } catch (error) {
-      console.error('[DesktopParkedOrderRepository] Error loading parked order:', error);
+      // console.error('[DesktopParkedOrderRepository] Error loading parked order:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to load parked order',
@@ -123,7 +148,7 @@ export class DesktopParkedOrderRepository implements ParkedOrderRepository {
       const result = await window.electronAPI.order.completeParked(data);
       return result;
     } catch (error) {
-      console.error('[DesktopParkedOrderRepository] Error completing parked order:', error);
+       // console.error('[DesktopParkedOrderRepository] Error completing parked order:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to complete parked order',
@@ -149,7 +174,7 @@ export class DesktopPaymentMethodRepository implements PaymentMethodRepository {
       const result = await window.electronAPI.paymentMethod.getAll(params);
       return result;
     } catch (error) {
-      console.error('[DesktopPaymentMethodRepository] Error getting payment methods:', error);
+      // console.error('[DesktopPaymentMethodRepository] Error getting payment methods:', error);
       return {
         success: false,
         paymentMethods: [],

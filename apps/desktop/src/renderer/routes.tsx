@@ -9,6 +9,7 @@ import { Sales } from '../pages/Sales.js';
 import { Payments } from '../pages/Payments.js';
 import { Login } from '../pages/Login.js';
 import { ReturnTransaction } from '../pages/ReturnTransaction.js';
+import { Orders } from '../pages/Orders.js';
 
 /**
  * Application Routes
@@ -26,6 +27,7 @@ export function AppRoutes() {
       <Route path="/transactions/return" element={<ReturnTransaction />} />
       <Route path="/sales" element={<Sales />} />
       <Route path="/payments" element={<Payments />} />
+      <Route path="/orders" element={<Orders />} />
       <Route path="/login" element={<Login />} />
       <Route path="/customers" element={<Customers />} />
       <Route path="/settings" element={null} />

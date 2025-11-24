@@ -259,6 +259,7 @@ export function TransactionActions({
 
   const renderButton = (action: ActionButton) => {
     const baseClasses = `${action.color || 'bg-orange-600'} px-4 relative transition-all hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50`;
+    const isDisabled = !!action.disabled;
 
     // Split button (two compact squares within one grid cell)
     if (action.split) {
@@ -389,7 +390,6 @@ export function TransactionActions({
       );
     }
 
-    const isDisabled = !!action.disabled;
     return (
       <button
         key={action.id}
@@ -489,7 +489,32 @@ export function TransactionActions({
       {/* Main Action Buttons Panel */}
       <div className="flex-1 flex flex-col p-2 overflow-hidden min-w-0 md:min-w-[280px] lg:min-w-[320px]">
         {/* Tab-specific content */}
-        <div className="overflow-y-auto overflow-x-hidden min-h-0 mb-2">
+        <div 
+          className="overflow-y-auto overflow-x-hidden min-h-0 mb-2 transaction-actions-scroll-container"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'var(--color-border-light) var(--color-bg-secondary)',
+          }}
+        >
+          <style>{`
+            .transaction-actions-scroll-container::-webkit-scrollbar {
+              width: 10px;
+              height: 10px;
+            }
+            .transaction-actions-scroll-container::-webkit-scrollbar-track {
+              background: var(--color-bg-secondary);
+              border-radius: 10px;
+            }
+            .transaction-actions-scroll-container::-webkit-scrollbar-thumb {
+              background-color: var(--color-border-light);
+              border-radius: 10px;
+              border: 2px solid var(--color-bg-secondary);
+              transition: background-color 0.2s ease;
+            }
+            .transaction-actions-scroll-container::-webkit-scrollbar-thumb:hover {
+              background-color: var(--color-border-medium);
+            }
+          `}</style>
           {renderTabContent()}
         </div>
 

@@ -160,6 +160,15 @@ interface ElectronAPI {
   };
   order: {
     create: (orderData: any) => Promise<{ success: boolean; order?: any; error?: string; isOffline?: boolean }>;
+    getAll: (options?: { page?: number; limit?: number; locationId?: string; status?: string }) => Promise<{
+      success: boolean;
+      orders?: any[];
+      total?: number;
+      page?: number;
+      totalPages?: number;
+      error?: string;
+      isOffline?: boolean;
+    }>;
     park: (orderData: any) => Promise<{ success: boolean; parkedOrder?: any; error?: string }>;
     searchParked: (searchParams?: any) => Promise<{ success: boolean; orders?: any[]; error?: string }>;
     loadParked: (parkNumber: string) => Promise<{ success: boolean; order?: any; error?: string }>;

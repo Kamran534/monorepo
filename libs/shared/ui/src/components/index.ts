@@ -19,6 +19,9 @@ export type { InvoiceProps, InvoiceLineItem, InvoiceBrand, InvoiceCustomer } fro
 // Transaction components
 export * from './transactions/index.js';
 
+// Orders components
+export * from './orders/index.js';
+
 // Home page components
 export {
   ImageSlider,

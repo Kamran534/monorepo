@@ -336,7 +336,7 @@ export function Dashboard() {
       colSpan: 1,
       rowSpan: 1,
       backgroundColor: 'var(--color-tile-brown-3)',
-      onClick: () => console.log('Find and manage orders clicked'),
+      onClick: () => navigate('/orders'),
     },
     {
       id: 'orders-pick-up',

@@ -42,10 +42,10 @@ export function PaymentWithPrintDialog({
   mode,
 
   // Print config
-  storeName = 'AL IMRAN BOUTIQUE',
-  storeNameArabic = 'العمران',
-  storeUrl = 'http://www.alimranboutique.com',
-  posNumber = 'ALIMRAN BOUTIQUE',
+  storeName = 'Trade Unleashed',
+  storeNameArabic = 'التجارة المنطلِقة',
+  storeUrl = 'http://www.tradeUnleashed.com',
+  posNumber = 'TRADE UNLEASHED',
 
   // Receipt data
   invoiceNumber,

@@ -23,11 +23,11 @@ async function loadBcrypt(): Promise<any> {
     const bcryptModule = await import('bcryptjs');
     bcrypt = bcryptModule.default || bcryptModule;
     bcryptLoaded = true;
-    console.log('[UserRepository] ✓ bcryptjs loaded via dynamic import');
+    // console.log('[UserRepository] ✓ bcryptjs loaded via dynamic import');
     return bcrypt;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.warn('[UserRepository] ⚠️ bcryptjs not available:', errorMsg);
+    // console.warn('[UserRepository] ⚠️ bcryptjs not available:', errorMsg);
     bcryptLoaded = true; // Mark as loaded to prevent retry
     return null;
   }
@@ -91,7 +91,7 @@ export class UserRepository {
 
     // If explicitly disabled, use offline login directly
     if (useServer === false) {
-      console.log('[UserRepository] Server login disabled, using offline login');
+      // console.log('[UserRepository] Server login disabled, using offline login');
       return await this.loginOffline(username, password);
     }
 
@@ -99,38 +99,44 @@ export class UserRepository {
     let shouldUseServer = useServer === true;
     
     if (useServer === undefined) {
-      // Auto-detect: Always try server first, don't check availability upfront
-      // This ensures we attempt the server even if availability check fails
-      console.log('[UserRepository] Auto-mode: Will try server first, then fallback to offline');
-      shouldUseServer = true; // Always try server first in auto mode
+      // Auto-detect: Check server availability first before attempting login
+      // console.log('[UserRepository] Auto-mode: Checking server availability first...');
+      const isServerAvailable = await this.checkServerAvailability();
+      if (isServerAvailable) {
+        // console.log('[UserRepository] Server is available, will attempt online login');
+        shouldUseServer = true;
+      } else {
+        // console.log('[UserRepository] Server is not available, using offline login');
+        shouldUseServer = false;
+      }
     } else {
-      console.log('[UserRepository] Server usage explicitly set:', useServer);
+      // console.log('[UserRepository] Server usage explicitly set:', useServer);
       shouldUseServer = useServer;
     }
 
     // Try online login if server should be used
     if (shouldUseServer) {
-      console.log('[UserRepository] Attempting online login...');
+      // console.log('[UserRepository] Attempting online login...');
       try {
         const result = await this.loginOnline(username, password);
         if (result.success && result.user && result.token) {
-          console.log('[UserRepository] Online login successful');
-          console.log('[UserRepository] Auth token is set, fetching user data from server...');
+          // console.log('[UserRepository] Online login successful');
+          // console.log('[UserRepository] Auth token is set, fetching user data from server...');
           
           // Auth token is now set in apiClient, fetch and save full user data
           // Await it to ensure it completes
           try {
-            console.log('[UserRepository] Starting fetchAndSaveUserDataToLocal for userId:', result.user.id);
+            // console.log('[UserRepository] Starting fetchAndSaveUserDataToLocal for userId:', result.user.id);
             await this.fetchAndSaveUserDataToLocal(result.user.id);
-            console.log('[UserRepository] ✅✅✅ User data fetch and save completed successfully');
+            // console.log('[UserRepository] ✅✅✅ User data fetch and save completed successfully');
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
             const errorStack = error instanceof Error ? error.stack : undefined;
-            console.error('[UserRepository] ⚠️⚠️⚠️ User data fetch/save FAILED (non-fatal):', {
-              error: errorMsg,
-              stack: errorStack,
-              userId: result.user.id,
-            });
+            // console.error('[UserRepository] ⚠️⚠️⚠️ User data fetch/save FAILED (non-fatal):', {
+            //   error: errorMsg,
+            //   stack: errorStack,
+            //   userId: result.user.id,
+            // });
             // Don't re-throw - login succeeded, user can still use the app online
             // Offline login won't work until user data is synced, but online login is fine
             console.warn('[UserRepository] Login succeeded but user data not saved to local DB. Offline login may not work.');
@@ -142,11 +148,11 @@ export class UserRepository {
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.warn('[UserRepository] Online login failed, trying offline:', errorMsg);
+        // console.warn('[UserRepository] Online login failed, trying offline:', errorMsg);  
         // Continue to offline login below
       }
     } else {
-      console.log('[UserRepository] Skipping online login (server explicitly disabled)');
+      // console.log('[UserRepository] Skipping online login (server explicitly disabled)');
     }
 
     // Fall back to offline login
@@ -158,7 +164,7 @@ export class UserRepository {
    */
   private async loginOnline(username: string, password: string): Promise<LoginResult> {
     try {
-      console.log('[UserRepository] Calling /api/auth/login');
+      // console.log('[UserRepository] Calling /api/auth/login');
       const response = await this.apiClient.post<{
         success: boolean;
         data: {
@@ -236,13 +242,54 @@ export class UserRepository {
   }
 
   /**
+   * Check if server is available by calling root URL (/)
+   */
+  private async checkServerAvailability(): Promise<boolean> {
+    try {
+      // Get fetch function (with fallback for Electron)
+      let fetchFn: typeof fetch;
+      if (typeof fetch === 'undefined') {
+        try {
+          const nodeFetch = await import('node-fetch');
+          fetchFn = (nodeFetch as any).default || nodeFetch;
+        } catch {
+          return false;
+        }
+      } else {
+        fetchFn = fetch;
+      }
+
+      // Get base URL from apiClient
+      const baseUrl = (this.apiClient as any).config?.baseUrl || 'http://localhost:4000';
+      
+      // Check server by calling root URL
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+
+      try {
+        const response = await fetchFn(`${baseUrl}/`, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        return response.ok || response.status < 500; // Accept any non-server-error status
+      } catch (error) {
+        clearTimeout(timeoutId);
+        return false;
+      }
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
    * Login offline from local database
    */
   async loginOffline(usernameOrEmail: string, password: string): Promise<LoginResult> {
     try {
-      console.log('[UserRepository] ========== OFFLINE LOGIN ATTEMPT ==========');
-      console.log('[UserRepository] Searching for user:', usernameOrEmail);
-      console.log('[UserRepository] Database type:', this.localDb.constructor.name);
+      // console.log('[UserRepository] ========== OFFLINE LOGIN ATTEMPT ==========');
+      // console.log('[UserRepository] Searching for user:', usernameOrEmail);
+      // console.log('[UserRepository] Database type:', this.localDb.constructor.name);
       
       // Query user from local database (supports both username and email)
       const users = await this.localDb.query<User & { passwordHash: string }>(
@@ -250,20 +297,20 @@ export class UserRepository {
         [usernameOrEmail, usernameOrEmail]
       );
 
-      console.log('[UserRepository] Query result:', {
-        userCount: users.length,
-        foundUser: users.length > 0 ? {
-          id: users[0].id,
-          username: users[0].username,
-          email: users[0].email,
-          hasPasswordHash: !!users[0].passwordHash,
-          passwordHashLength: users[0].passwordHash?.length || 0,
-          isActive: users[0].isActive,
-        } : null,
-      });
+      // console.log('[UserRepository] Query result:', {
+      //   userCount: users.length,
+      //   foundUser: users.length > 0 ? {
+      //     id: users[0].id,
+      //     username: users[0].username,
+      //     email: users[0].email,
+      //     hasPasswordHash: !!users[0].passwordHash,
+      //     passwordHashLength: users[0].passwordHash?.length || 0,
+      //     isActive: users[0].isActive,
+      //   } : null,
+      // });
 
       if (users.length === 0) {
-        console.log('[UserRepository] ✗ User not found in local database');
+        // console.log('[UserRepository] ✗ User not found in local database');
         return {
           success: false,
           error: 'User not found in local database. Please login online first to sync your credentials.',
@@ -302,12 +349,12 @@ export class UserRepository {
       }
 
       // Verify password using bcryptjs (works in both Node.js and browsers)
-      console.log('[UserRepository] Verifying password with bcryptjs...');
+      // console.log('[UserRepository] Verifying password with bcryptjs...');
       const isValidPassword = await bcryptModule.compare(password, user.passwordHash);
-      console.log('[UserRepository] Password verification result:', isValidPassword);
+      // console.log('[UserRepository] Password verification result:', isValidPassword);
       
       if (!isValidPassword) {
-        console.log('[UserRepository] ✗ Password verification failed');
+        // console.log('[UserRepository] ✗ Password verification failed');
         return {
           success: false,
           error: 'Invalid password',
@@ -315,7 +362,7 @@ export class UserRepository {
         };
       }
       
-      console.log('[UserRepository] ✓ Password verified successfully');
+      // console.log('[UserRepository] ✓ Password verified successfully');
 
       // Get role name if available
       let roleName: string | undefined;

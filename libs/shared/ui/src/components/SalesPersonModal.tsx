@@ -158,27 +158,48 @@ export const SalesPersonModal: React.FC<SalesPersonModalProps> = ({
   if (!isOpen && !isVisible) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end">
-      {/* Backdrop */}
-      <div
-        className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${
-          isClosing ? 'opacity-0' : 'opacity-100'
-        }`}
-      />
+    <>
+      <style>{`
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        @keyframes slideOutRight {
+          from {
+            transform: translateX(0);
+            opacity: 1;
+          }
+          to {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+        }
+      `}</style>
+      <div className="fixed inset-0 z-50 flex items-start justify-end">
+        {/* Backdrop */}
+        <div
+          className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${
+            isClosing ? 'opacity-0' : 'opacity-100'
+          }`}
+        />
 
-      {/* Modal Panel - Theme-aware using CSS variables */}
-      <div
-        ref={modalRef}
-          className={`relative flex flex-col shadow-xl h-full transition-transform duration-300 ease-out ${
-          isClosing || isAnimatingIn ? 'translate-x-full' : 'translate-x-0'
-        }`}
-        style={{
-          width: '320px',
-          maxWidth: '100%',
-          backgroundColor: 'var(--color-bg-secondary)',
-          animation: isClosing ? undefined : 'slideInFromRight 0.3s ease-out'
-        }}
-      >
+        {/* Modal Panel - Theme-aware using CSS variables */}
+        <div
+          ref={modalRef}
+          className="relative flex flex-col shadow-xl h-full"
+          style={{
+            width: '320px',
+            maxWidth: '100%',
+            backgroundColor: 'var(--color-bg-secondary)',
+            animation: isClosing ? 'slideOutRight 0.3s ease-out' : 'slideInRight 0.3s ease-out',
+          }}
+        >
         {/* Header */}
         <div
           className="flex items-center justify-between p-3"
@@ -372,6 +393,7 @@ export const SalesPersonModal: React.FC<SalesPersonModalProps> = ({
         </div>
       </div>
     </div>
+    </>
   );
 };
 

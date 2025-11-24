@@ -366,7 +366,32 @@ export function ProductDetail({ repository }: ProductDetailProps) {
 
   return (
     <div className="h-full w-full flex flex-col" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
-      <div className="flex-1 overflow-y-auto p-8">
+      <div 
+        className="flex-1 overflow-y-auto p-8 product-detail-scroll-container"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'var(--color-border-light) var(--color-bg-primary)',
+        }}
+      >
+        <style>{`
+          .product-detail-scroll-container::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+          }
+          .product-detail-scroll-container::-webkit-scrollbar-track {
+            background: var(--color-bg-primary);
+            border-radius: 10px;
+          }
+          .product-detail-scroll-container::-webkit-scrollbar-thumb {
+            background-color: var(--color-border-light);
+            border-radius: 10px;
+            border: 2px solid var(--color-bg-primary);
+            transition: background-color 0.2s ease;
+          }
+          .product-detail-scroll-container::-webkit-scrollbar-thumb:hover {
+            background-color: var(--color-border-medium);
+          }
+        `}</style>
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-12 gap-8">
             {/* Left Column - Product Information */}

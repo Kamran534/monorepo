@@ -188,7 +188,33 @@ export function Category({ repository, getConnectionState }: CategoryProps) {
   }
 
   return (
-    <div className="h-full w-full p-8 overflow-auto" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+    <div 
+      className="h-full w-full p-8 overflow-auto category-page-scroll-container" 
+      style={{ 
+        backgroundColor: 'var(--color-bg-primary)',
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'var(--color-border-light) var(--color-bg-primary)',
+      }}
+    >
+      <style>{`
+        .category-page-scroll-container::-webkit-scrollbar {
+          width: 10px;
+          height: 10px;
+        }
+        .category-page-scroll-container::-webkit-scrollbar-track {
+          background: var(--color-bg-primary);
+          border-radius: 10px;
+        }
+        .category-page-scroll-container::-webkit-scrollbar-thumb {
+          background-color: var(--color-border-light);
+          border-radius: 10px;
+          border: 2px solid var(--color-bg-primary);
+          transition: background-color 0.2s ease;
+        }
+        .category-page-scroll-container::-webkit-scrollbar-thumb:hover {
+          background-color: var(--color-border-medium);
+        }
+      `}</style>
       {/* Render each parent category as a section with its children */}
       {parentCategories.map((parentCategory) => {
         // Get child categories from the childCategories array

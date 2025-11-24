@@ -427,11 +427,8 @@ export function Transactions({
   }, [salesPersonModal.isOpen, salesPersons.length, salesPersonsLoading, loadSalesPersons]);
 
   useEffect(() => {
-    if (!assignedSalesPerson && salesPersons.length > 0) {
-      setAssignedSalesPerson(salesPersons[0]);
-      return;
-    }
-
+    // Only update if assignedSalesPerson exists and needs to be synced with latest data
+    // Do NOT automatically assign first sales person - let user choose manually
     if (assignedSalesPerson && salesPersons.length > 0) {
       const match = salesPersons.find((sp) => sp.id === assignedSalesPerson.id);
       if (match && (match.name !== assignedSalesPerson.name || match.code !== assignedSalesPerson.code)) {
@@ -441,8 +438,11 @@ export function Transactions({
   }, [assignedSalesPerson, salesPersons]);
 
   useEffect(() => {
+    // Sync assignedSalesPerson to modal - clear if null
     if (assignedSalesPerson) {
       salesPersonModal.setSelectedPerson(assignedSalesPerson);
+    } else {
+      salesPersonModal.setSelectedPerson(null);
     }
   }, [assignedSalesPerson, salesPersonModal]);
 
@@ -643,7 +643,7 @@ export function Transactions({
     }
 
     try {
-      const salesPersonId = assignedSalesPerson?.id ?? currentUserId;
+      const salesPersonId = assignedSalesPerson?.id ?? undefined;
       const orderInput: CreateSalesOrderInput = {
         locationId: currentLocationId,
         cashierId: currentUserId,
@@ -771,7 +771,7 @@ export function Transactions({
     }
 
     try {
-      const salesPersonId = assignedSalesPerson?.id ?? currentUserId;
+      const salesPersonId = assignedSalesPerson?.id ?? undefined;
       // Create the order with status 'Open' (will be changed to 'Parked')
       const orderResult = await effectiveSalesOrderRepo.createOrder(
         {
@@ -1276,7 +1276,7 @@ export function Transactions({
 
   const buildOrderInput = useCallback(
     (payments: OrderPaymentInput[]): CreateSalesOrderInput => {
-      const salesPersonId = assignedSalesPerson?.id ?? currentUserId;
+      const salesPersonId = assignedSalesPerson?.id ?? undefined;
       return {
         locationId: currentLocationId,
         cashierId: currentUserId,
@@ -1580,8 +1580,16 @@ export function Transactions({
           giftCard: giftCardData,
           adjustment: appliedAdjustment,
           // Pass IDs for order creation (repo passed via props)
-          salesPersonId: assignedSalesPerson?.id ?? currentUserId,
+          salesPersonId: assignedSalesPerson?.id ?? undefined,
+          salesPersonName: assignedSalesPerson?.name, // Pass sales person name
           customerId: customer?.id,
+          customer: customer ? { // Pass full customer details
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            address: customer.address,
+          } : undefined,
           parkedOrderId: currentParkedOrderId, // Pass parked order ID if resuming
         },
       });
@@ -1830,6 +1838,20 @@ export function Transactions({
     },
     // Green Section - Small square buttons
     {
+      id: 'profile',
+      icon: <User className="w-4 h-4" />,
+      label: '',
+      color: 'bg-green-700',
+      square: true,
+      onClick: () => {
+        // Ensure sales persons are loaded before opening modal
+        if (salesPersons.length === 0 && !salesPersonsLoading && effectiveSalesPersonRepo) {
+          void loadSalesPersons();
+        }
+        salesPersonModal.open();
+      },
+    },
+    {
       id: 'equals',
       icon: <Equal className="w-4 h-4" />,
       label: '',
@@ -1850,14 +1872,6 @@ export function Transactions({
       color: 'bg-green-700',
       square: true,
       onClick: () => console.log('Dollars'),
-    },
-    {
-      id: 'profile',
-      icon: <User className="w-4 h-4" />,
-      label: '',
-      color: 'bg-green-700',
-      square: true,
-      onClick: () => salesPersonModal.open(),
     },
     {
       id: 'heart',
@@ -2090,10 +2104,33 @@ export function Transactions({
           onClick={() => setShowInvoice(false)}
         >
           <div
-            className="bg-[var(--color-bg-primary)] p-3 rounded-none max-h-[90vh] overflow-auto border"
-            style={{ borderColor: 'var(--color-border-light)' }}
+            className="bg-[var(--color-bg-primary)] p-3 rounded-none max-h-[90vh] overflow-auto border transaction-invoice-modal-scroll-container"
+            style={{ 
+              borderColor: 'var(--color-border-light)',
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'var(--color-border-light) var(--color-bg-primary)',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
+            <style>{`
+              .transaction-invoice-modal-scroll-container::-webkit-scrollbar {
+                width: 10px;
+                height: 10px;
+              }
+              .transaction-invoice-modal-scroll-container::-webkit-scrollbar-track {
+                background: var(--color-bg-primary);
+                border-radius: 10px;
+              }
+              .transaction-invoice-modal-scroll-container::-webkit-scrollbar-thumb {
+                background-color: var(--color-border-light);
+                border-radius: 10px;
+                border: 2px solid var(--color-bg-primary);
+                transition: background-color 0.2s ease;
+              }
+              .transaction-invoice-modal-scroll-container::-webkit-scrollbar-thumb:hover {
+                background-color: var(--color-border-medium);
+              }
+            `}</style>
             <Invoice
               brand={{ storeName: 'PayFlow' }}
               invoiceNo="TEST-0001"
@@ -2149,7 +2186,32 @@ export function Transactions({
               </div>
             )}
 
-            <div className="p-4 overflow-y-auto">
+            <div 
+              className="p-4 overflow-y-auto transaction-payment-modal-scroll-container"
+              style={{
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'var(--color-border-light) var(--color-bg-primary)',
+              }}
+            >
+              <style>{`
+                .transaction-payment-modal-scroll-container::-webkit-scrollbar {
+                  width: 10px;
+                  height: 10px;
+                }
+                .transaction-payment-modal-scroll-container::-webkit-scrollbar-track {
+                  background: var(--color-bg-primary);
+                  border-radius: 10px;
+                }
+                .transaction-payment-modal-scroll-container::-webkit-scrollbar-thumb {
+                  background-color: var(--color-border-light);
+                  border-radius: 10px;
+                  border: 2px solid var(--color-bg-primary);
+                  transition: background-color 0.2s ease;
+                }
+                .transaction-payment-modal-scroll-container::-webkit-scrollbar-thumb:hover {
+                  background-color: var(--color-border-medium);
+                }
+              `}</style>
               <CompactPaymentPanel
                 key={paymentModalKey}
                 payments={paymentEntries}
