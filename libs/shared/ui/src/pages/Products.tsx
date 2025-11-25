@@ -11,19 +11,16 @@ import {
   SortDirection,
   RatingFilter,
   PriceFilter,
-  Pagination,
 } from '@monorepo/shared-ui';
 import {
   useAppDispatch,
   useAppSelector,
   fetchProducts,
-  setProductPage,
   selectProducts,
   selectProductsLoading,
   selectProductsError,
   selectProductsIsOffline,
   selectProductCacheAge,
-  selectProductPagination,
   type ProductRepository,
 } from '@monorepo/shared-store';
 
@@ -54,7 +51,6 @@ export function Products({ repository }: ProductsProps) {
   const error = useAppSelector(selectProductsError);
   const isOffline = useAppSelector(selectProductsIsOffline);
   const cacheAge = useAppSelector(selectProductCacheAge);
-  const pagination = useAppSelector(selectProductPagination);
   
   // Load view mode from localStorage, default to 'list'
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -107,16 +103,8 @@ export function Products({ repository }: ProductsProps) {
     sessionStorage.setItem(ACTION_STATE_STORAGE_KEY, JSON.stringify(payload));
   }, [sortField, sortDirection, hideDetails, ratingFilter, priceFilter]);
 
-  // Skip the effect-triggered fetch when we've already fetched manually (e.g., page change)
-  const skipPaginationFetchRef = React.useRef(false);
-
-  // Fetch products on mount and when page changes (will use cache if available)
+  // Fetch products on mount (will use cache if available)
   useEffect(() => {
-    if (skipPaginationFetchRef.current) {
-      skipPaginationFetchRef.current = false;
-      return;
-    }
-
     const fetchData = async () => {
       try {
         console.log('[Products] Checking cache...');
@@ -126,15 +114,11 @@ export function Products({ repository }: ProductsProps) {
           console.log('[Products] No cache found, fetching...');
         }
 
-        // Dispatch fetch action with pagination options
-        // Redux condition will check cache and skip if valid
+        // Dispatch fetch action (Redux condition will use cache if valid)
         await dispatch(
           fetchProducts({
             repository,
-            options: {
-              page: pagination.page,
-              limit: pagination.limit,
-            },
+            options: { page: 1, limit: 10000 },
             forceRefresh: false, // Let Redux condition handle cache check
           })
         ).unwrap();
@@ -179,48 +163,7 @@ export function Products({ repository }: ProductsProps) {
     };
 
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatch, repository, pagination.page, pagination.limit, cacheAge, show]); // Fetch when page or limit changes
-
-  // Handle page change
-  const handlePageChange = async (page: number) => {
-    if (page === pagination.page) {
-      return;
-    }
-
-    // Prevent the effect from refetching after we manually fetch
-    skipPaginationFetchRef.current = true;
-    dispatch(setProductPage(page));
-
-    try {
-      await dispatch(
-        fetchProducts({
-          repository,
-          options: {
-            page,
-            limit: pagination.limit,
-          },
-          forceRefresh: true,
-        })
-      ).unwrap();
-    } catch (err) {
-      // Handle different error types from Redux Toolkit
-      let errorMsg = 'Failed to load page';
-      if (typeof err === 'string') {
-        errorMsg = err;
-      } else if (err instanceof Error) {
-        errorMsg = err.message;
-      } else if (err && typeof err === 'object') {
-        if ('message' in err && typeof err.message === 'string') {
-          errorMsg = err.message;
-        } else if ('error' in err && typeof err.error === 'string') {
-          errorMsg = err.error;
-        }
-      }
-      console.error('[Products] ❌ Failed to fetch page:', errorMsg);
-      console.error('[Products] Error details:', err);
-    }
-  };
+  }, [dispatch, repository, cacheAge, show]);
 
   // Helper function to parse price from string (e.g., "$29.99" -> 29.99)
   const parsePrice = (priceStr?: string): number | null => {
@@ -421,19 +364,6 @@ export function Products({ repository }: ProductsProps) {
             className="h-full"
           />
         </div>
-        
-        {/* Pagination - Hide when searching */}
-        {!searchQuery.trim() && pagination.totalPages > 1 && (
-          <div className="flex-shrink-0 px-4 py-3 border-t" style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-primary)' }}>
-            <Pagination
-              currentPage={pagination.page}
-              totalPages={pagination.totalPages}
-              onPageChange={handlePageChange}
-              itemsPerPage={pagination.limit}
-              totalItems={pagination.total}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

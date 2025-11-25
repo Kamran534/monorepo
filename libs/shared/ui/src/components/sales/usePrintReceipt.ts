@@ -26,6 +26,7 @@ export interface PrintReceiptInput {
   cashier?: string;
   grossTotal: number;
   itemDiscount: number;
+  taxAmount?: number;
   netTotal: number;
   tendered: number;
   change: number;
@@ -97,6 +98,7 @@ export function usePrintReceipt({
       payments: input.payments,
       grossTotal: input.grossTotal,
       itemDiscount: input.itemDiscount,
+      taxAmount: input.taxAmount ?? 0,
       netTotal: input.netTotal,
       tendered: input.tendered,
       change: input.change,

@@ -1,6 +1,40 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { LineItem } from '../components/transactions/TransactionLines.js';
 
+const LINE_TAX_RATE = 0.03;
+
+const recalcLineTotals = (line: LineItem): LineItem => {
+  const price = Number(line.price) || 0;
+  const quantity = Number(line.quantity) || 0;
+  const baseSubtotal = price * quantity;
+
+  let discountAmount = 0;
+  if (line.lineDiscountType && line.lineDiscountValue !== undefined) {
+    discountAmount =
+      line.lineDiscountType === 'percent'
+        ? (Math.abs(baseSubtotal) * line.lineDiscountValue) / 100
+        : line.lineDiscountValue;
+  } else if (typeof line.discount === 'number') {
+    discountAmount = line.discount;
+  } else if (typeof line.lineDiscount === 'number') {
+    discountAmount = line.lineDiscount;
+  }
+
+  discountAmount = Math.min(Math.max(discountAmount, 0), Math.abs(baseSubtotal));
+  const signedDiscount = baseSubtotal < 0 ? -discountAmount : discountAmount;
+  const discountedSubtotal = baseSubtotal - signedDiscount;
+  const lineTax =
+    discountAmount > 0 ? Number((Math.max(discountedSubtotal, 0) * LINE_TAX_RATE).toFixed(2)) : undefined;
+
+  return {
+    ...line,
+    discount: discountAmount,
+    lineDiscount: discountAmount,
+    lineTax,
+    total: discountedSubtotal,
+  };
+};
+
 export type CartContextValue = {
   items: LineItem[];
   addItem: (item: Omit<LineItem, 'id' | 'total'> & { id?: string }, showToast?: (message: string, type: 'success' | 'error' | 'info') => void) => void;
@@ -42,25 +76,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             return prev;
           }
           showToast?.(`Only ${maxAllowed} more item(s) available in stock. Added ${maxAllowed} instead.`, 'info');
-          updated[index] = {
-            ...existing,
-            quantity: existing.quantity + maxAllowed,
-            price: existing.price, // keep existing price
-            total: existing.price * (existing.quantity + maxAllowed),
-            availableQuantity: availableQty, // Update available quantity
-          };
+        updated[index] = recalcLineTotals({
+          ...existing,
+          quantity: existing.quantity + maxAllowed,
+          price: existing.price, // keep existing price
+          availableQuantity: availableQty, // Update available quantity
+        });
           return updated;
         }
         
-        updated[index] = {
-          ...existing,
-          quantity: newQuantity,
-          price: existing.price, // keep existing price
-          total: existing.price * newQuantity,
-          availableQuantity: availableQty, // Update available quantity
-          salesPersonId: existing.salesPersonId || (item as any).salesPersonId, // Preserve salesperson
-          isReturn: existing.isReturn || (item as any).isReturn || false, // Preserve return flag
-        };
+      updated[index] = recalcLineTotals({
+        ...existing,
+        quantity: newQuantity,
+        price: existing.price, // keep existing price
+        availableQuantity: availableQty, // Update available quantity
+        salesPersonId: existing.salesPersonId || (item as any).salesPersonId, // Preserve salesperson
+        isReturn: existing.isReturn || (item as any).isReturn || false, // Preserve return flag
+      });
         return updated;
       }
 
@@ -74,33 +106,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         showToast?.(`Only ${availableQty} item(s) available in stock. Added ${availableQty} instead.`, 'info');
         const id = item.id ?? Math.random().toString(36).slice(2, 9);
         const total = price * availableQty;
-        return [...prev, {
+        return [...prev, recalcLineTotals({
           id,
           name: item.name,
           price,
           quantity: availableQty,
-          total,
           productId: item.productId,
           productVariantId: item.productVariantId,
           salesPersonId: (item as any).salesPersonId, // Preserve salesperson
           availableQuantity: availableQty,
-        }];
+        })];
       }
 
       const id = item.id ?? Math.random().toString(36).slice(2, 9);
-      const total = price * qtyToAdd;
-      return [...prev, {
+      return [...prev, recalcLineTotals({
         id,
         name: item.name,
         price,
         quantity: qtyToAdd,
-        total,
         productId: item.productId,
         productVariantId: item.productVariantId,
         salesPersonId: (item as any).salesPersonId, // Preserve salesperson
         availableQuantity: availableQty,
         isReturn: (item as any).isReturn || false, // Preserve return flag
-      }];
+      })];
     });
   }, []);
 
@@ -124,7 +153,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       
       return prev.map(li =>
-        li.id === id ? { ...li, quantity, total: li.price * quantity } : li
+        li.id === id ? recalcLineTotals({ ...li, quantity }) : li
       );
     });
   }, []);
@@ -132,7 +161,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const updateItem = useCallback((id: string, patch: Partial<LineItem>) => {
     setItems(prev =>
       prev.map(li =>
-        li.id === id ? { ...li, ...patch } : li
+        li.id === id ? recalcLineTotals({ ...li, ...patch }) : li
       )
     );
   }, []);

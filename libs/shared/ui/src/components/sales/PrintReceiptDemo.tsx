@@ -86,6 +86,7 @@ export function PrintReceiptDemo() {
       cashier: 'Hamza',
       grossTotal: 18900,
       itemDiscount: 90,
+      taxAmount: 0,
       netTotal: 18990,
       tendered: 19000,
       change: 10,

@@ -334,6 +334,7 @@ export function SalesOrderForm({
         cashier: currentCashier,
         grossTotal,
         itemDiscount,
+        taxAmount: orderTotals.taxAmount,
         netTotal,
         tendered,
         change,

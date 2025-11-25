@@ -18,9 +18,10 @@ export interface ActionButton {
   square?: boolean;
   rowSpan?: number;
   rectangular?: boolean;
+  iconOnly?: boolean;
   split?: {
-    left: { icon: React.ReactNode; onClick?: () => void; disabled?: boolean };
-    right: { icon: React.ReactNode; onClick?: () => void; disabled?: boolean };
+    left: { icon: React.ReactNode; onClick?: () => void; disabled?: boolean; label?: string };
+    right: { icon: React.ReactNode; onClick?: () => void; disabled?: boolean; label?: string };
   };
   section?: 'actions' | 'orders' | 'discounts' | 'products';
 }
@@ -270,18 +271,19 @@ export function TransactionActions({
       return (
         <div
           key={action.id}
-          className="grid grid-cols-2 gap-1 h-full"
-          style={{ height: 'var(--row-height, 60px)' }}
+          className="flex h-full w-full overflow-hidden gap-1"
         >
           <button
             onClick={() => {
               if (leftDisabled) return;
               split.left.onClick?.();
             }}
-            className={`${color} w-full h-full flex items-center justify-center hover:opacity-90 ${leftDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-            style={{ color: 'var(--color-text-light)', borderRadius: 0 }}
-            aria-label="left-action"
-            title="left-action"
+            className={`${color} flex-1 h-full flex flex-col items-center justify-center text-xs font-semibold hover:opacity-90 transition-all ${leftDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            style={{
+              color: 'var(--color-text-light)',
+              borderRadius: 0,
+            }}
+            aria-label={split.left.label ?? 'left option'}
             aria-disabled={leftDisabled}
           >
             {split.left.icon}
@@ -291,10 +293,9 @@ export function TransactionActions({
               if (rightDisabled) return;
               split.right.onClick?.();
             }}
-            className={`${color} w-full h-full flex items-center justify-center hover:opacity-90 ${rightDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`${color} flex-1 h-full flex flex-col items-center justify-center text-xs font-semibold hover:opacity-90 transition-all ${rightDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             style={{ color: 'var(--color-text-light)', borderRadius: 0 }}
-            aria-label="right-action"
-            title="right-action"
+            aria-label={split.right.label ?? 'right option'}
             aria-disabled={rightDisabled}
           >
             {split.right.icon}
@@ -345,6 +346,39 @@ export function TransactionActions({
         >
           {action.icon}
           <span className="text-sm font-medium">{action.label}</span>
+        </button>
+      );
+    }
+
+    // Square or rectangular button with icon only
+    if (action.square && action.iconOnly) {
+      const isRectangular = action.rectangular;
+      const getRectangularHeight = () => {
+        if (!isRectangular || action.rowSpan) return undefined;
+        return isFullscreen ? '116px' : '102px';
+      };
+      const isDisabled = !!action.disabled;
+      return (
+        <button
+          key={action.id}
+          onClick={action.onClick}
+          className={`${baseClasses} p-3 relative ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          style={{
+            color: 'var(--color-text-light)',
+            borderRadius: 0,
+            gridRow: action.rowSpan ? `span ${action.rowSpan}` : undefined,
+            height: action.rowSpan ? `calc(2 * var(--row-height, 60px) + var(--gap, 4px))` : undefined,
+            minHeight: action.rowSpan ? undefined : isRectangular ? getRectangularHeight() : '60px',
+            aspectRatio: action.rowSpan ? undefined : isRectangular ? undefined : '1 / 1',
+          }}
+          aria-label={action.label || undefined}
+          aria-disabled={isDisabled}
+        >
+          {action.icon && (
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+              {action.icon}
+            </div>
+          )}
         </button>
       );
     }

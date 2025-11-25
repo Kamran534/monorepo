@@ -8,7 +8,6 @@ export interface TransactionDiscountPanelProps {
   mode: 'amount' | 'percent';
   value: string;
   current?: { type: 'amount' | 'percent'; value: number } | null;
-  onModeChange: (mode: 'amount' | 'percent') => void;
   onValueChange: (val: string) => void;
   onApply: () => void;
   onClear?: () => void;
@@ -32,7 +31,6 @@ export function TransactionDiscountPanel({
   mode,
   value,
   current,
-  onModeChange,
   onValueChange,
   onApply,
   onClear,
@@ -43,7 +41,7 @@ export function TransactionDiscountPanel({
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 120);
     }
-  }, [isOpen, mode]);
+  }, [isOpen]);
 
   const handleKeypadInput = (key: string) => {
     const currentVal = value || '';
@@ -80,40 +78,27 @@ export function TransactionDiscountPanel({
     <SidePanel isOpen={isOpen} onClose={onClose} title="Order discount" width="320px">
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto space-y-4">
-          <div className="flex items-start gap-2">
+        <div className="flex items-start gap-2">
             <div
               className="w-10 h-10 rounded-full flex items-center justify-center"
               style={{ backgroundColor: 'var(--color-bg-secondary)' }}
             >
+            {mode === 'percent' ? (
               <Percent className="w-5 h-5" style={{ color: 'var(--color-text-primary)' }} />
+            ) : (
+              <DollarSign className="w-5 h-5" style={{ color: 'var(--color-text-primary)' }} />
+            )}
             </div>
             <div>
               <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                Discount type
+              {mode === 'amount' ? 'Amount discount' : 'Percent discount'}
               </p>
               <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-                Choose amount or percent. Use keypad below to enter the value, then press Enter.
+              {mode === 'amount'
+                ? 'Enter the discount amount using the keypad below, then press Enter.'
+                : 'Enter the discount percent using the keypad below, then press Enter.'}
               </p>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {(['amount', 'percent'] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => onModeChange(option)}
-                className={`px-3 py-2 rounded border text-sm font-medium ${
-                  mode === option ? 'bg-[var(--color-accent-blue)] text-white' : ''
-                }`}
-                style={{
-                  borderColor: 'var(--color-border-light)',
-                  color: mode === option ? 'white' : 'var(--color-text-primary)',
-                }}
-              >
-                {option === 'amount' ? 'Amount ($)' : 'Percent (%)'}
-              </button>
-            ))}
           </div>
 
           {current && (

@@ -51,6 +51,8 @@ import {
   TicketPercent,
   SlidersHorizontal,
   Eye,
+  BadgeDollarSign,
+  BadgePercent,
 } from 'lucide-react';
 import type { ProductRepository, Product as StoreProduct } from '@monorepo/shared-store';
 import type {
@@ -204,13 +206,14 @@ export function Transactions({
   
   const [isQuantityPanelOpen, setIsQuantityPanelOpen] = useState(false);
   const [isCouponPanelOpen, setIsCouponPanelOpen] = useState(false);
-  const [isDiscountPanelOpen, setIsDiscountPanelOpen] = useState(false);
+  const [isAmountDiscountPanelOpen, setIsAmountDiscountPanelOpen] = useState(false);
+  const [isPercentDiscountPanelOpen, setIsPercentDiscountPanelOpen] = useState(false);
   const [isGiftCardPanelOpen, setIsGiftCardPanelOpen] = useState(false);
   const [isAdjustmentPanelOpen, setIsAdjustmentPanelOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isVoidConfirmationOpen, setIsVoidConfirmationOpen] = useState(false);
-  const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount');
-  const [discountInput, setDiscountInput] = useState('');
+  const [discountAmountInput, setDiscountAmountInput] = useState('');
+  const [discountPercentInput, setDiscountPercentInput] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState<{ type: 'amount' | 'percent'; value: number } | null>(null);
   const [discountSource, setDiscountSource] = useState<'manual' | 'coupon' | null>(null);
   const [couponCodeInput, setCouponCodeInput] = useState('');
@@ -498,6 +501,10 @@ export function Transactions({
   const selectedItemData = useMemo(() => {
     return selectedItem ? lineItems.find(item => item.id === selectedItem) : null;
   }, [selectedItem, lineItems]);
+  const selectedLineItem = useMemo(
+    () => (selectedItem ? lineItems.find((item) => item.id === selectedItem) ?? null : null),
+    [lineItems, selectedItem]
+  );
   const [showInvoice, setShowInvoice] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentDialogMode, setPaymentDialogMode] = useState<'cash' | 'card' | null>(null);
@@ -694,11 +701,35 @@ export function Transactions({
 
 
   // Keyboard shortcuts
-  const openDiscountPanel = useCallback(() => {
-    setDiscountMode(appliedDiscount?.type ?? 'amount');
-    setDiscountInput(appliedDiscount ? String(appliedDiscount.value) : '');
-    setIsDiscountPanelOpen(true);
-  }, [appliedDiscount]);
+  const openAmountDiscountPanel = useCallback(() => {
+    if (selectedLineItem && selectedLineItem.lineDiscountType === 'amount') {
+      const existing =
+        selectedLineItem.lineDiscountValue ??
+        selectedLineItem.lineDiscount ??
+        0;
+      setDiscountAmountInput(existing ? String(existing) : '');
+    } else if (!selectedLineItem && appliedDiscount?.type === 'amount') {
+      setDiscountAmountInput(String(appliedDiscount.value));
+    } else {
+      setDiscountAmountInput('');
+    }
+    setIsAmountDiscountPanelOpen(true);
+  }, [selectedLineItem, appliedDiscount]);
+
+  const openPercentDiscountPanel = useCallback(() => {
+    if (selectedLineItem && selectedLineItem.lineDiscountType === 'percent') {
+      const existing =
+        selectedLineItem.lineDiscountValue ??
+        selectedLineItem.lineDiscount ??
+        0;
+      setDiscountPercentInput(existing ? String(existing) : '');
+    } else if (!selectedLineItem && appliedDiscount?.type === 'percent') {
+      setDiscountPercentInput(String(appliedDiscount.value));
+    } else {
+      setDiscountPercentInput('');
+    }
+    setIsPercentDiscountPanelOpen(true);
+  }, [selectedLineItem, appliedDiscount]);
 
   const openGiftCardPanel = useCallback(() => {
     setGiftCardNumberInput(giftCardData?.cardNumber ?? '');
@@ -1278,7 +1309,7 @@ export function Transactions({
         key: 'd',
         ctrl: true,
         shift: true,
-        action: openDiscountPanel,
+        action: openAmountDiscountPanel,
         description: 'Order discount prompt',
       },
       {
@@ -1727,39 +1758,50 @@ export function Transactions({
   }, [selectedItem, selectedItemData, setItemQuantity, removeItem, show, handleBarcodeScan]);
 
   const orderTotals = useMemo(() => {
-    // Calculate subtotal: return items contribute negatively
-    const subtotal = lineItems.reduce((sum, item) => {
-      if (item.isReturn || (item.price < 0 && item.quantity < 0)) {
-        // Return items: subtract their absolute total (negative contribution)
-        return sum - Math.abs(item.price * item.quantity);
-      }
-      return sum + item.price * item.quantity;
-    }, 0);
-    
+    const summary = lineItems.reduce(
+      (acc, item) => {
+        const lineValue = item.price * item.quantity;
+        const isReturn = item.isReturn || (item.price < 0 && item.quantity < 0);
+        if (isReturn) {
+          acc.subtotal -= Math.abs(lineValue);
+          return acc;
+        }
+
+        const lineDiscountAmount = Math.min(
+          Math.max(item.lineDiscount ?? item.discount ?? 0, 0),
+          Math.abs(lineValue),
+        );
+        acc.subtotal += lineValue;
+        acc.taxableSubtotal += lineValue;
+        acc.lineDiscountTotal += lineDiscountAmount;
+        return acc;
+      },
+      { subtotal: 0, taxableSubtotal: 0, lineDiscountTotal: 0 },
+    );
+
+    const adjustedSubtotal = summary.subtotal - summary.lineDiscountTotal;
+
     const discountValue =
       appliedDiscount && appliedDiscount.value > 0
         ? appliedDiscount.type === 'percent'
-          ? (Math.abs(subtotal) * appliedDiscount.value) / 100
+          ? (Math.abs(adjustedSubtotal) * appliedDiscount.value) / 100
           : appliedDiscount.value
         : 0;
     const giftCardValue = giftCardData?.discount ?? 0;
     const adjustmentValue = appliedAdjustment?.amount ?? 0;
 
-    // Calculate taxable base excluding return items (items with negative price/quantity)
-    const taxableSubtotal = lineItems.reduce((sum, item) => {
-      // Exclude return items from tax calculation
-      if (item.isReturn || (item.price < 0 && item.quantity < 0)) {
-        return sum;
-      }
-      return sum + item.price * item.quantity;
-    }, 0);
-    
-    const taxableBase = Math.max(0, taxableSubtotal - discountValue - giftCardValue + adjustmentValue);
+    const taxableBase = Math.max(
+      0,
+      summary.taxableSubtotal -
+        summary.lineDiscountTotal -
+        discountValue -
+        giftCardValue +
+        adjustmentValue,
+    );
     const taxValue = Number((taxableBase * TAX_RATE).toFixed(2));
-    // Total can be negative if subtotal is negative (returns exceed sales)
-    const total = subtotal - discountValue - giftCardValue + adjustmentValue + taxValue;
+    const total = adjustedSubtotal - discountValue - giftCardValue + adjustmentValue + taxValue;
     return {
-      subtotal,
+      subtotal: adjustedSubtotal,
       discountValue,
       giftCardValue,
       adjustmentValue,
@@ -1837,6 +1879,15 @@ export function Transactions({
           salesPersonId: item.salesPersonId || salesPersonId,
           quantity: item.quantity,
           unitPrice: item.price,
+          saleDiscount:
+            item.lineDiscount && item.lineDiscount > 0
+              ? {
+                  amount: Math.min(
+                    Math.abs(item.lineDiscount),
+                    Math.abs(item.price * item.quantity),
+                  ),
+                }
+              : undefined,
         })),
         payments,
         orderLevelDiscount: appliedDiscount
@@ -1848,6 +1899,8 @@ export function Transactions({
           ? { amount: appliedAdjustment.amount, reason: appliedAdjustment.reason }
           : undefined,
         giftCardNumber: giftCardData?.cardNumber,
+        taxAmountOverride: orderTotals.taxValue,
+        totalAmountOverride: orderTotals.total,
       };
     },
     [
@@ -1859,6 +1912,8 @@ export function Transactions({
       currentUserId,
       customer?.id,
       lineItems,
+      orderTotals.taxValue,
+      orderTotals.total,
     ]
   );
 
@@ -2092,6 +2147,7 @@ export function Transactions({
             cashier: assignedSalesPerson?.name || 'Cashier',
             grossTotal,
             itemDiscount,
+            taxAmount: orderTotals.taxValue,
             netTotal,
             tendered,
             change,
@@ -2281,19 +2337,76 @@ export function Transactions({
     }
   }, [completeOrder, handleClosePaymentModal, paymentAmountDue, paymentEntries, orderTotals.total]);
 
-  const handleApplyDiscount = () => {
-    const parsed = parseFloat(discountInput);
-    if (Number.isNaN(parsed) || parsed < 0) {
-      show('Enter a valid discount value', 'error');
-      return;
-    }
-    setAppliedDiscount({ type: discountMode, value: parsed });
-    setDiscountSource('manual');
-    setAppliedCoupon(null);
-    setCouponCodeInput('');
-    setIsDiscountPanelOpen(false);
-    show('Discount applied', 'success');
-  };
+  const handleApplyDiscount = useCallback(
+    (mode: 'amount' | 'percent', rawValue: string) => {
+      const parsed = parseFloat(rawValue);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        show('Enter a valid discount value', 'error');
+        return;
+      }
+
+      if (selectedLineItem) {
+        if (selectedLineItem.isReturn) {
+          show('Line discounts cannot be applied to returns.', 'error');
+          return;
+        }
+
+        const baseSubtotal = Math.abs(selectedLineItem.price) * Math.abs(selectedLineItem.quantity);
+        if (baseSubtotal === 0) {
+          show('Cannot apply a discount to a zero-value line.', 'error');
+          return;
+        }
+
+        const discountAmount =
+          mode === 'percent' ? (baseSubtotal * parsed) / 100 : parsed;
+        const clampedDiscount = Math.min(Math.max(discountAmount, 0), baseSubtotal);
+        const discountedSubtotal = baseSubtotal - clampedDiscount;
+        const lineTaxAmount = Number((discountedSubtotal * TAX_RATE).toFixed(2));
+
+        updateItem(selectedLineItem.id, {
+          lineDiscount: clampedDiscount,
+          discount: clampedDiscount,
+          lineDiscountType: mode,
+          lineDiscountValue: parsed,
+          lineTax: lineTaxAmount,
+          total: selectedLineItem.price >= 0 ? discountedSubtotal : -discountedSubtotal,
+        });
+
+        if (mode === 'amount') {
+          setDiscountAmountInput('');
+          setIsAmountDiscountPanelOpen(false);
+        } else {
+          setDiscountPercentInput('');
+          setIsPercentDiscountPanelOpen(false);
+        }
+
+        show('Line discount applied', 'success');
+        return;
+      }
+
+      setAppliedDiscount({ type: mode, value: parsed });
+      setDiscountSource('manual');
+      setAppliedCoupon(null);
+      setCouponCodeInput('');
+      if (mode === 'amount') {
+        setDiscountAmountInput('');
+        setIsAmountDiscountPanelOpen(false);
+      } else {
+        setDiscountPercentInput('');
+        setIsPercentDiscountPanelOpen(false);
+      }
+      show('Discount applied', 'success');
+    },
+    [
+      selectedLineItem,
+      updateItem,
+      show,
+      setDiscountSource,
+      setAppliedCoupon,
+      setAppliedDiscount,
+      setCouponCodeInput,
+    ],
+  );
 
   const handleApplyGiftCard = () => {
     if (!giftCardNumberInput.trim()) {
@@ -2340,8 +2453,13 @@ export function Transactions({
       };
 
       setAppliedDiscount({ type: coupon.type, value: coupon.value });
-      setDiscountMode(coupon.type === 'percent' ? 'percent' : 'amount');
-      setDiscountInput(String(coupon.value));
+      if (coupon.type === 'amount') {
+        setDiscountAmountInput(String(coupon.value));
+        setDiscountPercentInput('');
+      } else {
+        setDiscountPercentInput(String(coupon.value));
+        setDiscountAmountInput('');
+      }
       setDiscountSource('coupon');
       setCouponCodeInput(normalized);
       setAppliedCoupon({ code: normalized, type: coupon.type, value: coupon.value });
@@ -2350,7 +2468,7 @@ export function Transactions({
       const valueText = coupon.type === 'percent' ? `${coupon.value}%` : formatCurrency(coupon.value);
       show(`Coupon ${normalized} applied (${valueText})`, 'success');
     },
-    [show, formatCurrency, setDiscountMode],
+    [show, formatCurrency],
   );
 
   const handleClearAppliedCoupon = useCallback(() => {
@@ -2358,7 +2476,8 @@ export function Transactions({
     setCouponCodeInput('');
     if (discountSource === 'coupon') {
       setAppliedDiscount(null);
-      setDiscountInput('');
+      setDiscountAmountInput('');
+      setDiscountPercentInput('');
       setDiscountSource(null);
     }
     show('Coupon removed', 'info');
@@ -2377,10 +2496,31 @@ export function Transactions({
       return;
     }
     setAppliedDiscount(null);
-    setDiscountInput('');
+    setDiscountAmountInput('');
+    setDiscountPercentInput('');
     setDiscountSource(null);
     show('Discount removed', 'info');
   }, [appliedCoupon, discountSource, handleClearAppliedCoupon, show]);
+
+  const handleClearLineDiscount = useCallback(() => {
+    if (!selectedLineItem) {
+      show('Select a line to clear its discount.', 'error');
+      return;
+    }
+    updateItem(selectedLineItem.id, {
+      lineDiscount: undefined,
+      discount: undefined,
+      lineDiscountType: undefined,
+      lineDiscountValue: undefined,
+      lineTax: undefined,
+      total: selectedLineItem.price * selectedLineItem.quantity,
+    });
+    setDiscountAmountInput('');
+    setDiscountPercentInput('');
+    setIsAmountDiscountPanelOpen(false);
+    setIsPercentDiscountPanelOpen(false);
+    show('Line discount removed', 'info');
+  }, [selectedLineItem, updateItem, show]);
 
   const handleClearAdjustment = useCallback(() => {
     setAppliedAdjustment(null);
@@ -2413,6 +2553,7 @@ export function Transactions({
       split: {
         left: {
           icon: <Trash2 className="w-5 h-5" />,
+          label: 'Remove line',
           onClick: () => {
             if (!selectedItem) { show('Select a line first', 'error'); return; }
             removeItem(selectedItem);
@@ -2422,6 +2563,7 @@ export function Transactions({
         },
         right: {
           icon: <Archive className="w-5 h-5" />,
+          label: 'Park order',
           onClick: () => {
             if (lineItems.length === 0) {
               show('Add items before parking the transaction.', 'error');
@@ -2569,6 +2711,7 @@ export function Transactions({
       color: 'bg-gray-700',
       section: 'discounts',
       square: true,
+      // iconOnly: true,
       rectangular: true,
       onClick: () => console.log('Tax overrides'),
     },
@@ -2576,19 +2719,38 @@ export function Transactions({
       id: 'add-coupon',
       icon: <TicketPercent className="w-5 h-5" />,
       label: 'Add coupon',
-      color: 'bg-gray-700',
+      color: 'bg-orange-600',
       section: 'discounts',
       square: true,
+      // iconOnly: true,
       onClick: () => setIsCouponPanelOpen(true),
     },
     {
       id: 'order-discount',
-      icon: <Percent className="w-5 h-5" />,
-      label: 'Order discount',
-      color: 'bg-gray-700',
+      label: '',
+      color: 'bg-orange-600',
       section: 'discounts',
       square: true,
-      onClick: openDiscountPanel,
+      split: {
+        left: {
+          icon: (
+            <div className="flex flex-col items-center leading-none">
+              <BadgeDollarSign className="w-6 h-6" />
+            </div>
+          ),
+          label: 'Amount discount',
+          onClick: openAmountDiscountPanel,
+        },
+        right: {
+          icon: (
+            <div className="flex flex-col items-center leading-none">
+              <BadgePercent className="w-6 h-6" />
+            </div>
+          ),
+          label: 'Percent discount',
+          onClick: openPercentDiscountPanel,
+        },
+      },
     },
     {
       id: 'order-adjustment',
@@ -2602,6 +2764,46 @@ export function Transactions({
   ];
 
   const actionButtons: ActionButton[] = [...primaryActionButtons, ...discountActionButtons];
+
+  const amountPanelCurrent =
+    selectedLineItem && selectedLineItem.lineDiscountType === 'amount'
+      ? ({
+          type: 'amount',
+          value:
+            selectedLineItem.lineDiscountValue ??
+            selectedLineItem.lineDiscount ??
+            0,
+        } as const)
+      : !selectedLineItem && appliedDiscount?.type === 'amount'
+      ? appliedDiscount
+      : null;
+
+  const percentPanelCurrent =
+    selectedLineItem && selectedLineItem.lineDiscountType === 'percent'
+      ? ({
+          type: 'percent',
+          value:
+            selectedLineItem.lineDiscountValue ??
+            selectedLineItem.lineDiscount ??
+            0,
+        } as const)
+      : !selectedLineItem && appliedDiscount?.type === 'percent'
+      ? appliedDiscount
+      : null;
+
+  const amountPanelClearHandler =
+    selectedLineItem && selectedLineItem.lineDiscountType === 'amount'
+      ? handleClearLineDiscount
+      : !selectedLineItem && appliedDiscount?.type === 'amount'
+      ? handleClearDiscount
+      : undefined;
+
+  const percentPanelClearHandler =
+    selectedLineItem && selectedLineItem.lineDiscountType === 'percent'
+      ? handleClearLineDiscount
+      : !selectedLineItem && appliedDiscount?.type === 'percent'
+      ? handleClearDiscount
+      : undefined;
 
   return (
     <div
@@ -2712,15 +2914,25 @@ export function Transactions({
       />
 
       <TransactionDiscountPanel
-        isOpen={isDiscountPanelOpen}
-        onClose={() => setIsDiscountPanelOpen(false)}
-        mode={discountMode}
-        value={discountInput}
-        current={appliedDiscount}
-        onModeChange={setDiscountMode}
-        onValueChange={setDiscountInput}
-        onApply={handleApplyDiscount}
-        onClear={appliedDiscount ? handleClearDiscount : undefined}
+        isOpen={isAmountDiscountPanelOpen}
+        onClose={() => setIsAmountDiscountPanelOpen(false)}
+        mode="amount"
+        value={discountAmountInput}
+        current={amountPanelCurrent}
+        onValueChange={setDiscountAmountInput}
+        onApply={() => handleApplyDiscount('amount', discountAmountInput)}
+        onClear={amountPanelClearHandler}
+      />
+
+      <TransactionDiscountPanel
+        isOpen={isPercentDiscountPanelOpen}
+        onClose={() => setIsPercentDiscountPanelOpen(false)}
+        mode="percent"
+        value={discountPercentInput}
+        current={percentPanelCurrent}
+        onValueChange={setDiscountPercentInput}
+        onApply={() => handleApplyDiscount('percent', discountPercentInput)}
+        onClear={percentPanelClearHandler}
       />
 
       <TransactionAdjustmentPanel

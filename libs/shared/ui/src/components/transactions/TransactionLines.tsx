@@ -5,6 +5,8 @@ import { useCurrency } from '@monorepo/shared-hooks-currency';
 import type { SalesPerson as SalesPersonData } from '../SalesPersonModal.js';
 import type { Payment as TransactionPaymentEntry } from '../sales/CompactPaymentPanel.js';
 
+const DEFAULT_TAX_RATE = 0.03;
+
 export interface LineItem {
   id: string;
   name: string;
@@ -16,6 +18,12 @@ export interface LineItem {
   salesPersonId?: string; // Sales person assigned to this line item
   availableQuantity?: number; // Available stock quantity
   isReturn?: boolean; // Flag to indicate if this is a return item
+  discount?: number;
+  tax?: number;
+  lineDiscount?: number;
+  lineTax?: number;
+  lineDiscountType?: 'amount' | 'percent';
+  lineDiscountValue?: number;
 }
 
 export interface BillingSummary {
@@ -111,7 +119,17 @@ export function TransactionLines({
         return;
       }
 
-      const fallbackMethod: PaymentMethod = payment.paymentMethod ?? {
+      const sourceMethod = payment.paymentMethod as PaymentMethod | undefined;
+      const fallbackMethod: PaymentMethod = sourceMethod
+        ? {
+            id: sourceMethod.id,
+            code: sourceMethod.code,
+            name: sourceMethod.name,
+            type: sourceMethod.type,
+            isActive: sourceMethod.isActive,
+            icon: sourceMethod.icon,
+          }
+        : {
         id: payment.paymentMethodId,
         code: payment.paymentMethod?.code ?? payment.paymentMethodId,
         name: payment.paymentMethod?.name ?? payment.paymentMethodId ?? 'Payment',
@@ -327,7 +345,7 @@ export function TransactionLines({
             <div className="p-2 md:p-4 space-y-1.5 md:space-y-2 h-full">
               {/* Header Row */}
               <div
-                className="grid grid-cols-[2.2fr,0.8fr,1fr,1fr] gap-3 px-3 py-1 rounded text-[10px] md:text-xs font-semibold uppercase tracking-wide sticky top-0 z-10"
+                className="grid grid-cols-[2.2fr,0.8fr,1fr,1fr] gap-2 md:gap-3 px-3 py-1 rounded text-[10px] md:text-xs font-semibold uppercase tracking-wide sticky top-0 z-10"
                 style={{
                   backgroundColor: 'var(--color-bg-card)',
                   color: 'var(--color-text-secondary)',
@@ -336,8 +354,12 @@ export function TransactionLines({
               >
                 <span className="text-left">Item</span>
                 <span className="text-center">Qty</span>
-                <span className="text-right">Price</span>
-                <span className="text-right">Total</span>
+                <span className="text-right" style={{ minWidth: '90px' }}>
+                  Price
+                </span>
+                <span className="text-right" style={{ minWidth: '110px' }}>
+                  Total
+                </span>
               </div>
 
               {/* Line Items */}
@@ -346,15 +368,59 @@ export function TransactionLines({
                   const isSelected = selectedItem === item.id;
                   const isExpanded = expandedItemId === item.id;
                   const isMissingSalesPerson = linesMissingSalesPerson.includes(item.id);
+                  const lineSubtotal = Math.abs(item.price) * Math.abs(item.quantity);
+                  const rawTotal = Math.abs(
+                    typeof item.total === 'number' ? item.total : item.price * item.quantity
+                  );
+                  const rawLineDiscount =
+                    Number(
+                      (item as any).lineDiscount ??
+                        (item as any).discount ??
+                        item.lineDiscount ??
+                        item.discount ??
+                        0,
+                    ) || 0;
+                  const computedLineDiscount = Math.min(
+                    Math.max(rawLineDiscount, 0),
+                    lineSubtotal,
+                  );
+                  const rawLineTax =
+                    Number(
+                      (item as any).lineTax ??
+                        (item as any).tax ??
+                        item.lineTax ??
+                        item.tax ??
+                        0,
+                    ) || 0;
+                  const inferredLineTax = Math.max(
+                    0,
+                    (lineSubtotal - computedLineDiscount) * DEFAULT_TAX_RATE,
+                  );
+                  const computedLineTax =
+                    computedLineDiscount > 0
+                      ? (Number.isFinite(rawLineTax) && rawLineTax > 0 ? rawLineTax : inferredLineTax)
+                      : 0;
                   const formattedPrice = formatCurrency(Math.abs(item.price));
-                  const formattedTotal = formatCurrency(Math.abs(item.total));
+                  const formattedTotal = formatCurrency(rawTotal);
+                  const formattedLineDiscountDisplay = formatCurrency(computedLineDiscount);
+                  const formattedLineTaxDisplay = formatCurrency(computedLineTax);
+                  const formattedLineDiscountPercent = lineSubtotal
+                    ? `${Math.round((computedLineDiscount / lineSubtotal) * 100)}%`
+                    : '0%';
+                  const formattedLineTaxPercent = lineSubtotal
+                    ? `${Math.round((computedLineTax / Math.max(lineSubtotal - computedLineDiscount, 1e-6)) * 100)}%`
+                    : '0%';
+                  const formattedTotalWithTax =
+                    computedLineDiscount > 0
+                      ? formatCurrency(rawTotal + computedLineTax)
+                      : formattedTotal;
                   return (
                     <div key={item.id} className="space-y-1">
                       <div
                         onClick={() => {
                           onItemSelect?.(item.id);
                         }}
-                        className="grid grid-cols-[2.2fr,0.8fr,1fr,1fr] gap-3 px-3 py-2 md:py-2.5 rounded cursor-pointer hover:opacity-80"
+                        className="grid grid-cols-[2.2fr,0.8fr,1fr,1fr] gap-2 md:gap-3 px-3 py-2 md:py-2.5 rounded cursor-pointer hover:opacity-80"
                         style={{
                           backgroundColor: isSelected
                             ? 'var(--color-accent-blue)'
@@ -417,7 +483,7 @@ export function TransactionLines({
                         </div>
                         <div
                           className="flex items-center justify-end font-mono text-xs md:text-sm gap-1"
-                          style={{ fontVariantNumeric: 'tabular-nums' }}
+                          style={{ fontVariantNumeric: 'tabular-nums', minWidth: '90px', whiteSpace: 'nowrap' }}
                         >
                           {item.isReturn ? (
                             <span className="line-through">{formattedPrice}</span>
@@ -427,7 +493,7 @@ export function TransactionLines({
                         </div>
                         <div
                           className="flex items-center justify-end font-mono text-xs md:text-sm font-semibold gap-1"
-                          style={{ fontVariantNumeric: 'tabular-nums' }}
+                          style={{ fontVariantNumeric: 'tabular-nums', minWidth: '110px', whiteSpace: 'nowrap' }}
                         >
                           {item.isReturn ? (
                             <span className="line-through">{formattedTotal}</span>
@@ -469,8 +535,16 @@ export function TransactionLines({
                               <span>{formattedPrice}</span>
                             </div>
                             <div>
-                              <span className="font-semibold">Total (with tax):</span>{' '}
-                              <span>{formattedTotal}</span>
+                              <span className="font-semibold">Line discount:</span>{' '}
+                              <span>{formattedLineDiscountDisplay}</span>
+                            </div>
+                            <div>
+                              <span className="font-semibold">Line tax:</span>{' '}
+                              <span>{formattedLineTaxDisplay}</span>
+                            </div>
+                            <div>
+                              <span className="font-semibold">Total:</span>{' '}
+                              <span>{formattedTotalWithTax}</span>
                             </div>
                           </div>
                         </div>

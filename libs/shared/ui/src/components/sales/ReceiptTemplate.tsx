@@ -47,6 +47,7 @@ export interface ReceiptData {
   grossTotal: number;
   itemDiscount: number;
   netTotal: number;
+  taxAmount?: number;
   tendered: number;
   change: number;
 
@@ -76,6 +77,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
     payments,
     grossTotal,
     itemDiscount,
+    taxAmount = 0,
     netTotal,
     tendered,
     change,
@@ -239,7 +241,6 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
           borderBottom: '1px solid #000',
         }}
       >
-        <div style={{ flex: '2' }}>Product</div>
         <div style={{ width: '50px', textAlign: 'center' }}>Price</div>
         <div style={{ width: '30px', textAlign: 'center' }}>Qty</div>
         <div style={{ width: '40px', textAlign: 'center' }}>Disc%</div>
@@ -249,18 +250,46 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
 
       {/* Line Items */}
       {lineItems.map((item, index) => {
-        const discountPercent = item.saleDiscount?.percent || 0;
+        const initialDiscountPercent = item.saleDiscount?.percent || 0;
+        const initialDiscountAmount = item.saleDiscount?.amount || 0;
         const customDiscount = item.customDiscount?.amount || 0;
+        const lineSubtotal = Number(item.quantity) * Number(item.unitPrice);
+        const lineTotal =
+          item.lineTotal ??
+          Math.max(0, lineSubtotal - customDiscount - initialDiscountAmount);
+        const lineDiscountAmount = Math.max(0, lineSubtotal - lineTotal);
+        const lineDiscountPercent =
+          lineSubtotal > 0 ? `${((lineDiscountAmount / lineSubtotal) * 100).toFixed(1)}%` : '0%';
+        const lineTaxAmount =
+          typeof (item as any).lineTax === 'number'
+            ? Number((item as any).lineTax)
+            : 0;
+        const lineTaxPercent =
+          lineTotal > 0 ? `${((lineTaxAmount / lineTotal) * 100).toFixed(1)}%` : '0%';
         
         // Get product name from variant or extended properties
         const productName = (item as any).productName || item.variant?.product?.name || 'Item';
         const variantName = (item as any).variantName || item.variant?.variantName;
         const sku = (item as any).sku || item.variant?.sku;
-        const shortenedProductName = shortenProductName(productName);
+        // Combine product name and variant name for complete product name
+        const completeProductName = variantName 
+          ? `${productName} ${variantName}`.trim()
+          : productName;
 
         return (
           <div key={item.id || index} style={{ marginBottom: '3mm' }}>
-            {/* Item Details Row - Product name in first column */}
+            {/* Product Name Row - Full product name */}
+            <div
+              style={{
+                fontSize: '11px',
+                fontWeight: 'bold',
+                wordBreak: 'break-word',
+                marginBottom: '1mm',
+              }}
+            >
+              {completeProductName}
+            </div>
+            {/* Item Details Row */}
             <div
               style={{
                 display: 'flex',
@@ -268,9 +297,6 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
                 fontSize: '11px',
               }}
             >
-              <div style={{ flex: '2', fontWeight: 'bold', wordBreak: 'break-word' }}>
-                {shortenedProductName} {variantName && `- ${variantName}`}
-              </div>
               <div style={{ width: '50px', textAlign: 'center' }}>
                 {item.unitPrice.toFixed(0)}
               </div>
@@ -278,15 +304,25 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
                 {item.quantity}
               </div>
               <div style={{ width: '40px', textAlign: 'center' }}>
-                {discountPercent > 0 ? `${discountPercent}%` : '0%'}
+                {lineDiscountAmount > 0 ? lineDiscountPercent : '0%'}
               </div>
               <div style={{ width: '30px', textAlign: 'center' }}>
-                {customDiscount > 0 ? customDiscount.toFixed(0) : '0'}
+                {lineDiscountAmount > 0 ? lineDiscountAmount.toFixed(2) : '0'}
               </div>
               <div style={{ width: '60px', textAlign: 'right' }}>
                 {item.lineTotal.toFixed(2)}
               </div>
             </div>
+            {(lineDiscountAmount > 0 || lineTaxAmount > 0) && (
+              <div style={{ fontSize: '10px', marginTop: '1mm', color: '#4b5563' }}>
+                {lineDiscountAmount > 0 && (
+                  <div>Discount: Rs {lineDiscountAmount.toFixed(2)} ({lineDiscountPercent})</div>
+                )}
+                {lineTaxAmount > 0 && (
+                  <div>Tax: Rs {lineTaxAmount.toFixed(2)} ({lineTaxPercent})</div>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
@@ -299,21 +335,19 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
         }}
       />
 
-      {/* Totals Section - Match table column widths */}
+      {/* Totals Section */}
       <div style={{ fontSize: '11px', marginBottom: '1mm' }}>
         <div
           style={{
             display: 'flex',
+            justifyContent: 'space-between',
             fontSize: '11px',
             marginBottom: '1mm',
+            fontWeight: 'bold',
           }}
         >
-          <div style={{ flex: '2' }}>Total {lineItems.length}</div>
-          <div style={{ width: '50px', textAlign: 'center' }}></div>
-          <div style={{ width: '30px', textAlign: 'center' }}></div>
-          <div style={{ width: '40px', textAlign: 'center' }}></div>
-          <div style={{ width: '30px', textAlign: 'center' }}></div>
-          <div style={{ width: '60px', textAlign: 'right' }}>
+          <div>Total {lineItems.length}</div>
+          <div style={{ textAlign: 'right', minWidth: '80px' }}>
             {grossTotal.toFixed(2)}
           </div>
         </div>
@@ -355,6 +389,17 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
         >
           <div>Item Discount:</div>
           <div style={{ textAlign: 'right', minWidth: '80px' }}>-Rs {itemDiscount.toFixed(2)}</div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginBottom: '1mm',
+          }}
+        >
+          <div>Tax:</div>
+          <div style={{ textAlign: 'right', minWidth: '80px' }}>Rs {taxAmount.toFixed(2)}</div>
         </div>
 
         <div
@@ -471,7 +516,6 @@ export function generateReceiptHTML(data: ReceiptData): string {
         <div class="separator"></div>
         <div class="center" style="font-size: 11px; margin-bottom: 3mm;">------------ Original ------------</div>
         <div class="flex bold" style="font-size: 11px; margin-bottom: 2mm; padding-bottom: 1mm; border-bottom: 1px solid #000;">
-          <div style="flex: 2;">Product</div>
           <div style="width: 50px; text-align: center;">Price</div>
           <div style="width: 30px; text-align: center;">Qty</div>
           <div style="width: 40px; text-align: center;">Disc%</div>
@@ -481,32 +525,36 @@ export function generateReceiptHTML(data: ReceiptData): string {
         ${data.lineItems.map(item => {
           const discountPercent = item.saleDiscount?.percent || 0;
           const customDiscount = item.customDiscount?.amount || 0;
+          const lineSubtotal = Number(item.quantity) * Number(item.unitPrice);
+          const lineTotal = item.lineTotal ?? Math.max(0, lineSubtotal - customDiscount - (item.saleDiscount?.amount || 0));
+          const lineDiscountAmount = Math.max(0, lineSubtotal - lineTotal);
+          const lineDiscountPercent = lineSubtotal > 0 ? ((lineDiscountAmount / lineSubtotal) * 100).toFixed(1) : '0';
           // Get product name from variant or extended properties
           const productName = (item as any).productName || item.variant?.product?.name || 'Item';
           const variantName = (item as any).variantName || item.variant?.variantName;
           const sku = (item as any).sku || item.variant?.sku;
-          const shortenedProductName = shortenProductName(productName);
+          // Combine product name and variant name for complete product name
+          const completeProductName = variantName 
+            ? `${productName} ${variantName}`.trim()
+            : productName;
           return `
             <div style="margin-bottom: 3mm;">
+              <div style="font-size: 11px; font-weight: bold; word-break: break-word; margin-bottom: 1mm;">${completeProductName}</div>
               <div class="flex" style="font-size: 11px;">
-                <div style="flex: 2; font-weight: bold; word-break: break-word;">${shortenedProductName}${variantName ? ` - ${variantName}` : ''}</div>
                 <div style="width: 50px; text-align: center;">${item.unitPrice.toFixed(0)}</div>
                 <div style="width: 30px; text-align: center;">${item.quantity}</div>
-                <div style="width: 40px; text-align: center;">${discountPercent > 0 ? `${discountPercent}%` : '0%'}</div>
-                <div style="width: 30px; text-align: center;">${customDiscount > 0 ? customDiscount.toFixed(0) : '0'}</div>
+                <div style="width: 40px; text-align: center;">${lineDiscountAmount > 0 ? `${lineDiscountPercent}%` : '0%'}</div>
+                <div style="width: 30px; text-align: center;">${lineDiscountAmount > 0 ? lineDiscountAmount.toFixed(2) : '0'}</div>
                 <div style="width: 60px; text-align: right;">${item.lineTotal.toFixed(2)}</div>
-              </div>
+            </div>
+           
             </div>
           `;
         }).join('')}
         <div class="separator"></div>
-        <div class="flex" style="font-size: 11px; margin-bottom: 1mm;">
-          <div style="flex: 2;">Total ${data.lineItems.length}</div>
-          <div style="width: 50px; text-align: center;"></div>
-          <div style="width: 30px; text-align: center;"></div>
-          <div style="width: 40px; text-align: center;"></div>
-          <div style="width: 30px; text-align: center;"></div>
-          <div style="width: 60px; text-align: right;">${data.grossTotal.toFixed(2)}</div>
+        <div class="flex" style="font-size: 11px; margin-bottom: 1mm; font-weight: bold;">
+          <div>Total ${data.lineItems.length}</div>
+          <div style="text-align: right; min-width: 80px;">${data.grossTotal.toFixed(2)}</div>
         </div>
         <div class="separator"></div>
         <div class="bold" style="font-size: 12px; margin-top: 3mm;">
@@ -517,6 +565,10 @@ export function generateReceiptHTML(data: ReceiptData): string {
           <div class="flex" style="margin-bottom: 1mm;">
             <div>Item Discount:</div>
             <div style="text-align: right; min-width: 80px;">-Rs ${data.itemDiscount.toFixed(2)}</div>
+          </div>
+          <div class="flex" style="margin-bottom: 1mm;">
+            <div>Tax:</div>
+            <div style="text-align: right; min-width: 80px;">Rs ${(data.taxAmount ?? 0).toFixed(2)}</div>
           </div>
           <div class="flex" style="margin-bottom: 3mm;">
             <div>Net Total:</div>

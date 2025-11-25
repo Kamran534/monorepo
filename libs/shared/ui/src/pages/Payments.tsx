@@ -43,6 +43,7 @@ const FALLBACK_PAYMENT_METHODS: PaymentPanelMethod[] = [
 
 const DEFAULT_TAX_RATE = 0.03;
 const PAYMENT_TOLERANCE = 0.01;
+const ALLOWED_PAYMENT_METHOD_KEYS = ['cash', 'card'];
 
 type CapturedCustomer = {
   id?: string;
@@ -180,18 +181,34 @@ export function Payments({
         total: navigationState.orderTotal,
       };
     }
-    // Fallback calculation if no navigation state
-    const subtotal = lineItems.reduce(
-      (sum, li) => sum + Number(li.price ?? 0) * Number(li.quantity ?? 1),
-      0
+    const fallback = lineItems.reduce(
+      (acc, li) => {
+        const quantity = Number(li.quantity ?? 1);
+        const unitPrice = Number(li.price ?? 0);
+        const baseLineTotal = unitPrice * quantity;
+        const lineTotal = typeof li.total === 'number' ? li.total : baseLineTotal;
+        const lineDiscount = Math.max(0, baseLineTotal - lineTotal);
+        acc.subtotal += lineTotal;
+        acc.taxableSubtotal += baseLineTotal;
+        acc.lineDiscountTotal += lineDiscount;
+        return acc;
+      },
+      { subtotal: 0, taxableSubtotal: 0, lineDiscountTotal: 0 },
     );
-    const taxValue = Number((subtotal * DEFAULT_TAX_RATE).toFixed(2));
-    const total = Number((subtotal + taxValue).toFixed(2));
+    const discountValue = 0;
+    const giftCardValue = 0;
+    const adjustmentValue = 0;
+    const taxableBase = Math.max(
+      0,
+      fallback.taxableSubtotal - fallback.lineDiscountTotal - discountValue + adjustmentValue,
+    );
+    const taxValue = Number((taxableBase * DEFAULT_TAX_RATE).toFixed(2));
+    const total = Number((fallback.subtotal - discountValue + adjustmentValue + taxValue).toFixed(2));
     return {
-      subtotal,
-      discountValue: 0,
-      giftCardValue: 0,
-      adjustmentValue: 0,
+      subtotal: fallback.subtotal,
+      discountValue,
+      giftCardValue,
+      adjustmentValue,
       taxValue,
       total,
     };
@@ -271,6 +288,7 @@ export function Payments({
   const phoneInputRef = React.useRef<HTMLInputElement>(null);
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const emailInputRef = React.useRef<HTMLInputElement>(null);
+  const summaryContainerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (customers.length > 0 || customersLoading) {
@@ -304,6 +322,50 @@ export function Payments({
     }
   }, [navigationState, capturedCustomer]);
 
+  // Normalize repo methods down to our Cash/Card requirement
+  const selectAllowedPaymentMethods = useCallback(
+    (methods: any[] = []): PaymentPanelMethod[] => {
+      const filtered = methods
+        .filter((method) => {
+          const keyCandidates = [
+            method?.type,
+            method?.code,
+            method?.name,
+          ]
+            .filter(Boolean)
+            .map((value) => value.toLowerCase());
+
+          return keyCandidates.some((value) =>
+            ALLOWED_PAYMENT_METHOD_KEYS.some((key) => value.includes(key)),
+          );
+        })
+        .map((method) => ({
+          id: method.id || method.code || method.name,
+          code: method.code || method.type || method.name,
+          name: method.name,
+          type: method.type,
+          isActive: method.isActive ?? true,
+          icon: method.icon,
+        }));
+
+      if (filtered.length === 0) {
+        return FALLBACK_PAYMENT_METHODS;
+      }
+
+      // Sort to keep Cash first, Card second
+      return filtered.sort((a, b) => {
+        const aIndex = ALLOWED_PAYMENT_METHOD_KEYS.indexOf(
+          (a.type || a.code || '').toLowerCase().includes('cash') ? 'cash' : 'card',
+        );
+        const bIndex = ALLOWED_PAYMENT_METHOD_KEYS.indexOf(
+          (b.type || b.code || '').toLowerCase().includes('cash') ? 'cash' : 'card',
+        );
+        return aIndex - bIndex;
+      });
+    },
+    [],
+  );
+
   // Load payment methods from repository
   React.useEffect(() => {
     const loadPaymentMethods = async () => {
@@ -316,16 +378,7 @@ export function Payments({
       try {
         const result = await paymentMethodRepo.getPaymentMethods({ isActive: true });
         if (result.success && result.paymentMethods && result.paymentMethods.length > 0) {
-          setAvailablePaymentMethods(
-            result.paymentMethods.map((method) => ({
-              id: method.id, // Use actual UUID from database
-              code: method.code,
-              name: method.name,
-              type: method.type,
-              isActive: method.isActive,
-              icon: method.icon,
-            }))
-          );
+          setAvailablePaymentMethods(selectAllowedPaymentMethods(result.paymentMethods));
         } else {
           setAvailablePaymentMethods(FALLBACK_PAYMENT_METHODS);
         }
@@ -338,7 +391,7 @@ export function Payments({
     };
 
     loadPaymentMethods();
-  }, [paymentMethodRepo]);
+  }, [paymentMethodRepo, selectAllowedPaymentMethods]);
 
   // Save payment state to sessionStorage whenever it changes
   React.useEffect(() => {
@@ -440,8 +493,12 @@ export function Payments({
       } else if (completionStep === 'email' && emailInputRef.current) {
         emailInputRef.current.focus();
         emailInputRef.current.select();
+      } else if (completionStep === 'summary' && summaryContainerRef.current) {
+        summaryContainerRef.current.focus();
+        // Keep focus on the container
+        summaryContainerRef.current.focus();
       }
-    }, 120);
+    }, 150);
 
     return () => clearTimeout(focusTimeout);
   }, [isCompletionPanelOpen, completionStep]);
@@ -578,7 +635,7 @@ export function Payments({
     setFlowError(null);
 
         try {
-          const paymentInputs = payments.map((p) => ({
+            const paymentInputs = payments.map((p) => ({
             paymentMethodId: p.paymentMethodId,
             amount: p.amount,
             transactionId: p.transactionId,
@@ -677,11 +734,18 @@ export function Payments({
             lineItems: lineItems.map((item: any) => {
               const baseQuantity = Number(item.quantity ?? 1);
               const unitPrice = Math.abs(Number(item.price ?? 0));
+              const lineDiscountAmount =
+                typeof item.lineDiscount === 'number'
+                  ? Math.abs(item.lineDiscount)
+                  : typeof item.discount === 'number'
+                  ? Math.abs(item.discount)
+                  : 0;
               return {
                 variantId: item.productId || item.id,
                 salesPersonId: item.salesPersonId || navigationState?.salesPersonId || undefined,
                 quantity: item.isReturn ? -Math.abs(baseQuantity) : baseQuantity,
                 unitPrice,
+                saleDiscount: lineDiscountAmount > 0 ? { amount: lineDiscountAmount } : undefined,
               };
             }),
             payments: paymentInputs,
@@ -696,6 +760,8 @@ export function Payments({
             giftCardNumber: navigationState?.giftCard?.cardNumber,
             notes: undefined,
             customerNotes: undefined,
+            taxAmountOverride: orderBreakdown.taxValue,
+            totalAmountOverride: orderBreakdown.total,
           };
 
           console.log('[Payments] Creating order with data:', {
@@ -745,9 +811,12 @@ export function Payments({
               const sku = item.sku || item.barcode || item.productVariantId || '';
               const quantity = item.quantity || 1;
               const unitPrice = Number(item.price || 0);
-              const discount = item.discount || 0;
-              const lineSubtotal = unitPrice * quantity;
-              const lineTotal = lineSubtotal - discount;
+            const discount =
+              item.lineDiscount ??
+              item.discount ??
+              0;
+            const lineSubtotal = unitPrice * quantity;
+            const lineTotal = Math.max(0, unitPrice * quantity - discount);
 
               return {
                 id: item.id || item.productId || Math.random().toString(),
@@ -836,6 +905,7 @@ export function Payments({
               cashier: salesPersonName,
               grossTotal,
               itemDiscount,
+        taxAmount: orderBreakdown.taxValue,
               netTotal,
               tendered,
               change,
@@ -910,6 +980,41 @@ export function Payments({
     promptPrintReceipt,
   ]);
 
+  // Handle keyboard shortcuts for summary step
+  React.useEffect(() => {
+    if (!isCompletionPanelOpen || completionStep !== 'summary') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Enter key to confirm and generate bill
+      if (e.key === 'Enter' && !isProcessing) {
+        // Don't prevent default if user is typing in an input field
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        finalizeOrder();
+        return;
+      }
+      // Shift+Backspace to go back to edit customer
+      if (e.key === 'Backspace' && e.shiftKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        setCompletionStep('phone');
+      }
+    };
+
+    // Use capture phase to catch events early
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [isCompletionPanelOpen, completionStep, isProcessing, finalizeOrder]);
 
   return (
     <div className="h-[calc(100vh-var(--navbar-height,71px))] w-full flex flex-col" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
@@ -1150,7 +1255,26 @@ export function Payments({
         )}
 
         {completionStep === 'summary' && (
-          <div className="flex flex-col h-full">
+          <div 
+            ref={summaryContainerRef}
+            className="flex flex-col h-full outline-none"
+            onKeyDown={(e) => {
+              // Enter key to confirm and generate bill
+              if (e.key === 'Enter' && !isProcessing) {
+                e.preventDefault();
+                e.stopPropagation();
+                finalizeOrder();
+              }
+              // Shift+Backspace to go back to edit customer
+              else if (e.key === 'Backspace' && e.shiftKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                setCompletionStep('phone');
+              }
+            }}
+            tabIndex={-1}
+            style={{ outline: 'none' }}
+          >
             <div className="flex-1 overflow-y-auto space-y-3">
               <div
                 className="border rounded p-3 space-y-2"
@@ -1233,6 +1357,9 @@ export function Payments({
                 <Printer className="w-4 h-4" />
                 {isProcessing ? 'Finishing...' : 'Generate Bill'}
               </button>
+              <p className="text-[10px] text-center mt-2" style={{ color: 'var(--color-text-secondary)' }}>
+                Press Enter to confirm, Shift+Backspace to edit customer
+              </p>
             </div>
           </div>
         )}

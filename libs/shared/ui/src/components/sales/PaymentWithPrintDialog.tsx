@@ -118,6 +118,7 @@ export function PaymentWithPrintDialog({
             cashier,
             grossTotal,
             itemDiscount,
+            taxAmount: 0,
             netTotal,
             tendered,
             change,
