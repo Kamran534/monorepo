@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Customer } from '../components/customer/CustomerCard.js';
 import { CustomerForm, CustomerList } from '../components/customer/index.js';
 import { useTransactionCustomer } from '../hooks/useTransactionCustomer.js';
@@ -30,8 +30,9 @@ export function Customers() {
   const { show } = useToast();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { customer: currentTransactionCustomer, setCustomer: setTransactionCustomer } = useTransactionCustomer();
-  const [searchQuery, setSearchQuery] = useState('');
+  const searchTerm = searchParams.get('search') || '';
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   // Get data from Redux store
@@ -223,8 +224,7 @@ export function Customers() {
           ) : (
             <CustomerList
               customers={customers}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
+              searchQuery={searchTerm}
               onEditCustomer={handleEditCustomer}
               onDeleteCustomer={handleDeleteCustomer}
               onAddToTransaction={handleAddToTransaction}

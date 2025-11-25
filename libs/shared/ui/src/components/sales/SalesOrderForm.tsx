@@ -335,6 +335,7 @@ export function SalesOrderForm({
         grossTotal,
         itemDiscount,
         taxAmount: orderTotals.taxAmount,
+        adjustmentAmount: adjustment.amount || 0,
         netTotal,
         tendered,
         change,

@@ -1,10 +1,8 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Folder, ArrowLeft, Receipt, X } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { X, Printer, FileText } from 'lucide-react';
 import { useToast, Loading } from '@monorepo/shared-ui';
 import type { SalesOrder } from '@monorepo/shared-data-access';
-import { OrdersGrid, OrderDetailPanel } from '../components/orders/index.js';
-import { ReceiptTemplate } from '../components/sales/ReceiptTemplate.js';
 
 export interface OrdersProps {
   salesOrderRepo?: {
@@ -19,19 +17,33 @@ export interface OrdersProps {
   };
 }
 
+const ITEMS_PER_PAGE = 10;
+
 export function Orders({ salesOrderRepo }: OrdersProps = {}) {
-  const navigate = useNavigate();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showDetailPanel, setShowDetailPanel] = useState(false);
-  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
-  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const { show } = useToast();
+
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadOrders();
   }, []);
+
+  // Sync search term with URL params
+  useEffect(() => {
+    const urlSearch = searchParams.get('search') || '';
+    setSearchTerm(urlSearch);
+  }, [searchParams]);
+
+  // Reset pagination when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const loadOrders = async () => {
     try {
@@ -51,21 +63,6 @@ export function Orders({ salesOrderRepo }: OrdersProps = {}) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleOrderClick = (order: SalesOrder) => {
-    setSelectedOrder(order);
-    setShowDetailPanel(true);
-  };
-
-  const handleCloseDetail = () => {
-    setIsAnimatingOut(true);
-    // Wait for slide-out animation to complete
-    setTimeout(() => {
-      setShowDetailPanel(false);
-      setIsAnimatingOut(false);
-      setSelectedOrder(null);
-    }, 300);
   };
 
   const formatDate = (date: string | Date | undefined) => {
@@ -90,65 +87,61 @@ export function Orders({ salesOrderRepo }: OrdersProps = {}) {
     return `Rs ${formatted}`;
   };
 
-  const handleShowReceipt = () => {
-    if (!selectedOrder) {
-      show('Please select an order first', 'info');
-      return;
+  const filteredOrders = useMemo(() => {
+    if (!searchTerm.trim()) return orders;
+    // Normalize search query: replace "/" with "-" for scanner compatibility
+    const normalizedQuery = searchTerm.toLowerCase().replace(/\//g, '-');
+    return orders.filter((order) => {
+      const customerName = `${order.customer?.firstName || ''} ${order.customer?.lastName || ''}`.toLowerCase();
+      // Normalize order numbers for comparison
+      const normalizedOrderNumber = order.orderNumber?.toLowerCase().replace(/\//g, '-') || '';
+      const normalizedOrderId = order.id?.toLowerCase().replace(/\//g, '-') || '';
+      return (
+        normalizedOrderNumber.includes(normalizedQuery) ||
+        customerName.includes(normalizedQuery) ||
+        normalizedOrderId.includes(normalizedQuery)
+      );
+    });
+  }, [orders, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ITEMS_PER_PAGE));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
     }
-    setShowReceiptModal(true);
-  };
+  }, [currentPage, totalPages]);
 
-  const handleCloseReceipt = () => {
-    setShowReceiptModal(false);
-  };
+  const paginatedOrders = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredOrders.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredOrders, currentPage]);
 
-  // Prepare receipt data from selected order
-  const getReceiptData = () => {
-    if (!selectedOrder) return null;
+  const handleSelectOrder = useCallback(
+    (order: SalesOrder) => {
+      setSelectedOrder(order);
+    },
+    [],
+  );
 
-    const orderDate = selectedOrder.completedAt || selectedOrder.orderDate;
-    const dateTime = formatDate(orderDate);
-    
-    // Get cashier name
-    const cashierName = selectedOrder.salesPerson?.name || 
-                       selectedOrder.salesPerson?.code || 
-                       'Cashier';
+  const handleViewDetails = useCallback(
+    (order: SalesOrder) => {
+      const reference = encodeURIComponent(order.orderNumber || order.id);
+      navigate(`/orders/${reference}`);
+    },
+    [navigate],
+  );
 
-    // Prepare customer data if available
-    const customer = selectedOrder.customer && selectedOrder.customer.id
-      ? {
-          id: selectedOrder.customer.id,
-          firstName: selectedOrder.customer.firstName || '',
-          lastName: selectedOrder.customer.lastName || '',
-          email: selectedOrder.customer.email,
-          phone: selectedOrder.customer.phone,
-          customerCode: selectedOrder.customer.customerCode,
-        }
-      : undefined;
+  const handlePrintOrder = useCallback(
+    (order: SalesOrder) => {
+      show(`Printing order ${order.orderNumber || order.id}`, 'info');
+    },
+    [show],
+  );
 
-    // Create a simplified receipt with available data
-    // Note: We don't have lineItems and payments in the order data,
-    // so we'll create a summary receipt
-    return {
-      storeName: 'TRADE UNLEASHED',
-      storeNameArabic: 'التجارة المنطلِقة',
-      storeUrl: 'http://www.tradeunleashed.com',
-      posNumber: 'TRADE UNLEASHED',
-      invoiceNumber: selectedOrder.orderNumber || selectedOrder.id,
-      orderNumber: selectedOrder.orderNumber || selectedOrder.id,
-      orderId: selectedOrder.id,
-      dateTime: dateTime,
-      cashier: cashierName,
-      customer,
-      lineItems: [], // Empty - we don't have line items in the order data
-      payments: [], // Empty - we don't have payments in the order data
-      grossTotal: selectedOrder.subtotal || 0,
-      itemDiscount: selectedOrder.discountAmount || 0,
-      netTotal: selectedOrder.totalAmount || 0,
-      tendered: selectedOrder.amountPaid || 0,
-      change: selectedOrder.changeAmount || 0,
-    };
-  };
+  const handleCloseDetail = useCallback(() => {
+    setSelectedOrder(null);
+  }, []);
 
   if (loading) {
     return (
@@ -173,216 +166,322 @@ export function Orders({ salesOrderRepo }: OrdersProps = {}) {
       }}
     >
       {/* Main Content */}
-      <div className="flex-1 flex min-h-0">
-        {/* Left Panel - Orders Grid */}
-        <div
-          className="flex-1 min-w-0 border-r"
-          style={{
-            borderColor: 'var(--color-border-light)',
-            width: (showDetailPanel && !isAnimatingOut) ? '66.666%' : '100%',
-            transition: 'width 0.3s ease-out',
-            willChange: 'width',
-          }}
-        >
-          <div
-            className="flex flex-col h-full w-full min-h-0"
-            style={{
-              backgroundColor: 'var(--color-bg-secondary)',
-            }}
-          >
-            {/* Header */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Detail panel */}
+        {selectedOrder && (
+          <div className="px-4 mt-4">
             <div
-              className="px-4 py-3 border-b flex-shrink-0"
+              className="w-full p-4 rounded border"
               style={{
                 borderColor: 'var(--color-border-light)',
                 backgroundColor: 'var(--color-bg-card)',
               }}
             >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => navigate('/')}
-                    className="p-1.5 rounded transition-colors flex-shrink-0"
-                    style={{
-                      color: 'var(--color-text-secondary)',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'var(--color-bg-hover)';
-                      e.currentTarget.style.color = 'var(--color-text-primary)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                      e.currentTarget.style.color = 'var(--color-text-secondary)';
-                    }}
-                    aria-label="Back to home"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                  <h2
-                    className="text-base font-semibold"
-                    style={{ color: 'var(--color-text-primary)' }}
-                  >
-                    Orders
-                  </h2>
-                  <span
-                    className="text-sm"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                  >
-                    {orders.length} {orders.length === 1 ? 'order' : 'orders'} found
-                  </span>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs uppercase" style={{ color: 'var(--color-text-secondary)' }}>
+                      Order reference
+                    </p>
+                    <p className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                      {selectedOrder.orderNumber || selectedOrder.id}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleViewDetails(selectedOrder)}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded border text-sm"
+                      style={{
+                        borderColor: 'var(--color-border-light)',
+                        color: 'var(--color-text-primary)',
+                        backgroundColor: 'var(--color-bg-secondary)',
+                      }}
+                    >
+                      <FileText className="w-4 h-4" />
+                      Detail
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePrintOrder(selectedOrder)}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded text-sm"
+                      style={{
+                        backgroundColor: 'var(--color-accent-blue)',
+                        color: 'var(--color-text-light)',
+                      }}
+                    >
+                      <Printer className="w-4 h-4" />
+                      Print
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCloseDetail}
+                      className="p-2 rounded border"
+                      style={{
+                        borderColor: 'var(--color-border-light)',
+                        color: 'var(--color-text-secondary)',
+                      }}
+                      aria-label="Close detail panel"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={handleShowReceipt}
-                  disabled={!selectedOrder}
-                  className="p-1.5 rounded transition-colors flex-shrink-0"
-                  style={{
-                    color: selectedOrder ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                    opacity: selectedOrder ? 1 : 0.5,
-                    cursor: selectedOrder ? 'pointer' : 'not-allowed',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (selectedOrder) {
-                      e.currentTarget.style.backgroundColor = 'var(--color-bg-hover)';
-                      e.currentTarget.style.color = '#ea580c';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (selectedOrder) {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                      e.currentTarget.style.color = 'var(--color-text-primary)';
-                    }
-                  }}
-                  aria-label="View receipt"
-                  title={selectedOrder ? 'View receipt' : 'Select an order to view receipt'}
-                >
-                  <Receipt className="w-4 h-4" />
-                </button>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs uppercase" style={{ color: 'var(--color-text-secondary)' }}>
+                      Customer
+                    </p>
+                    <p style={{ color: 'var(--color-text-primary)' }}>
+                      {selectedOrder.customer?.firstName
+                        ? `${selectedOrder.customer.firstName} ${selectedOrder.customer.lastName || ''}`.trim()
+                        : 'Walk-in'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase" style={{ color: 'var(--color-text-secondary)' }}>
+                      Sales person
+                    </p>
+                    <p style={{ color: 'var(--color-text-primary)' }}>
+                      {selectedOrder.salesPerson?.name || selectedOrder.salesPerson?.code || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase" style={{ color: 'var(--color-text-secondary)' }}>
+                      Date created
+                    </p>
+                    <p style={{ color: 'var(--color-text-primary)' }}>{formatDate(selectedOrder.completedAt || selectedOrder.orderDate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase" style={{ color: 'var(--color-text-secondary)' }}>
+                      Status
+                    </p>
+                    <p style={{ color: 'var(--color-text-primary)' }}>{selectedOrder.status || '—'}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-2">
+                  <div>
+                    <p className="text-xs uppercase" style={{ color: 'var(--color-text-secondary)' }}>
+                      Subtotal
+                    </p>
+                    <p style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(selectedOrder.subtotal)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase" style={{ color: 'var(--color-text-secondary)' }}>
+                      Discount
+                    </p>
+                    <p style={{ color: 'var(--color-text-primary)' }}>-{formatCurrency(selectedOrder.discountAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase" style={{ color: 'var(--color-text-secondary)' }}>
+                      Tax
+                    </p>
+                    <p style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(selectedOrder.taxAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase" style={{ color: 'var(--color-text-secondary)' }}>
+                      Total
+                    </p>
+                    <p style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(selectedOrder.totalAmount)}</p>
+                  </div>
+                </div>
               </div>
             </div>
-
-            {/* Orders Grid */}
-            <div 
-              className="flex-1 min-h-0 overflow-y-auto p-3 orders-scroll-container"
-              style={{
-                scrollbarWidth: 'thin',
-                scrollbarColor: 'var(--color-border-light) var(--color-bg-secondary)',
-              }}
-            >
-              <style>{`
-                .orders-scroll-container::-webkit-scrollbar {
-                  width: 10px;
-                  height: 10px;
-                }
-                .orders-scroll-container::-webkit-scrollbar-track {
-                  background: var(--color-bg-secondary);
-                  border-radius: 10px;
-                }
-                .orders-scroll-container::-webkit-scrollbar-thumb {
-                  background-color: var(--color-border-light);
-                  border-radius: 10px;
-                  border: 2px solid var(--color-bg-secondary);
-                  transition: background-color 0.2s ease;
-                }
-                .orders-scroll-container::-webkit-scrollbar-thumb:hover {
-                  background-color: var(--color-border-medium);
-                }
-              `}</style>
-              <OrdersGrid
-                orders={orders}
-                selectedOrderId={selectedOrder?.id || null}
-                onOrderClick={handleOrderClick}
-                formatDate={formatDate}
-                formatCurrency={formatCurrency}
-                columns={(showDetailPanel && !isAnimatingOut) ? 3 : 4}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Right Panel - Order Details */}
-        {showDetailPanel && selectedOrder && (
-          <div 
-            className="flex-shrink-0"
-            style={{
-              width: isAnimatingOut ? '0%' : '33.334%',
-              transition: 'width 0.3s ease-out',
-              overflow: 'hidden',
-            }}
-          >
-            <OrderDetailPanel
-              order={selectedOrder}
-              onClose={handleCloseDetail}
-              formatDate={formatDate}
-              formatCurrency={formatCurrency}
-              isAnimatingOut={isAnimatingOut}
-            />
           </div>
         )}
-      </div>
 
-      {/* Receipt Modal */}
-      {showReceiptModal && selectedOrder && getReceiptData() && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
-          onClick={handleCloseReceipt}
+        {/* Orders table */}
+        <div 
+          className="flex-1 overflow-y-auto px-4 pb-4 mt-4 orders-scroll-container"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'var(--color-border-light) var(--color-bg-secondary)',
+          }}
         >
-          <div
-            className="bg-white rounded-lg shadow-xl max-h-[90vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: 'var(--color-bg-primary)',
-              width: '100mm',
-              paddingLeft: '24px',
-              paddingRight: '24px',
-            }}
-          >
-            <style>{`
-              .receipt-modal-scroll-container {
-                scrollbar-width: none;
-                -ms-overflow-style: none;
-              }
-              .receipt-modal-scroll-container::-webkit-scrollbar {
-                display: none;
-              }
-            `}</style>
-            <div className="flex items-center justify-between mb-4 pt-6">
-              <h3
-                className="text-lg font-semibold"
-                style={{ color: 'var(--color-text-primary)' }}
+          <style>{`
+            .orders-scroll-container::-webkit-scrollbar {
+              width: 10px;
+              height: 10px;
+            }
+            .orders-scroll-container::-webkit-scrollbar-track {
+              background: var(--color-bg-secondary);
+              border-radius: 10px;
+            }
+            .orders-scroll-container::-webkit-scrollbar-thumb {
+              background-color: var(--color-border-light);
+              border-radius: 10px;
+              border: 2px solid var(--color-bg-secondary);
+              transition: background-color 0.2s ease;
+            }
+            .orders-scroll-container::-webkit-scrollbar-thumb:hover {
+              background-color: var(--color-border-medium);
+            }
+            .orders-table-wrapper {
+              overflow-x: auto;
+            }
+            .orders-table thead {
+              position: sticky;
+              top: 0;
+              z-index: 15;
+              background-color: var(--color-bg-card);
+            }
+            .orders-table thead th {
+              position: sticky;
+              top: 0;
+              z-index: 20;
+              background-color: var(--color-bg-card);
+              border-bottom: 1px solid var(--color-border-light);
+            }
+          `}</style>
+          <div className="w-full rounded border overflow-hidden" style={{ borderColor: 'var(--color-border-light)' }}>
+            <div className="orders-table-wrapper">
+              <table className="orders-table w-full text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                <thead>
+                  <tr>
+                    <th className="text-left px-4 py-2 font-semibold">Customer</th>
+                    <th className="text-left px-4 py-2 font-semibold">Order #</th>
+                    <th className="text-left px-4 py-2 font-semibold">Date</th>
+                    <th className="text-left px-4 py-2 font-semibold">Total</th>
+                    <th className="text-left px-4 py-2 font-semibold">Status</th>
+                    <th className="text-left px-4 py-2 font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedOrders.map((order) => {
+                  const isActive = selectedOrder?.id === order.id;
+                  return (
+                    <tr
+                      key={order.id}
+                      onClick={() => handleSelectOrder(order)}
+                      className="cursor-pointer border-t"
+                      style={{
+                        borderColor: 'var(--color-border-light)',
+                        backgroundColor: isActive ? 'var(--color-bg-hover)' : 'transparent',
+                      }}
+                    >
+                      <td className="px-4 py-3">
+                        {order.customer?.firstName
+                          ? `${order.customer.firstName} ${order.customer.lastName || ''}`.trim()
+                          : 'Walk-in'}
+                      </td>
+                      <td className="px-4 py-3">{order.orderNumber || order.id}</td>
+                      <td className="px-4 py-3">{formatDate(order.completedAt || order.orderDate)}</td>
+                      <td className="px-4 py-3">{formatCurrency(order.totalAmount)}</td>
+                      <td className="px-4 py-3">{order.status || '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetails(order);
+                            }}
+                            className="text-xs flex items-center gap-1"
+                            style={{ color: 'var(--color-accent-blue)' }}
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Detail
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePrintOrder(order);
+                            }}
+                            className="text-xs flex items-center gap-1"
+                            style={{ color: 'var(--color-accent-blue)' }}
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            Print
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filteredOrders.length === 0 && (
+              <div className="text-center py-8 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                {searchTerm.trim() ? `No orders match "${searchTerm}".` : 'No orders found.'}
+              </div>
+            )}
+            {filteredOrders.length > 0 && (
+              <div
+                className="flex flex-wrap items-center justify-between px-4 py-3 border-t text-sm gap-2"
+                style={{ borderColor: 'var(--color-border-light)', color: 'var(--color-text-secondary)' }}
               >
-                Receipt - {selectedOrder.orderNumber}
-              </h3>
-              <button
-                onClick={handleCloseReceipt}
-                className="p-2 rounded transition-colors"
-                style={{
-                  color: 'var(--color-text-secondary)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--color-bg-hover)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-                aria-label="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div 
-              className="receipt-modal-scroll-container" 
-              style={{ 
-                maxHeight: 'calc(90vh - 120px)', 
-                overflowY: 'auto',
-                overflowX: 'hidden',
-              }}
-            >
-              <ReceiptTemplate data={getReceiptData()!} />
-            </div>
+                <span>
+                  {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredOrders.length)} of {filteredOrders.length}
+                </span>
+                <div className="flex items-center gap-2 text-base">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 rounded border disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="First page"
+                    style={{
+                      borderColor: 'var(--color-border-light)',
+                      color: 'var(--color-text-primary)',
+                      backgroundColor: 'var(--color-bg-secondary)',
+                    }}
+                  >
+                    «
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 rounded border disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Previous page"
+                    style={{
+                      borderColor: 'var(--color-border-light)',
+                      color: 'var(--color-text-primary)',
+                      backgroundColor: 'var(--color-bg-secondary)',
+                    }}
+                  >
+                    ‹
+                  </button>
+                  <span style={{ color: 'var(--color-text-primary)' }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 rounded border disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Next page"
+                    style={{
+                      borderColor: 'var(--color-border-light)',
+                      color: 'var(--color-text-primary)',
+                      backgroundColor: 'var(--color-bg-secondary)',
+                    }}
+                  >
+                    ›
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 rounded border disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Last page"
+                    style={{
+                      borderColor: 'var(--color-border-light)',
+                      color: 'var(--color-text-primary)',
+                      backgroundColor: 'var(--color-bg-secondary)',
+                    }}
+                  >
+                    »
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
+      </div>
+
     </div>
   );
 }

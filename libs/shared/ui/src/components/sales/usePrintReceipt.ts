@@ -20,6 +20,7 @@ export interface PrintReceiptInput {
   invoiceNumber: string;
   orderNumber?: string;
   orderId?: string;
+  orderDate?: string;
   lineItems: LineItem[];
   payments: Payment[];
   customer?: Customer;
@@ -27,10 +28,12 @@ export interface PrintReceiptInput {
   grossTotal: number;
   itemDiscount: number;
   taxAmount?: number;
+  adjustmentAmount?: number;
   netTotal: number;
   tendered: number;
   change: number;
   footerText?: string[];
+  theme?: 'light' | 'dark';
 }
 
 /**
@@ -99,10 +102,12 @@ export function usePrintReceipt({
       grossTotal: input.grossTotal,
       itemDiscount: input.itemDiscount,
       taxAmount: input.taxAmount ?? 0,
+      adjustmentAmount: input.adjustmentAmount ?? 0,
       netTotal: input.netTotal,
       tendered: input.tendered,
       change: input.change,
       footerText: input.footerText,
+      theme: input.theme,
     };
 
     // Store in ref immediately for synchronous access
@@ -141,6 +146,8 @@ export function usePrintReceipt({
       const isElectron = navigator.userAgent.toLowerCase().includes('electron');
       
       // Auto-save PDF first (for both Electron and web)
+      const orderDateIso = input.orderDate || new Date().toISOString();
+
       if (isElectron && (window as any).electronAPI?.savePDF) {
         try {
           // Auto-save PDF without system dialog
@@ -152,6 +159,7 @@ export function usePrintReceipt({
           const pdfResult = await (window as any).electronAPI.savePDF({
             htmlContent: receiptHTML,
             orderId: orderId,
+            orderDate: orderDateIso,
           });
           if (pdfResult?.success) {
             console.log('[usePrintReceipt] PDF saved successfully to:', pdfResult.path);

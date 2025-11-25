@@ -198,10 +198,7 @@ export function Payments({
     const discountValue = 0;
     const giftCardValue = 0;
     const adjustmentValue = 0;
-    const taxableBase = Math.max(
-      0,
-      fallback.taxableSubtotal - fallback.lineDiscountTotal - discountValue + adjustmentValue,
-    );
+    const taxableBase = Math.max(0, fallback.taxableSubtotal);
     const taxValue = Number((taxableBase * DEFAULT_TAX_RATE).toFixed(2));
     const total = Number((fallback.subtotal - discountValue + adjustmentValue + taxValue).toFixed(2));
     return {
@@ -289,6 +286,7 @@ export function Payments({
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const emailInputRef = React.useRef<HTMLInputElement>(null);
   const summaryContainerRef = React.useRef<HTMLDivElement>(null);
+  const [selectedCustomerIndex, setSelectedCustomerIndex] = useState<number>(-1);
 
   React.useEffect(() => {
     if (customers.length > 0 || customersLoading) {
@@ -428,6 +426,18 @@ export function Payments({
       )
       .slice(0, 5);
   }, [customers, phoneSearchValue]);
+  React.useEffect(() => {
+    if (phoneMatches.length === 0) {
+      setSelectedCustomerIndex(-1);
+      return;
+    }
+    setSelectedCustomerIndex((prev) => {
+      if (prev < 0 || prev >= phoneMatches.length) {
+        return 0;
+      }
+      return prev;
+    });
+  }, [phoneMatches]);
   const activeCustomerDetails = useMemo(() => {
     if (capturedCustomer) {
       return capturedCustomer;
@@ -906,6 +916,7 @@ export function Payments({
               grossTotal,
               itemDiscount,
         taxAmount: orderBreakdown.taxValue,
+        adjustmentAmount: orderBreakdown.adjustmentValue,
               netTotal,
               tendered,
               change,
@@ -1066,9 +1077,32 @@ export function Payments({
                     value={customerPhoneInput}
                     onChange={(e) => handlePhoneInputChange(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === 'ArrowDown' && phoneMatches.length > 0) {
                         e.preventDefault();
-                        handlePhoneNext();
+                        setSelectedCustomerIndex((prev) => {
+                          if (phoneMatches.length === 0) return -1;
+                          const next = prev < phoneMatches.length - 1 ? prev + 1 : 0;
+                          return next;
+                        });
+                        return;
+                      }
+                      if (e.key === 'ArrowUp' && phoneMatches.length > 0) {
+                        e.preventDefault();
+                        setSelectedCustomerIndex((prev) => {
+                          if (phoneMatches.length === 0) return -1;
+                          const next = prev > 0 ? prev - 1 : phoneMatches.length - 1;
+                          return next;
+                        });
+                        return;
+                      }
+                      if (e.key === 'Enter') {
+                        if (selectedCustomerIndex >= 0 && phoneMatches[selectedCustomerIndex]) {
+                          e.preventDefault();
+                          handleSelectSuggestedCustomer(phoneMatches[selectedCustomerIndex]);
+                        } else {
+                          e.preventDefault();
+                          handlePhoneNext();
+                        }
                       } else if (e.key === 'Backspace' && e.shiftKey) {
                         e.preventDefault();
                         // No back step from phone, so do nothing
@@ -1094,23 +1128,28 @@ export function Payments({
                     <Search className="w-3 h-3" />
                     Matching customers
                   </div>
-                  {phoneMatches.map((match) => (
+                  {phoneMatches.map((match, index) => {
+                    const isSelected = index === selectedCustomerIndex;
+                    return (
                     <button
                       key={`${match.id}-${match.phone}`}
                       type="button"
                       onClick={() => handleSelectSuggestedCustomer(match)}
-                      className="w-full text-left rounded px-2 py-1.5 hover:opacity-80 transition-opacity"
+                      onMouseEnter={() => setSelectedCustomerIndex(index)}
+                      className="w-full text-left rounded px-2 py-1.5 transition-opacity"
                       style={{ 
-                        color: 'var(--color-text-primary)',
-                        backgroundColor: 'var(--color-bg-secondary)',
+                        color: isSelected ? 'var(--color-text-light)' : 'var(--color-text-primary)',
+                        backgroundColor: isSelected ? 'var(--color-accent-blue)' : 'var(--color-bg-secondary)',
                       }}
+                      aria-selected={isSelected}
                     >
                       <div className="text-sm font-medium">{match.name || 'Customer'}</div>
                       <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                         {match.phone || 'No phone on file'}
                       </div>
                     </button>
-                  ))}
+                  );
+                  })}
                 </div>
               ) : customerPhoneInput.trim() ? (
                 <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>

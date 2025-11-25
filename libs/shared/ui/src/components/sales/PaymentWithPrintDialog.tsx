@@ -119,6 +119,7 @@ export function PaymentWithPrintDialog({
             grossTotal,
             itemDiscount,
             taxAmount: 0,
+            adjustmentAmount: 0,
             netTotal,
             tendered,
             change,

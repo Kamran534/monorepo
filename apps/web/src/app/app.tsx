@@ -61,6 +61,15 @@ function AppContent() {
       const trimmed = barcode.trim();
 
       try {
+        // If on Orders page, search for orders by barcode
+        if (location.pathname.startsWith('/orders')) {
+          // Replace "/" with "-" for scanner input (e.g., ORD/1764071841830/438 -> ORD-1764071841830-438)
+          const normalizedBarcode = trimmed.replace(/\//g, '-');
+          navigate(`/orders?search=${encodeURIComponent(normalizedBarcode)}`, { replace: true });
+          scanLockRef.current = false;
+          return;
+        }
+
         const result = await lookupProductByBarcode(trimmed);
 
         if (!result) {
@@ -108,7 +117,7 @@ function AppContent() {
         scanLockRef.current = false;
       }
     },
-    [addItem, isAuthenticated, items, setItemQuantity, show]
+    [addItem, isAuthenticated, items, setItemQuantity, show, location.pathname, navigate]
   );
 
   useBarcodeScanner({
@@ -149,6 +158,8 @@ function AppContent() {
         }
       }
 
+      // Check if current path is orders page (list or detail)
+      const isOrders = currentPath === '/orders' || currentPath.startsWith('/orders/');
       // Check if current path is return transaction page
       const isReturnTransaction = currentPath === '/transactions/return';
 
@@ -168,6 +179,9 @@ function AppContent() {
         }
         // Show back button if we have a previous path in stack
         setShowBackButton(stack.length > 1);
+      } else if (isOrders) {
+        // Orders page - always show back button
+        setShowBackButton(true);
       } else if (isReturnTransaction) {
         // Return transaction page - always show back button
         setShowBackButton(true);
@@ -267,6 +281,12 @@ function AppContent() {
     if (location.pathname === '/products') {
       return 'Products';
     }
+    if (location.pathname.startsWith('/orders')) {
+      return 'Sales';
+    }
+    if (location.pathname.startsWith('/orders/')) {
+      return 'Order Detail';
+    }
     // Category detail page - show category name
     if (isCategoryDetailPage && categoryNameRef.current) {
       return categoryNameRef.current;
@@ -284,14 +304,33 @@ function AppContent() {
     navigate(item.path);
   };
 
-  // Search handler - navigate to products page with search query
+  // Search handler - navigate to products page with search query, or search orders/customers if on those pages
   const handleSearch = (query: string) => {
-    if (query.trim()) {
-      navigate(`/products?search=${encodeURIComponent(query.trim())}`);
+    if (location.pathname === '/orders') {
+      // On Orders page - update URL search params to filter orders
+      if (query.trim()) {
+        // Replace "/" with "-" for scanner input (e.g., ORD/1764071841830/438 -> ORD-1764071841830-438)
+        const normalizedQuery = query.trim().replace(/\//g, '-');
+        navigate(`/orders?search=${encodeURIComponent(normalizedQuery)}`, { replace: true });
+      } else {
+        navigate('/orders', { replace: true });
+      }
+    } else if (location.pathname === '/customers') {
+      // On Customers page - update URL search params to filter customers
+      if (query.trim()) {
+        navigate(`/customers?search=${encodeURIComponent(query.trim())}`, { replace: true });
+      } else {
+        navigate('/customers', { replace: true });
+      }
     } else {
-      // If search is empty, navigate to products page without query
-      if (location.pathname === '/products') {
-        navigate('/products');
+      // On other pages - navigate to products page with search query
+      if (query.trim()) {
+        navigate(`/products?search=${encodeURIComponent(query.trim())}`);
+      } else {
+        // If search is empty, navigate to products page without query
+        if (location.pathname === '/products') {
+          navigate('/products');
+        }
       }
     }
   };

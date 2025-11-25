@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Search, Square, Printer, HelpCircle } from 'lucide-react';
 import { ReturnableProductsTable } from '../components/transactions/ReturnableProductsTable.js';
 import { ReturnDetailsPanel } from '../components/transactions/ReturnDetailsPanel.js';
@@ -10,57 +11,80 @@ export interface ReturnTransactionProps {
   onBack?: () => void;
 }
 
+interface ReturnItemData {
+  id: string;
+  productId?: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  sku?: string;
+  variantId?: string;
+  // Line-level details
+  lineDiscount?: number;
+  lineDiscountPercent?: number;
+  lineTax?: number;
+  color?: string;
+  size?: string;
+  salesPersonName?: string;
+  salesPersonId?: string;
+  originalPrice?: number;
+}
+
+interface LocationState {
+  returnItems?: ReturnItemData[];
+  originalOrderId?: string;
+}
+
 /**
  * ReturnTransaction Page
- * 
+ *
  * Page for processing return transactions. Shows returnable products
  * on the left and selected product details on the right.
  */
 export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransactionProps) {
   const { addItem } = useCart();
   const { show } = useToast();
+  const location = useLocation();
+  const navigationState = location.state as LocationState | null;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string | undefined>();
   const [returningQuantities, setReturningQuantities] = useState<Record<string, number>>({});
 
-  // Mock data - In a real app, this would come from the original order
+  // Get return items from navigation state or use empty array
   const baseReturnableProducts: ReturnableProduct[] = useMemo(() => {
-    // Example data matching the image
-    return [
-      {
-        id: '1',
-        productNumber: 'P-PB-0100010',
-        productName: 'P-PB-0100010',
-        sold: 1,
+    if (navigationState?.returnItems && navigationState.returnItems.length > 0) {
+      // Convert navigation state items to returnable products
+      return navigationState.returnItems.map((item, index) => ({
+        id: item.id || String(index + 1),
+        productNumber: item.sku || item.productId || 'N/A',
+        productName: item.productName || 'Unknown Product',
+        sold: item.quantity,
         uom: 'PCS',
         previous: 0,
-        available: 1.0,
-        returning: 1.0,
-        unitPrice: 20.0,
-        total: 20.0,
-        variant: 'RED, ME',
-        sku: '3264',
-        barcode: 'PPB0100010059ME',
-        imageUrl: undefined, // Can be set to actual image URL
-      },
-      {
-        id: '2',
-        productNumber: 'P-PB-0100011',
-        productName: 'P-PB-0100011',
-        sold: 1,
-        uom: 'PCS',
-        previous: 0,
-        available: 1.0,
-        returning: 1.0,
-        unitPrice: 25.0,
-        total: 25.0,
-        variant: 'BLUE, ME',
-        sku: '3265',
-        barcode: 'PPB0100010059BLUE',
-        imageUrl: undefined, // Can be set to actual image URL
-      }
-    ];
-  }, [originalOrderId]);
+        available: item.quantity,
+        returning: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.total,
+        variant: item.color && item.size ? `${item.color}, ${item.size}` : item.color || item.size,
+        sku: item.sku,
+        barcode: item.sku,
+        imageUrl: undefined,
+        // Line-level details
+        lineDiscount: item.lineDiscount,
+        lineDiscountPercent: item.lineDiscountPercent,
+        lineTax: item.lineTax,
+        color: item.color,
+        size: item.size,
+        salesPersonName: item.salesPersonName,
+        salesPersonId: item.salesPersonId,
+        originalPrice: item.originalPrice,
+      }));
+    }
+
+    // If no items passed, return empty array
+    return [];
+  }, [navigationState]);
 
   // Merge returning quantities with base products
   const returnableProducts: ReturnableProduct[] = useMemo(() => {
@@ -145,6 +169,41 @@ export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransaction
     });
   }, [selectedProduct, returningQuantity, addItem, show]);
 
+  // Show message if no items available for return
+  if (baseReturnableProducts.length === 0) {
+    return (
+      <div
+        className="w-full h-full flex flex-col items-center justify-center"
+        style={{
+          backgroundColor: 'var(--color-bg-primary)',
+          height: 'calc(100vh - var(--navbar-height, 80px))',
+        }}
+      >
+        <div className="text-center p-8">
+          <HelpCircle className="w-16 h-16 mx-auto mb-4" style={{ color: 'var(--color-text-secondary)' }} />
+          <h2 className="text-xl font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+            No Items for Return
+          </h2>
+          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            Please select an item from a recalled order to return.
+          </p>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="mt-4 px-6 py-2 rounded font-medium"
+              style={{
+                backgroundColor: 'var(--color-accent-blue)',
+                color: 'white',
+              }}
+            >
+              Go Back
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="w-full h-full flex flex-col"
@@ -153,7 +212,7 @@ export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransaction
         height: 'calc(100vh - var(--navbar-height, 80px))',
       }}
     >
-     
+
       {/* Main Content */}
       <div className="flex-1 flex min-h-0">
         {/* Left Panel - Returnable Products */}

@@ -134,6 +134,67 @@ export function ReturnDetailsPanel({
                       </span>
                     </div>
                   )}
+                  {selectedProduct.color && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-medium w-20 flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
+                        Color:
+                      </span>
+                      <span className="text-xs flex-1" style={{ color: 'var(--color-text-primary)' }}>
+                        {selectedProduct.color}
+                      </span>
+                    </div>
+                  )}
+                  {selectedProduct.size && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-medium w-20 flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
+                        Size:
+                      </span>
+                      <span className="text-xs flex-1" style={{ color: 'var(--color-text-primary)' }}>
+                        {selectedProduct.size}
+                      </span>
+                    </div>
+                  )}
+                  {selectedProduct.salesPersonName && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-medium w-20 flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
+                        Sales Person:
+                      </span>
+                      <span className="text-xs flex-1" style={{ color: 'var(--color-text-primary)' }}>
+                        {selectedProduct.salesPersonName}
+                      </span>
+                    </div>
+                  )}
+                  {selectedProduct.originalPrice && selectedProduct.originalPrice !== selectedProduct.unitPrice && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-medium w-20 flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
+                        Original Price:
+                      </span>
+                      <span className="text-xs flex-1" style={{ color: 'var(--color-text-primary)' }}>
+                        {formatCurrency(selectedProduct.originalPrice)}
+                      </span>
+                    </div>
+                  )}
+                  {(selectedProduct.lineDiscount !== undefined && selectedProduct.lineDiscount > 0) && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-medium w-20 flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
+                        Line Discount:
+                      </span>
+                      <span className="text-xs flex-1" style={{ color: 'var(--color-text-primary)' }}>
+                        {formatCurrency(selectedProduct.lineDiscount)}
+                        {selectedProduct.lineDiscountPercent && ` (${selectedProduct.lineDiscountPercent.toFixed(1)}%)`}
+                      </span>
+                    </div>
+                  )}
+                  {(selectedProduct.lineTax !== undefined && selectedProduct.lineTax > 0) && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-medium w-20 flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
+                        Line Tax:
+                      </span>
+                      <span className="text-xs flex-1" style={{ color: 'var(--color-text-primary)' }}>
+                        {formatCurrency(selectedProduct.lineTax)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

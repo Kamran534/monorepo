@@ -18,6 +18,15 @@ export interface ReturnableProduct {
   sku?: string;
   barcode?: string;
   imageUrl?: string;
+  // Line-level details
+  lineDiscount?: number;
+  lineDiscountPercent?: number;
+  lineTax?: number;
+  color?: string;
+  size?: string;
+  salesPersonName?: string;
+  salesPersonId?: string;
+  originalPrice?: number;
 }
 
 export interface ReturnableProductsTableProps extends ComponentProps {

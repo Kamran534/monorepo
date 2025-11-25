@@ -10,6 +10,7 @@ import { Payments } from '../pages/Payments';
 import { Login } from '../pages/Login';
 import { ReturnTransaction } from '../pages/ReturnTransaction';
 import { Orders } from '../pages/Orders';
+import { OrderDetail } from '../pages/OrderDetail';
 
 /**
  * Application Routes
@@ -28,6 +29,7 @@ export function AppRoutes() {
       <Route path="/sales" element={<Sales />} />
       <Route path="/payments" element={<Payments />} />
       <Route path="/orders" element={<Orders />} />
+      <Route path="/orders/:orderId" element={<OrderDetail />} />
       <Route path="/login" element={<Login />} />
       <Route path="/customers" element={<Customers />} />
       <Route path="/settings" element={null} />

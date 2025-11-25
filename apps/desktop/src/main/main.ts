@@ -1578,7 +1578,7 @@ function setupIpcHandlers(): void {
   // Save PDF handler - automatically save receipt as PDF
   ipcMain.handle('save-pdf', async (event, options) => {
     try {
-      const { htmlContent, orderId } = options;
+      const { htmlContent, orderId, orderDate } = options;
       console.log('[IPC] save-pdf called with orderId:', orderId);
       if (!htmlContent || !orderId) {
         console.error('[IPC] save-pdf missing required fields:', { hasHtmlContent: !!htmlContent, hasOrderId: !!orderId });
@@ -1629,7 +1629,13 @@ function setupIpcHandlers(): void {
       console.log('[IPC] PDF generated successfully, size:', pdfData.length, 'bytes');
 
       // Create directory structure: apps/desktop/assets/bills/YYYY-MM-DD/
-      const date = new Date();
+      let date = new Date();
+      if (orderDate) {
+        const parsed = new Date(orderDate);
+        if (!Number.isNaN(parsed.getTime())) {
+          date = parsed;
+        }
+      }
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');

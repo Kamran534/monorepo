@@ -111,18 +111,40 @@ export interface OrderRecallLineItem {
   variantId: string;
   productId?: string;
   salesPersonId?: string;
+  salesPersonName?: string;
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  lineDiscount?: number;
+  lineDiscountPercent?: number;
+  customDiscountAmount?: number;
+  customDiscountPercent?: number;
+  lineTax?: number;
+  notes?: string;
   variantName?: string;
   productName?: string;
   sku?: string;
+}
+
+export interface OrderPaymentSummary {
+  id: string;
+  orderId: string;
+  paymentMethodId: string;
+  amount: number;
+  status?: string;
+  paymentMethodName?: string;
+  transactionId?: string;
+  authorizationCode?: string;
+  cardLast4?: string;
+  cardBrand?: string;
+  processedAt?: string;
 }
 
 export interface OrderRecallData {
   order: SalesOrder;
   lineItems: OrderRecallLineItem[];
   customer?: OrderRecallCustomer;
+  payments?: OrderPaymentSummary[];
 }
 
 export interface OrderRecallResult {
@@ -242,29 +264,87 @@ export class SalesOrderRepository {
       const lineItemRows = await this.localDb.query<any>(
         `SELECT
           oli.*,
-          pv.sku,
-          pv.variantName,
-          pv.productId,
-          p.name as productName
+          COALESCE(pv.sku, p.productCode) as sku,
+          COALESCE(pv.variantName, p.name) as variantName,
+          COALESCE(pv.productId, p.id) as productId,
+          COALESCE(p_via_variant.name, p.name, pv.variantName) as productName,
+          sp.name as salesPersonName,
+          sp.firstName as salesPersonFirstName,
+          sp.lastName as salesPersonLastName,
+          sp.code as salesPersonCode
         FROM OrderLineItem oli
         LEFT JOIN ProductVariant pv ON oli.variantId = pv.id
-        LEFT JOIN Product p ON pv.productId = p.id
+        LEFT JOIN Product p_via_variant ON pv.productId = p_via_variant.id
+        LEFT JOIN Product p ON oli.variantId = p.id
+        LEFT JOIN SalesPerson sp ON oli.salesPersonId = sp.id
         WHERE oli.orderId = ?`,
         [order.id],
       );
 
-      const lineItems: OrderRecallLineItem[] = lineItemRows.map((row: any) => ({
+      console.log('[SalesOrderRepository] Line items raw data:', JSON.stringify(lineItemRows, null, 2));
+
+      const lineItems: OrderRecallLineItem[] = lineItemRows.map((row: any) => {
+        const mapped = {
+          id: row.id,
+          orderId: row.orderId,
+          variantId: row.variantId,
+          productId: row.productId || undefined,
+          salesPersonId: row.salesPersonId || undefined,
+          salesPersonName:
+            row.salesPersonName ||
+            [row.salesPersonFirstName, row.salesPersonLastName].filter(Boolean).join(' ').trim() ||
+            row.salesPersonCode ||
+            undefined,
+          quantity: row.quantity,
+          unitPrice: row.unitPrice,
+          lineTotal: row.lineTotal,
+          lineDiscount: row.lineDiscount ?? undefined,
+          lineDiscountPercent: row.lineDiscountPercent ?? undefined,
+          customDiscountAmount: row.customDiscountAmount ?? undefined,
+          customDiscountPercent: row.customDiscountPercent ?? undefined,
+          lineTax: row.lineTax ?? undefined,
+          notes: row.notes ?? undefined,
+          variantName: row.variantName || undefined,
+          productName: row.productName || undefined,
+          sku: row.sku || undefined,
+        };
+
+        console.log('[SalesOrderRepository] Mapped line item:', {
+          variantId: mapped.variantId,
+          productName: mapped.productName,
+          variantName: mapped.variantName,
+          sku: mapped.sku,
+        });
+
+        if (!mapped.productName && !mapped.variantName) {
+          console.warn('[SalesOrderRepository] Missing product/variant name for variantId:', row.variantId, 'Full row data:', JSON.stringify(row, null, 2));
+        }
+
+        return mapped;
+      });
+
+      const paymentRows = await this.localDb.query<any>(
+        `SELECT
+          op.*,
+          pm.name as paymentMethodName
+        FROM OrderPayment op
+        LEFT JOIN PaymentMethod pm ON pm.id = op.paymentMethodId
+        WHERE op.orderId = ?`,
+        [order.id],
+      );
+
+      const payments: OrderPaymentSummary[] = paymentRows.map((row: any) => ({
         id: row.id,
         orderId: row.orderId,
-        variantId: row.variantId,
-        productId: row.productId || undefined,
-        salesPersonId: row.salesPersonId || undefined,
-        quantity: row.quantity,
-        unitPrice: row.unitPrice,
-        lineTotal: row.lineTotal,
-        variantName: row.variantName || undefined,
-        productName: row.productName || undefined,
-        sku: row.sku || undefined,
+        paymentMethodId: row.paymentMethodId,
+        amount: row.amount ?? 0,
+        status: row.status ?? undefined,
+        paymentMethodName: row.paymentMethodName ?? undefined,
+        transactionId: row.transactionId ?? undefined,
+        authorizationCode: row.authorizationCode ?? undefined,
+        cardLast4: row.cardLast4 ?? undefined,
+        cardBrand: row.cardBrand ?? undefined,
+        processedAt: row.processedAt ?? undefined,
       }));
 
       return {
@@ -273,6 +353,7 @@ export class SalesOrderRepository {
           order,
           lineItems,
           customer,
+          payments,
         },
       };
     } catch (error: any) {
@@ -295,7 +376,8 @@ export class SalesOrderRepository {
     }
 
     try {
-      const rows = await this.localDb.query<any>(
+      // First try as ProductVariant
+      let rows = await this.localDb.query<any>(
         `SELECT
           pv.id,
           pv.productId,
@@ -309,19 +391,45 @@ export class SalesOrderRepository {
         [variantId],
       );
 
-      if (!rows.length) {
-        return null;
+      if (rows.length > 0) {
+        const row = rows[0];
+        return {
+          variantId: row.id,
+          productId: row.productId || undefined,
+          variantName: row.variantName || undefined,
+          productName: row.productName || undefined,
+          sku: row.sku || undefined,
+        };
       }
 
-      const row = rows[0];
-      return {
-        variantId: row.id,
-        productId: row.productId || undefined,
-        variantName: row.variantName || undefined,
-        productName: row.productName || undefined,
-        sku: row.sku || undefined,
-      };
+      // If not found, try as Product (some systems store product ID in variantId field)
+      rows = await this.localDb.query<any>(
+        `SELECT
+          p.id,
+          p.id as productId,
+          p.name as variantName,
+          p.productCode as sku,
+          p.name as productName
+        FROM Product p
+        WHERE p.id = ?
+        LIMIT 1`,
+        [variantId],
+      );
+
+      if (rows.length > 0) {
+        const row = rows[0];
+        return {
+          variantId: row.id,
+          productId: row.productId || undefined,
+          variantName: row.variantName || undefined,
+          productName: row.productName || undefined,
+          sku: row.sku || undefined,
+        };
+      }
+
+      return null;
     } catch (error) {
+      console.error('[SalesOrderRepository] getVariantDetails error:', error);
       return null;
     }
   }

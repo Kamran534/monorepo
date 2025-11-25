@@ -76,6 +76,15 @@ function AppContent() {
       const trimmed = barcode.trim();
 
       try {
+        // If on Orders page, search for orders by barcode
+        if (location.pathname.startsWith('/orders')) {
+          // Replace "/" with "-" for scanner input (e.g., ORD/1764071841830/438 -> ORD-1764071841830-438)
+          const normalizedBarcode = trimmed.replace(/\//g, '-');
+          navigate(`/orders?search=${encodeURIComponent(normalizedBarcode)}`, { replace: true });
+          scanLockRef.current = false;
+          return;
+        }
+
         const result = await lookupProductByBarcode(trimmed);
 
         if (!result) {
@@ -123,7 +132,7 @@ function AppContent() {
         scanLockRef.current = false;
       }
     },
-    [addItem, isAuthenticated, items, setItemQuantity, show]
+    [addItem, isAuthenticated, items, setItemQuantity, show, location.pathname, navigate]
   );
 
   useBarcodeScanner({
@@ -166,6 +175,8 @@ function AppContent() {
 
       // Check if current path is payments page
       const isPayments = currentPath === '/payments';
+      // Check if current path is orders page (list or detail)
+      const isOrders = currentPath === '/orders' || currentPath.startsWith('/orders/');
       // Check if current path is customers page and previous page was transactions
       const isCustomers = currentPath === '/customers';
       const previousPath = stack.length > 1 ? stack[stack.length - 2] : null;
@@ -191,6 +202,9 @@ function AppContent() {
         setShowBackButton(stack.length > 1);
       } else if (isPayments) {
         // Payments page - always show back button
+        setShowBackButton(true);
+      } else if (isOrders) {
+        // Orders list/detail page - always show back button
         setShowBackButton(true);
       } else if (isCustomersFromTransactions) {
         // Customers page opened from transactions - show back button
@@ -281,17 +295,10 @@ function AppContent() {
   const isProductDetailPage = /^\/products\//.test(location.pathname) && location.pathname !== '/products';
   const isPaymentsPage = location.pathname === '/payments';
 
-  // Check if customers page was opened from transactions (check navigation stack)
-  const navigationStack = navigationStackRef.current;
-  const isCustomersFromTransactionsPage =
-    location.pathname === '/customers' &&
-    navigationStack.length >= 2 &&
-    navigationStack[navigationStack.length - 2] === '/transactions';
-
   // Get active item based on current path
   // If on category detail page or product detail page, don't show any sidebar item as active
   const allItems = [...sidebarItems, ...footerItems];
-  const activeItemId = (isCategoryDetailPage || isProductDetailPage || isPaymentsPage || isCustomersFromTransactionsPage)
+  const activeItemId = (isCategoryDetailPage || isProductDetailPage || isPaymentsPage)
     ? undefined
     : (allItems.find(item => item.path === location.pathname)?.id || (location.pathname === '/' ? 'dashboard' : undefined));
   
@@ -319,6 +326,12 @@ function AppContent() {
     if (location.pathname === '/products') {
       return 'Products';
     }
+    if (location.pathname === '/orders') {
+      return 'Sales';
+    }
+    if (location.pathname.startsWith('/orders/')) {
+      return 'Order Detail';
+    }
     // Category detail page - show category name
     if (isCategoryDetailPage && categoryNameRef.current) {
       return categoryNameRef.current;
@@ -336,14 +349,33 @@ function AppContent() {
     navigate(item.path);
   };
 
-  // Search handler - navigate to products page with search query
+  // Search handler - navigate to products page with search query, or search orders/customers if on those pages
   const handleSearch = (query: string) => {
-    if (query.trim()) {
-      navigate(`/products?search=${encodeURIComponent(query.trim())}`);
+    if (location.pathname.startsWith('/orders')) {
+      // On Orders page - update URL search params to filter orders
+      if (query.trim()) {
+        // Replace "/" with "-" for scanner input (e.g., ORD/1764071841830/438 -> ORD-1764071841830-438)
+        const normalizedQuery = query.trim().replace(/\//g, '-');
+        navigate(`/orders?search=${encodeURIComponent(normalizedQuery)}`, { replace: true });
+      } else {
+        navigate('/orders', { replace: true });
+      }
+    } else if (location.pathname === '/customers') {
+      // On Customers page - update URL search params to filter customers
+      if (query.trim()) {
+        navigate(`/customers?search=${encodeURIComponent(query.trim())}`, { replace: true });
+      } else {
+        navigate('/customers', { replace: true });
+      }
     } else {
-      // If search is empty, navigate to products page without query
-      if (location.pathname === '/products') {
-        navigate('/products');
+      // On other pages - navigate to products page with search query
+      if (query.trim()) {
+        navigate(`/products?search=${encodeURIComponent(query.trim())}`);
+      } else {
+        // If search is empty, navigate to products page without query
+        if (location.pathname === '/products') {
+          navigate('/products');
+        }
       }
     }
   };

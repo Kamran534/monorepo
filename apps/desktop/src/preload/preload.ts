@@ -18,7 +18,7 @@ try {
       // console.log('[Preload] Print called with options:', options);
       return ipcRenderer.invoke('print-content', options);
     },
-    savePDF: (options: { htmlContent: string; orderId: string }) => {
+    savePDF: (options: { htmlContent: string; orderId: string; orderDate?: string }) => {
       // console.log('[Preload] savePDF called');
       return ipcRenderer.invoke('save-pdf', options);
     },

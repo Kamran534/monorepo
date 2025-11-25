@@ -834,85 +834,153 @@ export function Transactions({
       setAppliedAdjustment(null);
 
       for (const item of orderLineItems) {
-        let resolvedName =
-          item.productName ||
-          item.variantName ||
-          (item as any).name ||
-          ((item as any).sku ? `Item ${(item as any).sku}` : '');
+        let resolvedName = '';
+        let resolvedProductId = item.productId;
+        let resolvedSku = (item as any).sku;
 
-        if (!resolvedName) {
-          const catalogName = resolveNameFromCatalog(item.variantId, item.productId);
-          resolvedName = catalogName || '';
+        // Debug: Log the incoming item data
+        console.log('[Transactions] Hydrating line item:', {
+          variantId: item.variantId,
+          productId: item.productId,
+          productName: item.productName,
+          variantName: item.variantName,
+          sku: (item as any).sku,
+        });
+
+        // Priority 1: Try productName from database query (most reliable for recalled orders)
+        if (item.productName) {
+          resolvedName = item.productName;
+          // If we have variant name, append it
+          if (item.variantName && item.variantName !== item.productName) {
+            resolvedName = `${item.productName} - ${item.variantName}`;
+          }
+          console.log('[Transactions] Resolved name from productName:', resolvedName);
+        }
+        // Priority 2: Try variantName from database query
+        else if (item.variantName) {
+          resolvedName = item.variantName;
+          console.log('[Transactions] Resolved name from variantName:', resolvedName);
+        }
+        // Priority 3: Try any other name field
+        else if ((item as any).name) {
+          resolvedName = (item as any).name;
+          console.log('[Transactions] Resolved name from name field:', resolvedName);
+        }
+        // Priority 4: Try SKU-based name
+        else if (resolvedSku) {
+          resolvedName = `Item ${resolvedSku}`;
+          console.log('[Transactions] Resolved name from SKU:', resolvedName);
         }
 
+        // Priority 5: Try catalog cache
         if (!resolvedName) {
-          const repoWithLookups = productRepository as unknown as {
-            getVariantById?: (variantId: string) => Promise<{
-              name?: string;
-              variantName?: string;
-              sku?: string;
-              productId?: string;
-              product?: { id?: string; name?: string };
-            } | null>;
-          };
+          const catalogName = resolveNameFromCatalog(item.variantId, item.productId);
+          if (catalogName) {
+            resolvedName = catalogName;
+            console.log('[Transactions] Resolved name from catalog cache:', resolvedName);
+          }
+        }
 
-          if (item.variantId) {
-            let variantName: string | null = null;
+        // Priority 6: Fetch from repositories if still not resolved
+        if (!resolvedName && item.variantId) {
+          console.log('[Transactions] Attempting to fetch variant details for:', item.variantId);
+
+          // Try getVariantDetails first (faster, local DB query)
+          if (salesOrderRepoRef.current?.getVariantDetails) {
+            try {
+              const variantDetails = await salesOrderRepoRef.current.getVariantDetails(item.variantId);
+              if (variantDetails) {
+                console.log('[Transactions] Got variant details:', variantDetails);
+                // Build name from variant and product
+                if (variantDetails.productName) {
+                  resolvedName = variantDetails.productName;
+                  if (variantDetails.variantName && variantDetails.variantName !== variantDetails.productName) {
+                    resolvedName = `${variantDetails.productName} - ${variantDetails.variantName}`;
+                  }
+                } else if (variantDetails.variantName) {
+                  resolvedName = variantDetails.variantName;
+                } else if (variantDetails.sku) {
+                  resolvedName = `Item ${variantDetails.sku}`;
+                }
+
+                if (!resolvedProductId) {
+                  resolvedProductId = variantDetails.productId;
+                }
+                if (!resolvedSku) {
+                  resolvedSku = variantDetails.sku;
+                }
+                console.log('[Transactions] Resolved name from getVariantDetails:', resolvedName);
+              }
+            } catch (error) {
+              console.warn(`[Transactions] Failed to get variant details for ${item.variantId}:`, error);
+            }
+          }
+
+          // Try productRepository as fallback
+          if (!resolvedName) {
+            const repoWithLookups = productRepository as unknown as {
+              getVariantById?: (variantId: string) => Promise<{
+                name?: string;
+                variantName?: string;
+                sku?: string;
+                productId?: string;
+                product?: { id?: string; name?: string };
+              } | null>;
+            };
+
             if (typeof repoWithLookups?.getVariantById === 'function') {
               try {
                 const variant = await repoWithLookups.getVariantById(item.variantId);
                 if (variant) {
-                  variantName =
-                    variant.name ||
-                    variant.variantName ||
-                    variant.product?.name ||
-                    variant.sku ||
-                    null;
-                  if (!item.productId) {
-                    (item as any).productId = variant.productId || variant.product?.id;
+                  console.log('[Transactions] Got variant from product repository:', variant);
+                  if (variant.product?.name) {
+                    resolvedName = variant.product.name;
+                    if (variant.variantName && variant.variantName !== variant.product.name) {
+                      resolvedName = `${variant.product.name} - ${variant.variantName}`;
+                    }
+                  } else if (variant.name) {
+                    resolvedName = variant.name;
+                  } else if (variant.variantName) {
+                    resolvedName = variant.variantName;
+                  } else if (variant.sku) {
+                    resolvedName = `Item ${variant.sku}`;
                   }
-                }
-              } catch {
-                // ignore
-              }
-            }
 
-            if (!variantName && salesOrderRepoRef.current?.getVariantDetails) {
-              try {
-                const variantDetails = await salesOrderRepoRef.current.getVariantDetails(item.variantId);
-                if (variantDetails) {
-                  variantName =
-                    variantDetails.variantName ||
-                    variantDetails.productName ||
-                    variantDetails.sku ||
-                    null;
-                  if (!item.productId) {
-                    (item as any).productId = variantDetails.productId;
+                  if (!resolvedProductId) {
+                    resolvedProductId = variant.productId || variant.product?.id;
                   }
+                  if (!resolvedSku) {
+                    resolvedSku = variant.sku;
+                  }
+                  console.log('[Transactions] Resolved name from productRepository:', resolvedName);
                 }
-              } catch {
-                // ignore
+              } catch (error) {
+                console.warn(`[Transactions] Failed to get variant from product repository for ${item.variantId}:`, error);
               }
-            }
-
-            if (variantName) {
-              resolvedName = variantName;
             }
           }
         }
 
+        // Final fallback
         if (!resolvedName) {
-          resolvedName = 'Unknown item';
+          if (resolvedSku) {
+            resolvedName = `Item ${resolvedSku}`;
+          } else if (item.variantId) {
+            resolvedName = `Item (${item.variantId.substring(0, 8)})`;
+          } else {
+            resolvedName = 'Unknown item';
+          }
+          console.warn('[Transactions] Using fallback name:', resolvedName);
         }
 
-        cacheVariantMapping(item.variantId, item.productId, resolvedName);
+        cacheVariantMapping(item.variantId, resolvedProductId, resolvedName);
 
         addItem({
           id: item.id || item.variantId || createTempId(),
           name: resolvedName,
           price: item.unitPrice,
           quantity: item.quantity,
-          productId: item.productId || item.variantId || item.id,
+          productId: resolvedProductId || item.variantId || item.id,
           salesPersonId: item.salesPersonId || undefined,
         });
       }
@@ -1790,14 +1858,7 @@ export function Transactions({
     const giftCardValue = giftCardData?.discount ?? 0;
     const adjustmentValue = appliedAdjustment?.amount ?? 0;
 
-    const taxableBase = Math.max(
-      0,
-      summary.taxableSubtotal -
-        summary.lineDiscountTotal -
-        discountValue -
-        giftCardValue +
-        adjustmentValue,
-    );
+    const taxableBase = Math.max(0, summary.taxableSubtotal);
     const taxValue = Number((taxableBase * TAX_RATE).toFixed(2));
     const total = adjustedSubtotal - discountValue - giftCardValue + adjustmentValue + taxValue;
     return {
@@ -2148,6 +2209,7 @@ export function Transactions({
             grossTotal,
             itemDiscount,
             taxAmount: orderTotals.taxValue,
+            adjustmentAmount: appliedAdjustment?.amount ?? 0,
             netTotal,
             tendered,
             change,
@@ -2544,7 +2606,44 @@ export function Transactions({
       color: 'bg-orange-600',
       square: true,
       rowSpan: 2,
-      onClick: () => navigate('/transactions/return'),
+      onClick: () => {
+        if (!selectedItem) {
+          show('Select an item to return', 'error');
+          return;
+        }
+        const itemToReturn = lineItems.find((item) => item.id === selectedItem);
+        if (!itemToReturn) {
+          show('Selected item not found', 'error');
+          return;
+        }
+        // Navigate to return page with item data
+        navigate('/transactions/return', {
+          state: {
+            returnItems: [
+              {
+                id: itemToReturn.id,
+                productId: itemToReturn.productId,
+                productName: itemToReturn.name,
+                quantity: itemToReturn.quantity,
+                unitPrice: itemToReturn.price,
+                total: itemToReturn.price * itemToReturn.quantity,
+                sku: (itemToReturn as any).sku,
+                variantId: (itemToReturn as any).variantId,
+                // Line-level details
+                lineDiscount: (itemToReturn as any).lineDiscount,
+                lineDiscountPercent: (itemToReturn as any).lineDiscountPercent,
+                lineTax: (itemToReturn as any).lineTax,
+                color: (itemToReturn as any).color,
+                size: (itemToReturn as any).size,
+                salesPersonId: itemToReturn.salesPersonId,
+                salesPersonName: assignedSalesPerson?.name,
+                originalPrice: (itemToReturn as any).originalPrice || itemToReturn.price,
+              },
+            ],
+            originalOrderId: currentParkedOrderId,
+          },
+        });
+      },
     },
     {
       id: 'change-unit-split',

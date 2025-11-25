@@ -1,12 +1,11 @@
 import React, { useMemo } from 'react';
-import { Search, User } from 'lucide-react';
+import { User } from 'lucide-react';
 import { ComponentProps } from '../../types.js';
 import { CustomerCard, Customer } from './CustomerCard.js';
 
 export interface CustomerListProps extends ComponentProps {
   customers: Customer[];
   searchQuery: string;
-  onSearchChange: (query: string) => void;
   onEditCustomer?: (customer: Customer) => void;
   onDeleteCustomer?: (customer: Customer) => void;
   onAddToTransaction?: (customer: Customer) => void;
@@ -20,7 +19,6 @@ export interface CustomerListProps extends ComponentProps {
 export function CustomerList({
   customers,
   searchQuery,
-  onSearchChange,
   onEditCustomer,
   onDeleteCustomer,
   onAddToTransaction,
@@ -42,32 +40,12 @@ export function CustomerList({
   return (
     <div className={`flex flex-col h-full ${className}`}>
       <div className="flex-shrink-0 mb-4">
-        <div className="flex items-center justify-between">
-          <h3
-            className="text-lg font-semibold"
-            style={{ color: 'var(--color-text-primary)' }}
-          >
-            Customers ({filteredCustomers.length})
-          </h3>
-          <div className="relative">
-            <Search
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 opacity-50"
-              style={{ color: 'var(--color-text-secondary)' }}
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="pl-10 pr-4 py-1 rounded border text-sm w-full max-w-md"
-              style={{
-                backgroundColor: 'var(--color-bg-secondary)',
-                color: 'var(--color-text-primary)',
-                borderColor: 'var(--color-border-light)',
-              }}
-              placeholder="Search customers..."
-            />
-          </div>
-        </div>
+        <h3
+          className="text-lg font-semibold"
+          style={{ color: 'var(--color-text-primary)' }}
+        >
+          Customers ({filteredCustomers.length})
+        </h3>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0 pr-1">

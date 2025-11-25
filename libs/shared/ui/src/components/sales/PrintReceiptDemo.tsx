@@ -87,6 +87,7 @@ export function PrintReceiptDemo() {
       grossTotal: 18900,
       itemDiscount: 90,
       taxAmount: 0,
+      adjustmentAmount: 0,
       netTotal: 18990,
       tendered: 19000,
       change: 10,

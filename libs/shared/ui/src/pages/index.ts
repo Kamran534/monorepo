@@ -8,4 +8,5 @@ export * from './ProductDetail.js';
 export * from './Sales.js';
 export * from './Payments.js';
 export * from './Orders.js';
+export * from './OrderDetail.js';
 export * from './ReturnTransaction.js';

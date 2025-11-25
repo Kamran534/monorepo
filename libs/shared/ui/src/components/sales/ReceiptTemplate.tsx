@@ -20,12 +20,24 @@ const normalizeReceiptCodeValue = (value?: string | null) => {
   return value.replace(/\//g, '-');
 };
 
+const getReceiptThemeColors = (theme?: 'light' | 'dark') => {
+  const isDark = theme === 'dark';
+  return {
+    text: isDark ? '#f8fafc' : '#0f172a',
+    muted: isDark ? 'rgba(248,250,252,0.7)' : '#4b5563',
+    accent: isDark ? '#38bdf8' : '#111827',
+    border: isDark ? 'rgba(248,250,252,0.35)' : '#111827',
+    background: isDark ? '#0f172a' : '#ffffff',
+  };
+};
+
 export interface ReceiptData {
   // Store info
   storeName: string;
   storeNameArabic?: string;
   storeUrl?: string;
   posNumber?: string;
+  theme?: 'light' | 'dark';
 
   // Invoice details
   invoiceNumber: string;
@@ -48,6 +60,7 @@ export interface ReceiptData {
   itemDiscount: number;
   netTotal: number;
   taxAmount?: number;
+  adjustmentAmount?: number;
   tendered: number;
   change: number;
 
@@ -78,6 +91,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
     grossTotal,
     itemDiscount,
     taxAmount = 0,
+    adjustmentAmount = 0,
     netTotal,
     tendered,
     change,
@@ -89,6 +103,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
     ],
   } = data;
   const qrValue = normalizeReceiptCodeValue(orderNumber || orderId || invoiceNumber);
+  const { text, muted, accent, border, background } = getReceiptThemeColors(data.theme);
 
   return (
     <div
@@ -97,7 +112,8 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
         fontFamily: "'Courier New', monospace",
         fontSize: '12px',
         lineHeight: '1.4',
-        color: '#000',
+        color: text,
+        backgroundColor: background,
         padding: '5mm',
       }}
     >
@@ -391,6 +407,21 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
           <div style={{ textAlign: 'right', minWidth: '80px' }}>-Rs {itemDiscount.toFixed(2)}</div>
         </div>
 
+        {adjustmentAmount !== 0 && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              marginBottom: '1mm',
+            }}
+          >
+            <div>Adjustment:</div>
+            <div style={{ textAlign: 'right', minWidth: '80px' }}>
+              Rs {adjustmentAmount.toFixed(2)}
+            </div>
+          </div>
+        )}
+
         <div
           style={{
             display: 'flex',
@@ -438,7 +469,7 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
       {/* Separator Line */}
       <div
         style={{
-          borderTop: '1px dashed #000',
+          borderTop: `1px dashed ${border}`,
           margin: '4mm 0',
         }}
       />
@@ -458,8 +489,8 @@ export function ReceiptTemplate({ data }: { data: ReceiptData }) {
               marginTop: isLastLine ? '3mm' : '0',
               paddingTop: isLastLine ? '3mm' : '0',
               paddingBottom: isLastLine ? '3mm' : '0',
-              borderTop: isLastLine ? '1px dashed #000' : 'none',
-              borderBottom: isLastLine ? '1px dashed #000' : 'none',
+              borderTop: isLastLine ? `1px dashed ${border}` : 'none',
+              borderBottom: isLastLine ? `1px dashed ${border}` : 'none',
               fontWeight: isLastLine ? 'bold' : 'normal',
             }}
           >
@@ -480,6 +511,7 @@ export function generateReceiptHTML(data: ReceiptData): string {
   const receiptElement = document.createElement('div');
   const root = document.createElement('div');
   receiptElement.appendChild(root);
+  const { text, muted, border, background } = getReceiptThemeColors(data.theme);
 
   // Note: In a real implementation, you would use ReactDOM.renderToString
   // For now, we'll return a simplified HTML template
@@ -496,11 +528,14 @@ export function generateReceiptHTML(data: ReceiptData): string {
             line-height: 1.4;
             width: 80mm;
             padding: 5mm;
+            color: ${text};
+            background-color: ${background};
           }
           .center { text-align: center; }
           .bold { font-weight: bold; }
-          .separator { border-top: 1px dashed #000; margin: 3mm 0; }
-          .flex { display: flex; justify-content: space-between; }
+          .muted { color: ${muted}; }
+          .separator { border-top: 1px dashed ${border}; margin: 3mm 0; }
+          .flex { display: flex; justify-content: space-between; color: ${text}; }
         </style>
       </head>
       <body>
@@ -514,8 +549,8 @@ export function generateReceiptHTML(data: ReceiptData): string {
         <div style="font-size: 11px; margin-bottom: 1mm;">Mode of Payment: ${data.payments[0]?.paymentMethod?.type || 'Cash'}</div>
         ${data.customer ? `<div style="font-size: 11px; margin-bottom: 3mm;">Customer: ${`${data.customer.firstName} ${data.customer.lastName}`.trim()}</div>` : ''}
         <div class="separator"></div>
-        <div class="center" style="font-size: 11px; margin-bottom: 3mm;">------------ Original ------------</div>
-        <div class="flex bold" style="font-size: 11px; margin-bottom: 2mm; padding-bottom: 1mm; border-bottom: 1px solid #000;">
+        <div class="center muted" style="font-size: 11px; margin-bottom: 3mm;">------------ Original ------------</div>
+        <div class="flex bold" style="font-size: 11px; margin-bottom: 2mm; padding-bottom: 1mm; border-bottom: 1px solid ${border};">
           <div style="width: 50px; text-align: center;">Price</div>
           <div style="width: 30px; text-align: center;">Qty</div>
           <div style="width: 40px; text-align: center;">Disc%</div>
@@ -566,6 +601,11 @@ export function generateReceiptHTML(data: ReceiptData): string {
             <div>Item Discount:</div>
             <div style="text-align: right; min-width: 80px;">-Rs ${data.itemDiscount.toFixed(2)}</div>
           </div>
+          ${data.adjustmentAmount && data.adjustmentAmount !== 0 ? `
+          <div class="flex" style="margin-bottom: 1mm;">
+            <div>Adjustment:</div>
+            <div style="text-align: right; min-width: 80px;">Rs ${data.adjustmentAmount.toFixed(2)}</div>
+          </div>` : ''}
           <div class="flex" style="margin-bottom: 1mm;">
             <div>Tax:</div>
             <div style="text-align: right; min-width: 80px;">Rs ${(data.taxAmount ?? 0).toFixed(2)}</div>
@@ -603,7 +643,7 @@ export function generateReceiptHTML(data: ReceiptData): string {
           'Thanks for visiting us',
         ]).map((line, i, arr) => {
           const isLastLine = i === arr.length - 1;
-          return `<div style="text-align: ${isLastLine ? 'center' : 'left'}; font-size: 11px; margin-bottom: ${isLastLine ? '1mm' : '1mm'}; margin-top: ${isLastLine ? '3mm' : '0'}; padding-top: ${isLastLine ? '3mm' : '0'}; padding-bottom: ${isLastLine ? '3mm' : '0'}; border-top: ${isLastLine ? '1px dashed #000' : 'none'}; border-bottom: ${isLastLine ? '1px dashed #000' : 'none'}; ${isLastLine ? 'font-weight: bold;' : ''}">${line}</div>`;
+          return `<div style="text-align: ${isLastLine ? 'center' : 'left'}; font-size: 11px; margin-bottom: ${isLastLine ? '1mm' : '1mm'}; margin-top: ${isLastLine ? '3mm' : '0'}; padding-top: ${isLastLine ? '3mm' : '0'}; padding-bottom: ${isLastLine ? '3mm' : '0'}; border-top: ${isLastLine ? '1px dashed ${border}' : 'none'}; border-bottom: ${isLastLine ? '1px dashed ${border}' : 'none'}; ${isLastLine ? 'font-weight: bold;' : ''}">${line}</div>`;
         }).join('')}
       </body>
     </html>
