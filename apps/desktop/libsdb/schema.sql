@@ -619,7 +619,8 @@ CREATE TABLE IF NOT EXISTS OrderLineItem (
 
     -- Line-level discounts (sale discount)
     lineDiscount REAL DEFAULT 0,
-    lineDiscountPercent REAL DEFAULT 0,
+    lineDiscountType TEXT, -- 'amount' or 'percent'
+    lineDiscountPercent REAL, -- Original percent value if discount was percentage-based
 
     -- Custom discount at line level
     customDiscountAmount REAL DEFAULT 0,

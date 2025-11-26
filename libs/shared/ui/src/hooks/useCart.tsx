@@ -3,35 +3,77 @@ import type { LineItem } from '../components/transactions/TransactionLines.js';
 
 const LINE_TAX_RATE = 0.03;
 
+const parseNumeric = (value: any): number | undefined => {
+  if (value === null || value === undefined) return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+};
+
 const recalcLineTotals = (line: LineItem): LineItem => {
-  const price = Number(line.price) || 0;
-  const quantity = Number(line.quantity) || 0;
+  const price = parseNumeric(line.price) ?? 0;
+  const quantity = parseNumeric(line.quantity) ?? 0;
   const baseSubtotal = price * quantity;
 
-  let discountAmount = 0;
-  if (line.lineDiscountType && line.lineDiscountValue !== undefined) {
-    discountAmount =
-      line.lineDiscountType === 'percent'
-        ? (Math.abs(baseSubtotal) * line.lineDiscountValue) / 100
-        : line.lineDiscountValue;
-  } else if (typeof line.discount === 'number') {
-    discountAmount = line.discount;
-  } else if (typeof line.lineDiscount === 'number') {
-    discountAmount = line.lineDiscount;
+  const lineDiscountValue = parseNumeric(line.lineDiscountValue);
+  const providedSaleDiscount = parseNumeric(line.lineDiscount ?? line.discount);
+  const computedSaleDiscount =
+    line.lineDiscountType && lineDiscountValue !== undefined
+      ? line.lineDiscountType === 'percent'
+        ? (Math.abs(baseSubtotal) * lineDiscountValue) / 100
+        : lineDiscountValue
+      : 0;
+  const saleDiscountAmount = providedSaleDiscount ?? computedSaleDiscount;
+
+  // Debug logging - ALWAYS log to see what's happening
+  console.log('[useCart] recalcLineTotals:', {
+    name: line.name,
+    lineDiscount: line.lineDiscount,
+    lineDiscountType: line.lineDiscountType,
+    lineDiscountValue: lineDiscountValue,
+    providedSaleDiscount,
+    computedSaleDiscount,
+    finalSaleDiscountAmount: saleDiscountAmount,
+  });
+
+  let resolvedCustomDiscountAmount = parseNumeric(line.customDiscountAmount);
+  const resolvedCustomDiscountPercent = parseNumeric(line.customDiscountPercent);
+  if (resolvedCustomDiscountAmount === undefined && resolvedCustomDiscountPercent !== undefined) {
+    resolvedCustomDiscountAmount = (Math.abs(baseSubtotal) * resolvedCustomDiscountPercent) / 100;
+  }
+
+  let discountAmount = saleDiscountAmount;
+  if (resolvedCustomDiscountAmount !== undefined) {
+    discountAmount += resolvedCustomDiscountAmount;
   }
 
   discountAmount = Math.min(Math.max(discountAmount, 0), Math.abs(baseSubtotal));
   const signedDiscount = baseSubtotal < 0 ? -discountAmount : discountAmount;
   const discountedSubtotal = baseSubtotal - signedDiscount;
-  const lineTax =
-    discountAmount > 0 ? Number((Math.max(discountedSubtotal, 0) * LINE_TAX_RATE).toFixed(2)) : undefined;
+
+  const providedLineTax = parseNumeric(line.lineTax);
+  const computedLineTax =
+    discountAmount > 0 ? Number((Math.max(discountedSubtotal, 0) * LINE_TAX_RATE).toFixed(2)) : 0;
+  const finalLineTax = providedLineTax ?? computedLineTax;
+
+  const providedTotal = parseNumeric(line.initialTotal ?? line.total ?? (line as unknown as { total?: number }).total);
+  const finalTotal = providedTotal ?? discountedSubtotal;
 
   return {
     ...line,
     discount: discountAmount,
-    lineDiscount: discountAmount,
-    lineTax,
-    total: discountedSubtotal,
+    lineDiscount:
+      line.lineDiscount !== undefined ? line.lineDiscount : saleDiscountAmount,
+    customDiscountAmount:
+      line.customDiscountAmount !== undefined
+        ? line.customDiscountAmount
+        : resolvedCustomDiscountAmount,
+    customDiscountPercent:
+      line.customDiscountPercent !== undefined
+        ? line.customDiscountPercent
+        : resolvedCustomDiscountPercent,
+    lineTax: finalLineTax,
+    total: finalTotal,
+    initialTotal: undefined,
   };
 };
 
@@ -105,7 +147,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (availableQty !== Infinity && qtyToAdd > availableQty) {
         showToast?.(`Only ${availableQty} item(s) available in stock. Added ${availableQty} instead.`, 'info');
         const id = item.id ?? Math.random().toString(36).slice(2, 9);
-        const total = price * availableQty;
         return [...prev, recalcLineTotals({
           id,
           name: item.name,
@@ -115,6 +156,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           productVariantId: item.productVariantId,
           salesPersonId: (item as any).salesPersonId, // Preserve salesperson
           availableQuantity: availableQty,
+          // Preserve discount information
+          lineDiscount: item.lineDiscount,
+          lineDiscountType: item.lineDiscountType,
+          lineDiscountValue: item.lineDiscountValue,
+          lineDiscountPercent: item.lineDiscountPercent,
+          customDiscountAmount: item.customDiscountAmount,
+          customDiscountPercent: item.customDiscountPercent,
+          lineTax: item.lineTax,
+          total: price * availableQty,
         })];
       }
 
@@ -129,6 +179,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         salesPersonId: (item as any).salesPersonId, // Preserve salesperson
         availableQuantity: availableQty,
         isReturn: (item as any).isReturn || false, // Preserve return flag
+        // Preserve discount information
+        lineDiscount: item.lineDiscount,
+        lineDiscountType: item.lineDiscountType,
+        lineDiscountValue: item.lineDiscountValue,
+        lineDiscountPercent: item.lineDiscountPercent,
+        customDiscountAmount: item.customDiscountAmount,
+        customDiscountPercent: item.customDiscountPercent,
+        lineTax: item.lineTax,
+        total: price * qtyToAdd,
       })];
     });
   }, []);

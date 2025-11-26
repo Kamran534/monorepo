@@ -241,8 +241,8 @@ export function OrderDetail({ salesOrderRepo }: OrderDetailProps = {}) {
     >
       <div className="flex-1 flex min-h-0">
         {/* Left section - order lines */}
-        <div className="flex-1 min-w-0 p-4 pt-0 space-y-4 overflow-y-auto">
-          <div className="rounded border p-5 space-y-4" style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-card)' }}>
+        <div className="flex-1 min-w-0 overflow-y-auto">
+          <div className="border border-b-0 px-5 py-5 space-y-4" style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-card)' }}>
             {/* <div className="flex flex-col gap-1">
               <p className="text-xs uppercase tracking-wide" style={{ color: 'var(--color-text-secondary)' }}>
                 Order reference
@@ -270,10 +270,15 @@ export function OrderDetail({ salesOrderRepo }: OrderDetailProps = {}) {
             </div>
           </div>
 
-          <div className="rounded border overflow-hidden" style={{ borderColor: 'var(--color-border-light)' }}>
+          <div className="border border-t-0 overflow-hidden" style={{ borderColor: 'var(--color-border-light)' }}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                <thead style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
+                <thead
+                  style={{
+                    backgroundColor: '#EA580C',
+                    color: '#FFFFFF',
+                  }}
+                >
                   <tr>
                     <th className="text-left px-4 py-2 font-semibold">Item Name</th>
                     <th className="text-center px-4 py-2 font-semibold">Quantity</th>
@@ -291,45 +296,62 @@ export function OrderDetail({ salesOrderRepo }: OrderDetailProps = {}) {
                       </td>
                     </tr>
                   )}
-                  {lineItems.map((item) => (
+                  {lineItems.map((item) => {
+                    const isExpanded = expandedLineId === item.id;
+                    const rowTextColor = isExpanded ? '#FFFFFF' : 'var(--color-text-primary)';
+                    const secondaryTextColor = isExpanded ? 'rgba(255,255,255,0.75)' : 'var(--color-text-secondary)';
+
+                    return (
                     <Fragment key={item.id}>
                       <tr
-                        className="border-t cursor-pointer hover:bg-[var(--color-bg-hover)] transition-colors"
-                        style={{ borderColor: 'var(--color-border-light)' }}
+                        className="border-t cursor-pointer transition-colors"
+                        style={{
+                          borderColor: 'var(--color-border-light)',
+                          backgroundColor: isExpanded ? '#EA580C' : 'transparent',
+                          color: rowTextColor,
+                        }}
                         onClick={() => toggleLine(item.id)}
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            {expandedLineId === item.id ? (
-                              <ChevronDown className="w-4 h-4" style={{ color: 'var(--color-text-secondary)' }} />
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" style={{ color: rowTextColor }} />
                             ) : (
                               <ChevronRight className="w-4 h-4" style={{ color: 'var(--color-text-secondary)' }} />
                             )}
-                            <p className="font-medium">{item.productName || item.variantName || 'Item'}</p>
+                            <p className="font-medium" style={{ color: rowTextColor }}>
+                              {item.productName || item.variantName || 'Item'}
+                            </p>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-center">{item.quantity}</td>
-                        <td className="px-4 py-3 text-right">{formatCurrency(item.unitPrice)}</td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 text-center" style={{ color: rowTextColor }}>
+                          {item.quantity}
+                        </td>
+                        <td className="px-4 py-3 text-right" style={{ color: rowTextColor }}>
+                          {formatCurrency(item.unitPrice)}
+                        </td>
+                        <td className="px-4 py-3 text-right" style={{ color: rowTextColor }}>
                           {formatDiscountValue(item.lineDiscount, item.lineDiscountPercent)}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 text-right" style={{ color: rowTextColor }}>
                           {formatDiscountValue(item.customDiscountAmount, item.customDiscountPercent)}
                         </td>
-                        <td className="px-4 py-3 text-right">{formatCurrency(item.lineTotal)}</td>
+                        <td className="px-4 py-3 text-right" style={{ color: rowTextColor }}>
+                          {formatCurrency(item.lineTotal)}
+                        </td>
                       </tr>
-                      {expandedLineId === item.id && (
+                      {isExpanded && (
                         <tr>
                           <td colSpan={6} className="px-4 pb-4">
                             <div
-                              className="rounded border p-4 text-xs space-y-3"
+                              className="border p-4 text-xs space-y-3"
                               style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-secondary)' }}
                             >
                               <div className="flex flex-wrap items-center justify-between gap-3 text-sm font-medium">
                                 <span style={{ color: 'var(--color-text-primary)' }}>
                                   {item.productName || item.variantName || 'Item'} {item.sku ? `(${item.sku})` : ''}
                                 </span>
-                                <span style={{ color: 'var(--color-text-secondary)' }}>
+                                <span style={{ color: secondaryTextColor }}>
                                   Total: {formatCurrency(item.lineTotal)}
                                 </span>
                               </div>
@@ -362,7 +384,8 @@ export function OrderDetail({ salesOrderRepo }: OrderDetailProps = {}) {
                         </tr>
                       )}
                     </Fragment>
-                  ))}
+                  );
+                })}
                 </tbody>
                 {/* <tfoot style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
                   <tr>
@@ -388,7 +411,7 @@ export function OrderDetail({ salesOrderRepo }: OrderDetailProps = {}) {
         </div>
 
         {/* Right panel - details */}
-        <div className="w-80 rounded flex-shrink-0 border-l" style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-card)' }}>
+        <div className="w-80 flex-shrink-0 border-l" style={{ borderColor: 'var(--color-border-light)', backgroundColor: 'var(--color-bg-card)' }}>
           <div className="h-full overflow-y-auto p-4 space-y-4">
             <div>
               <h3

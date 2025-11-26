@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Search, Square, Printer, HelpCircle } from 'lucide-react';
 import { ReturnableProductsTable } from '../components/transactions/ReturnableProductsTable.js';
@@ -26,6 +26,8 @@ interface ReturnItemData {
   lineTax?: number;
   color?: string;
   size?: string;
+  customDiscountAmount?: number;
+  customDiscountPercent?: number;
   salesPersonName?: string;
   salesPersonId?: string;
   originalPrice?: number;
@@ -43,7 +45,7 @@ interface LocationState {
  * on the left and selected product details on the right.
  */
 export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransactionProps) {
-  const { addItem } = useCart();
+  const { items: cartItems, updateItem } = useCart();
   const { show } = useToast();
   const location = useLocation();
   const navigationState = location.state as LocationState | null;
@@ -74,6 +76,8 @@ export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransaction
         lineDiscount: item.lineDiscount,
         lineDiscountPercent: item.lineDiscountPercent,
         lineTax: item.lineTax,
+        customDiscountAmount: item.customDiscountAmount,
+        customDiscountPercent: item.customDiscountPercent,
         color: item.color,
         size: item.size,
         salesPersonName: item.salesPersonName,
@@ -100,6 +104,20 @@ export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransaction
       return product;
     });
   }, [baseReturnableProducts, returningQuantities]);
+
+  // Automatically select the first product when the page opens
+  useEffect(() => {
+    if (!selectedProductId && baseReturnableProducts.length > 0) {
+      const firstProduct = baseReturnableProducts[0];
+      setSelectedProductId(firstProduct.id);
+
+      // Initialize returning quantity for the first product if not already set
+      setReturningQuantities((prev) => ({
+        ...prev,
+        [firstProduct.id]: prev[firstProduct.id] ?? firstProduct.returning,
+      }));
+    }
+  }, [selectedProductId, baseReturnableProducts, setReturningQuantities]);
 
   const selectedProduct = useMemo(() => {
     if (!selectedProductId) return null;
@@ -143,31 +161,54 @@ export function ReturnTransaction({ originalOrderId, onBack }: ReturnTransaction
       return;
     }
 
-    // Add product to cart with negative quantity and negative price for returns
-    // The cart will calculate total as price * quantity, which will be positive
-    // We mark it as return so it displays with strikethrough and excludes tax
-    addItem(
-      {
-        name: selectedProduct.productName || selectedProduct.productNumber,
-        price: -selectedProduct.unitPrice, // Negative price for returns
-        quantity: -returningQuantity, // Negative quantity for returns
-        productId: selectedProduct.id,
-        availableQuantity: Infinity, // Returns don't need stock check
-        isReturn: true, // Mark as return item
-      },
-      show
-    );
+    const existingLine =
+      cartItems.find(
+        (line) =>
+          line.id === selectedProduct.id ||
+          line.productId === selectedProduct.productNumber ||
+          line.productVariantId === selectedProduct.productNumber
+      ) ?? cartItems.find((line) => line.id === selectedProduct.productNumber);
 
-    show(`Added ${returningQuantity} item(s) for return`, 'success');
-    
-    // Reset selection after adding to cart
+    if (!existingLine) {
+      show('Unable to locate this item in the transaction. Please recall the order again.', 'error');
+      return;
+    }
+
+    const currentQty = Number(existingLine.quantity) || 0;
+    if (currentQty <= 0) {
+      show('This line has no remaining quantity to return.', 'error');
+      return;
+    }
+
+    const returnQty = Math.min(returningQuantity, currentQty);
+    if (returnQty <= 0) {
+      show('Return quantity must be greater than zero.', 'error');
+      return;
+    }
+
+    if (returnQty >= currentQty) {
+      updateItem(existingLine.id, {
+        isReturn: true,
+      });
+      show(`Marked ${selectedProduct.productName || 'item'} as fully returned.`, 'success');
+    } else {
+      updateItem(existingLine.id, {
+        quantity: currentQty - returnQty,
+        isReturn: false,
+      });
+      show(
+        `Updated ${selectedProduct.productName || 'item'} quantity to ${currentQty - returnQty}.`,
+        'success'
+      );
+    }
+
     setSelectedProductId(undefined);
     setReturningQuantities((prev) => {
       const updated = { ...prev };
       delete updated[selectedProduct.id];
       return updated;
     });
-  }, [selectedProduct, returningQuantity, addItem, show]);
+  }, [cartItems, selectedProduct, returningQuantity, updateItem, show]);
 
   // Show message if no items available for return
   if (baseReturnableProducts.length === 0) {

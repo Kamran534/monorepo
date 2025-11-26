@@ -34,6 +34,20 @@ export function ReturnDetailsPanel({
     setImageError(false);
   }, [selectedProduct?.id]);
 
+  const maxReturnable = selectedProduct?.available ?? selectedProduct?.sold ?? 0;
+  const decreaseQuantity = () => {
+    if (!selectedProduct) return;
+    const newQty = Math.max(0, returningQuantity - 1);
+    onReturningQuantityChange?.(newQty);
+  };
+
+  const increaseQuantity = () => {
+    if (!selectedProduct) return;
+    const limit = Math.max(0, maxReturnable);
+    const newQty = Math.min(limit, returningQuantity + 1 || 1);
+    onReturningQuantityChange?.(newQty);
+  };
+
   return (
     <div
       className={`flex flex-col h-full w-full min-h-0 ${className}`}
@@ -206,32 +220,51 @@ export function ReturnDetailsPanel({
               </div>
               <div className="flex items-center gap-2">
                 <div
-                  className="flex-1 text-3xl font-bold text-center py-[2px] px-4 rounded"
+                  className="flex items-center justify-between rounded px-3 py-[2px] flex-1"
                   style={{
                     backgroundColor: '#1A2B3C',
                     color: '#FFFFFF',
                   }}
                 >
-                  {formatNumber(returningQuantity)}
+                  <button
+                    type="button"
+                    className="w-10 h-10 flex items-center justify-center"
+                    style={{
+                      backgroundColor: 'transparent',
+                      color: '#FFFFFF',
+                    }}
+                    onClick={decreaseQuantity}
+                    disabled={returningQuantity <= 0}
+                  >
+                    –
+                  </button>
+                  <span className="text-3xl font-bold text-center px-4">
+                    {formatNumber(returningQuantity)}
+                  </span>
+                  <button
+                    type="button"
+                    className="w-10 h-10 flex items-center justify-center"
+                    style={{
+                      backgroundColor: 'transparent',
+                      color: '#FFFFFF',
+                    }}
+                    onClick={increaseQuantity}
+                    disabled={returningQuantity >= maxReturnable}
+                  >
+                    +
+                  </button>
                 </div>
                 <button
                   type="button"
-                  className="w-12 h-12 flex items-center justify-center rounded hover:opacity-90 transition-opacity bg-orange-600"
+                  className="w-12 h-12 flex items-center justify-center rounded bg-orange-600 hover:opacity-90 transition-opacity"
                   style={{
                     color: '#FFFFFF',
                   }}
                   onClick={() => {
-                    if (onAddToCart) {
-                      // Add to cart with negative billing
-                      onAddToCart();
-                    } else {
-                      // Fallback: Increment quantity
-                      const newQty = Math.min(returningQuantity + 1, selectedProduct.available);
-                      onReturningQuantityChange?.(newQty);
-                    }
+                    onAddToCart?.();
                   }}
                 >
-                  <ArrowRight className="w-6 h-6" />
+                  <ArrowRight className="w-5 h-5" />
                 </button>
               </div>
             </div>

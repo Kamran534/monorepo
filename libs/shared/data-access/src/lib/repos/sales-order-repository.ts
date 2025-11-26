@@ -116,6 +116,7 @@ export interface OrderRecallLineItem {
   unitPrice: number;
   lineTotal: number;
   lineDiscount?: number;
+  lineDiscountType?: 'amount' | 'percent';
   lineDiscountPercent?: number;
   customDiscountAmount?: number;
   customDiscountPercent?: number;
@@ -165,6 +166,22 @@ export class SalesOrderRepository {
     private localDb: LocalDbClient,
     private apiClient: RemoteApiClient
   ) {}
+
+  private lineDiscountTypeColumnChecked = false;
+
+  private async ensureLineDiscountTypeColumn(): Promise<void> {
+    if (this.lineDiscountTypeColumnChecked) return;
+    try {
+      await this.localDb.execute(`ALTER TABLE OrderLineItem ADD COLUMN lineDiscountType TEXT`);
+    } catch (error: any) {
+      const message = error?.message || '';
+      if (!/duplicate column/i.test(message) && !/already exists/i.test(message)) {
+        console.warn('[SalesOrderRepository] Failed to ensure lineDiscountType column:', message);
+      }
+    } finally {
+      this.lineDiscountTypeColumnChecked = true;
+    }
+  }
 
   /**
    * Check if server is available by calling root URL (/)
@@ -293,6 +310,7 @@ export class SalesOrderRepository {
           unitPrice: row.unitPrice,
           lineTotal: row.lineTotal,
           lineDiscount: row.lineDiscount ?? undefined,
+          lineDiscountType: row.lineDiscountType ?? undefined,
           lineDiscountPercent: row.lineDiscountPercent ?? undefined,
           customDiscountAmount: row.customDiscountAmount ?? undefined,
           customDiscountPercent: row.customDiscountPercent ?? undefined,
@@ -743,6 +761,9 @@ export class SalesOrderRepository {
         }
       }
 
+      // Ensure schema has optional columns we rely on
+      await this.ensureLineDiscountTypeColumn();
+
       // Insert line items (for both new and updated orders)
       // console.log(`[SalesOrderRepository] Inserting ${data.lineItems.length} line items...`);
       for (let i = 0; i < data.lineItems.length; i++) {
@@ -767,14 +788,21 @@ export class SalesOrderRepository {
         const lineTotal = Math.max(0, lineSubtotal - saleDiscount - customDiscount);
 
         try {
+          // Determine discount type
+          const lineDiscountType = lineItem.saleDiscount?.amount
+            ? 'amount'
+            : lineItem.saleDiscount?.percent
+            ? 'percent'
+            : null;
+
           await this.localDb.execute(
             `INSERT INTO OrderLineItem (
               id, orderId, variantId, salesPersonId, quantity, unitPrice,
-              lineDiscount, lineDiscountPercent,
+              lineDiscount, lineDiscountType, lineDiscountPercent,
               customDiscountAmount, customDiscountPercent,
               lineTotal, notes, createdAt,
               sync_status, last_synced_at, is_deleted
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               lineId,
               orderId,
@@ -783,9 +811,10 @@ export class SalesOrderRepository {
               lineItem.quantity,
               lineItem.unitPrice,
               saleDiscount,
-              lineItem.saleDiscount?.percent || 0,
+              lineDiscountType,
+              lineItem.saleDiscount?.percent || null,
               customDiscount,
-              lineItem.customDiscount?.percent || 0,
+              lineItem.customDiscount?.percent || null,
               lineTotal,
               lineItem.notes || null,
               now,

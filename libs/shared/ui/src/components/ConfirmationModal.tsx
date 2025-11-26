@@ -19,6 +19,7 @@ export interface ConfirmationModalProps extends ComponentProps {
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
   isLoading?: boolean;
+  showCancelButton?: boolean;
 }
 
 /**
@@ -36,6 +37,7 @@ export function ConfirmationModal({
   cancelText = 'Cancel',
   variant = 'warning',
   isLoading = false,
+  showCancelButton = true,
   className = '',
 }: ConfirmationModalProps) {
   const handleClose = useCallback(() => {
@@ -68,9 +70,9 @@ export function ConfirmationModal({
         };
       case 'warning':
         return {
-          iconColor: '#f59e0b',
-          confirmButtonBg: '#f59e0b',
-          confirmButtonHover: '#d97706',
+          iconColor: '#f97316',
+          confirmButtonBg: '#f97316',
+          confirmButtonHover: '#ea580c',
         };
       case 'info':
         return {
@@ -143,18 +145,20 @@ export function ConfirmationModal({
       >
         {isLoading ? 'Processing...' : confirmText}
       </button>
-      <button
-        onClick={handleClose}
-        disabled={isLoading}
-        className="w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 border"
-        style={{
-          backgroundColor: 'var(--color-bg-secondary)',
-          color: 'var(--color-text-primary)',
-          borderColor: 'var(--color-border-light)',
-        }}
-      >
-        {cancelText}
-      </button>
+      {showCancelButton && (
+        <button
+          onClick={handleClose}
+          disabled={isLoading}
+          className="w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 border"
+          style={{
+            backgroundColor: 'var(--color-bg-secondary)',
+            color: 'var(--color-text-primary)',
+            borderColor: 'var(--color-border-light)',
+          }}
+        >
+          {cancelText}
+        </button>
+      )}
     </div>
   );
 

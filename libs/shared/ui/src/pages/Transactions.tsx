@@ -452,13 +452,75 @@ export function Transactions({
   const [isResumeConfirmOpen, setIsResumeConfirmOpen] = useState(false);
   
   // Track if current transaction is from a recalled order (not a new order)
-  const [isRecalledOrder, setIsRecalledOrder] = useState(false);
-  const [recalledOrderId, setRecalledOrderId] = useState<string | null>(null);
+  const [isRecalledOrder, setIsRecalledOrder] = useState<boolean>(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return sessionStorage.getItem('transactions-isRecalledOrder') === 'true';
+  });
+  const [recalledOrderId, setRecalledOrderId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return sessionStorage.getItem('transactions-recalledOrderId');
+  });
+  // Persist recalled order state so navigating away (e.g. to the return page) doesn't reset it
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (isRecalledOrder) {
+      sessionStorage.setItem('transactions-isRecalledOrder', 'true');
+    } else {
+      sessionStorage.removeItem('transactions-isRecalledOrder');
+    }
+  }, [isRecalledOrder]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (recalledOrderId) {
+      sessionStorage.setItem('transactions-recalledOrderId', recalledOrderId);
+    } else {
+      sessionStorage.removeItem('transactions-recalledOrderId');
+    }
+  }, [recalledOrderId]);
 
   // Sales person state
   const [salesPersons, setSalesPersons] = useState<SalesPersonData[]>([]);
   const [salesPersonsLoading, setSalesPersonsLoading] = useState(false);
   const [assignedSalesPerson, setAssignedSalesPerson] = useState<SalesPersonData | null>(null);
+  const getSalesPersonNameForLine = useCallback(
+    (lineItem?: any): string | undefined => {
+      if (!lineItem) {
+        return assignedSalesPerson?.name || undefined;
+      }
+
+      const directName =
+        (typeof lineItem.salesPersonName === 'string' && lineItem.salesPersonName.trim()) ||
+        (lineItem.salesPerson && typeof lineItem.salesPerson === 'object'
+          ? lineItem.salesPerson.name ||
+            `${lineItem.salesPerson.firstName ?? ''} ${lineItem.salesPerson.lastName ?? ''}`.trim()
+          : '') ||
+        '';
+
+      if (directName) {
+        return directName;
+      }
+
+      if (lineItem.salesPersonId) {
+        const match = salesPersons.find((person) => person.id === lineItem.salesPersonId);
+        if (match) {
+          return match.name || match.code || match.id;
+        }
+      }
+
+      return assignedSalesPerson?.name || undefined;
+    },
+    [assignedSalesPerson?.name, salesPersons],
+  );
+
   const salesPersonModal = useSalesPersonModal({
     enabled: true,
   });
@@ -801,6 +863,12 @@ export function Transactions({
     return `${input.firstName ?? ''} ${input.lastName ?? ''}`.trim();
   };
 
+  const parseDecimal = useCallback((value: any): number | undefined => {
+    if (value === null || value === undefined) return undefined;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : undefined;
+  }, []);
+
   const hydrateTransactionFromOrder = useCallback(
     async ({
       order,
@@ -843,6 +911,34 @@ export function Transactions({
       setRecalledOrderId(order?.id || order?.orderNumber || null);
 
       for (const item of orderLineItems) {
+        const unitPrice = parseDecimal(item.unitPrice) ?? 0;
+        const quantity = parseDecimal(item.quantity) ?? 0;
+        const lineSubtotal = unitPrice * quantity;
+        const dbLineTotal = parseDecimal((item as any).lineTotal);
+
+        const saleDiscountAmount = parseDecimal((item as any).lineDiscount ?? (item as any).discount);
+        let customDiscountAmount = parseDecimal(
+          (item as any).customDiscountAmount ?? (item as any).customDiscount?.amount,
+        );
+        const customDiscountPercent = parseDecimal(
+          (item as any).customDiscountPercent ?? (item as any).customDiscount?.percent,
+        );
+
+        if (customDiscountAmount === undefined && customDiscountPercent !== undefined) {
+          customDiscountAmount = (Math.abs(lineSubtotal) * customDiscountPercent) / 100;
+        }
+
+        const combinedDiscountFromTotal =
+          dbLineTotal !== undefined ? Math.max(0, lineSubtotal - dbLineTotal) : undefined;
+
+        let resolvedSaleDiscount = saleDiscountAmount;
+        if (resolvedSaleDiscount === undefined && customDiscountAmount === undefined && combinedDiscountFromTotal !== undefined) {
+          resolvedSaleDiscount = combinedDiscountFromTotal;
+        }
+
+        const finalLineTotal =
+          dbLineTotal ?? lineSubtotal - ((resolvedSaleDiscount ?? 0) + (customDiscountAmount ?? 0));
+
         let resolvedName = '';
         let resolvedProductId = item.productId;
         let resolvedSku = (item as any).sku;
@@ -984,13 +1080,65 @@ export function Transactions({
 
         cacheVariantMapping(item.variantId, resolvedProductId, resolvedName);
 
+        // Determine discount type and value for proper reconstruction
+        const lineDiscountType = (item as any).lineDiscountType as 'amount' | 'percent' | undefined;
+        const lineDiscountPercentValue = parseDecimal((item as any).lineDiscountPercent);
+
+        // Calculate lineDiscountValue and default type for old orders
+        let lineDiscountValue: number | undefined;
+        let effectiveLineDiscountType = lineDiscountType;
+
+        if (lineDiscountType === 'percent' && lineDiscountPercentValue !== undefined) {
+          lineDiscountValue = lineDiscountPercentValue;
+        } else if (lineDiscountType === 'amount' && resolvedSaleDiscount !== undefined) {
+          lineDiscountValue = resolvedSaleDiscount;
+        } else if (resolvedSaleDiscount !== undefined) {
+          // Fallback for old orders without lineDiscountType:
+          // Assume amount-based discount
+          effectiveLineDiscountType = 'amount';
+          lineDiscountValue = resolvedSaleDiscount;
+        }
+
+        // Debug logging
+        console.log('[Transactions] Hydrating line item discount:', {
+          variantId: item.variantId,
+          resolvedSaleDiscount,
+          lineDiscountType,
+          effectiveLineDiscountType,
+          lineDiscountPercentValue,
+          lineDiscountValue,
+        });
+
         addItem({
           id: item.id || item.variantId || createTempId(),
           name: resolvedName,
-          price: item.unitPrice,
-          quantity: item.quantity,
+          price: unitPrice,
+          quantity: quantity,
           productId: resolvedProductId || item.variantId || item.id,
+          productVariantId: item.variantId,
           salesPersonId: item.salesPersonId || undefined,
+          salesPersonName:
+            (item as any).salesPersonName ||
+            (item as any).salesPerson?.name ||
+            assignedSalesPerson?.name,
+          lineDiscount: resolvedSaleDiscount,
+          lineDiscountType: effectiveLineDiscountType,
+          lineDiscountValue: lineDiscountValue,
+          lineDiscountPercent: lineDiscountPercentValue,
+          customDiscountAmount,
+          customDiscountPercent,
+          lineTax: parseDecimal((item as any).lineTax),
+          color:
+            (item as any).color ??
+            (item as any).variantColor ??
+            (item as any).productColor ??
+            undefined,
+          size:
+            (item as any).size ??
+            (item as any).variantSize ??
+            (item as any).productSize ??
+            undefined,
+          initialTotal: finalLineTotal,
         });
       }
 
@@ -1052,8 +1200,10 @@ export function Transactions({
       addItem,
       cacheVariantMapping,
       clearCustomer,
+      assignedSalesPerson?.name,
       lineItems,
       productRepository,
+      parseDecimal,
       removeItem,
       resolveNameFromCatalog,
       salesPersons,
@@ -1365,6 +1515,15 @@ export function Transactions({
 
   useKeyboardShortcuts({
     shortcuts: [
+      {
+        key: 'Escape',
+        action: () => {
+          if (isVoidConfirmationOpen) return;
+          if (lineItems.length === 0) return;
+          setIsVoidConfirmationOpen(true);
+        },
+        description: 'Open void confirmation',
+      },
       {
         key: 'p',
         ctrl: true,
@@ -2018,6 +2177,8 @@ export function Transactions({
     setPaymentEntries([]);
     setPaymentDialogError(null);
     setCurrentParkedOrderId(null);
+    setIsRecalledOrder(false);
+    setRecalledOrderId(null);
     clearPaymentSessionTracking();
     partialPaymentsHydratedAtRef.current = 0;
   }, [clearCustomer, clearPaymentSessionTracking, lineItems, removeItem]);
@@ -2664,12 +2825,12 @@ export function Transactions({
           return;
         }
         
-        // TODO: Re-enable this check after scanner is available for order recall
-        // Only allow returns for recalled orders (not new orders that haven't been completed)
-        // if (!isRecalledOrder) {
-        //   show('Returns are only available for recalled orders. Please recall an order first.', 'error');
-        //   return;
-        // }
+        // Only allow returns for recalled completed orders (not parked orders or new orders)
+        // A recalled completed order must have isRecalledOrder=true and currentParkedOrderId=null
+        if (!isRecalledOrder || currentParkedOrderId !== null) {
+          show('Returns are only available for completed orders recalled by scanning a bill. Please recall a completed order first.', 'error');
+          return;
+        }
         
         const itemToReturn = lineItems.find((item) => item.id === selectedItem);
         if (!itemToReturn) {
@@ -2690,13 +2851,21 @@ export function Transactions({
                 sku: (itemToReturn as any).sku,
                 variantId: (itemToReturn as any).variantId,
                 // Line-level details
-                lineDiscount: (itemToReturn as any).lineDiscount,
-                lineDiscountPercent: (itemToReturn as any).lineDiscountPercent,
-                lineTax: (itemToReturn as any).lineTax,
+                lineDiscount: parseDecimal((itemToReturn as any).lineDiscount),
+                lineDiscountPercent: parseDecimal((itemToReturn as any).lineDiscountPercent),
+                lineTax: parseDecimal((itemToReturn as any).lineTax),
+                customDiscountAmount: parseDecimal(
+                  (itemToReturn as any).customDiscountAmount ??
+                    (itemToReturn as any).customDiscount?.amount,
+                ),
+                customDiscountPercent: parseDecimal(
+                  (itemToReturn as any).customDiscountPercent ??
+                    (itemToReturn as any).customDiscount?.percent,
+                ),
                 color: (itemToReturn as any).color,
                 size: (itemToReturn as any).size,
                 salesPersonId: itemToReturn.salesPersonId,
-                salesPersonName: assignedSalesPerson?.name,
+                salesPersonName: getSalesPersonNameForLine(itemToReturn),
                 originalPrice: (itemToReturn as any).originalPrice || itemToReturn.price,
               },
             ],
@@ -3364,8 +3533,8 @@ export function Transactions({
         title="Void Transaction"
         message="Are you sure you want to void this transaction? All cart data will be cleared."
         confirmText="Void Transaction"
-        cancelText="Cancel"
         variant="warning"
+        showCancelButton={false}
       />
 
       {/* Sales Person Modal - Ctrl+Shift+I to open */}

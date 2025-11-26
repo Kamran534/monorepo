@@ -88,10 +88,13 @@ export function Orders({ salesOrderRepo }: OrdersProps = {}) {
   };
 
   const filteredOrders = useMemo(() => {
-    if (!searchTerm.trim()) return orders;
+    // Filter out orders with status "Parked"
+    const nonParkedOrders = orders.filter((order) => order.status !== 'Parked');
+    
+    if (!searchTerm.trim()) return nonParkedOrders;
     // Normalize search query: replace "/" with "-" for scanner compatibility
     const normalizedQuery = searchTerm.toLowerCase().replace(/\//g, '-');
-    return orders.filter((order) => {
+    return nonParkedOrders.filter((order) => {
       const customerName = `${order.customer?.firstName || ''} ${order.customer?.lastName || ''}`.toLowerCase();
       // Normalize order numbers for comparison
       const normalizedOrderNumber = order.orderNumber?.toLowerCase().replace(/\//g, '-') || '';

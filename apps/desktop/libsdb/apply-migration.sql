@@ -100,6 +100,13 @@ CREATE TABLE IF NOT EXISTS StoreConfig (
 
 CREATE INDEX IF NOT EXISTS idx_storeConfig_organizationCode ON StoreConfig(organizationCode);
 
+-- ============================================
+-- 5. Add lineDiscountType to OrderLineItem
+-- ============================================
+-- Add new columns to store discount type and original percent value
+-- This allows proper reconstruction of discounts when recalling orders
+ALTER TABLE OrderLineItem ADD COLUMN lineDiscountType TEXT; -- 'amount' or 'percent'
+
 COMMIT;
 
 -- Verify changes

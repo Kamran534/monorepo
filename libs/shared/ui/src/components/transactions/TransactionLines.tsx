@@ -16,6 +16,7 @@ export interface LineItem {
   productId?: string; // Product ID for inventory tracking
   productVariantId?: string; // Variant ID for inventory tracking
   salesPersonId?: string; // Sales person assigned to this line item
+  salesPersonName?: string | null;
   availableQuantity?: number; // Available stock quantity
   isReturn?: boolean; // Flag to indicate if this is a return item
   discount?: number;
@@ -24,6 +25,12 @@ export interface LineItem {
   lineTax?: number;
   lineDiscountType?: 'amount' | 'percent';
   lineDiscountValue?: number;
+  lineDiscountPercent?: number;
+  initialTotal?: number;
+  customDiscountAmount?: number;
+  customDiscountPercent?: number;
+  color?: string | null;
+  size?: string | null;
 }
 
 export interface BillingSummary {
@@ -418,7 +425,7 @@ export function TransactionLines({
                     <div key={item.id} className="space-y-1">
                       <div
                         onClick={() => {
-                          onItemSelect?.(item.id);
+                          onItemSelect?.(isSelected ? '' : item.id);
                         }}
                         className="grid grid-cols-[2.2fr,0.8fr,1fr,1fr] gap-2 md:gap-3 px-3 py-2 md:py-2.5 rounded cursor-pointer hover:opacity-80"
                         style={{

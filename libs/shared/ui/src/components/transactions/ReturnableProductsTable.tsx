@@ -27,6 +27,8 @@ export interface ReturnableProduct {
   salesPersonName?: string;
   salesPersonId?: string;
   originalPrice?: number;
+  customDiscountAmount?: number;
+  customDiscountPercent?: number;
 }
 
 export interface ReturnableProductsTableProps extends ComponentProps {
@@ -54,6 +56,36 @@ export function ReturnableProductsTable({
   const formatNumber = (num: number): string => {
     return num.toFixed(1);
   };
+
+  const formatDiscountValue = (amount?: number, percent?: number): string => {
+    const hasAmount = amount !== undefined && amount !== null;
+    const hasPercent = percent !== undefined && percent !== null;
+
+    if (!hasAmount && !hasPercent) {
+      return '—';
+    }
+
+    if (hasAmount && hasPercent) {
+      return `${formatCurrency(amount ?? 0)} (${(percent ?? 0).toFixed(1)}%)`;
+    }
+
+    if (hasAmount) {
+      return `${formatCurrency(amount ?? 0)}`;
+    }
+
+    return `${(percent ?? 0).toFixed(1)}%`;
+  };
+
+  const DetailItem = ({ label, value }: { label: string; value: string }) => (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.65)' }}>
+        {label}
+      </span>
+      <span className="text-sm font-medium" style={{ color: '#FFFFFF' }}>
+        {value}
+      </span>
+    </div>
+  );
 
   // Filter products based on search query
   const filteredProducts = React.useMemo(() => {
@@ -114,7 +146,7 @@ export function ReturnableProductsTable({
             }}
           >
             <span></span>
-            <span>PRODUCT NUMBER</span>
+            <span>PRODUCT</span>
             <span className="text-center">SOLD</span>
             <span className="text-center">UOM</span>
             <span className="text-center">PREVIOUS</span>
@@ -167,9 +199,8 @@ export function ReturnableProductsTable({
                         onClick={(e) => e.stopPropagation()}
                       />
                     </div>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{product.productNumber}</span>
-                      <span className="text-xs opacity-80">{product.productName}</span>
+                    <div className="flex flex-col justify-center">
+                      <span className="font-medium">{product.productName}</span>
                     </div>
                     <span className="text-center">{product.sold}</span>
                     <span className="text-center">{product.uom}</span>
@@ -188,33 +219,21 @@ export function ReturnableProductsTable({
                         color: '#FFFFFF',
                       }}
                     >
-                      <div className="flex items-center justify-between text-sm">
-                        <span style={{ color: '#FFFFFF' }}>UNIT PRICE:</span>
-                        <span className="font-semibold" style={{ color: '#FFFFFF' }}>
-                          {formatCurrency(product.unitPrice)}
-                        </span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <DetailItem label="Unit price" value={formatCurrency(product.unitPrice)} />
+                        <DetailItem label="Line total" value={formatCurrency(product.total)} />
+                        <DetailItem label="Sales person" value={product.salesPersonName || '—'} />
+                        <DetailItem label="Line tax" value={formatCurrency(product.lineTax ?? 0)} />
+                        <DetailItem label="Line discount" value={formatDiscountValue(product.lineDiscount)} />
+                        <DetailItem label="Custom discount" value={formatDiscountValue(product.customDiscountAmount)} />
+                        <DetailItem label="Color" value={product.color || '—'} />
+                        <DetailItem label="Size" value={product.size || '—'} />
                       </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span style={{ color: '#FFFFFF' }}>TOTAL:</span>
-                        <span className="font-semibold" style={{ color: '#FFFFFF' }}>
-                          {formatCurrency(product.total)}
-                        </span>
+                      <div className="text-xs space-y-1" style={{ color: '#FFFFFF' }}>
+                        {product.variant && <div>{product.variant}</div>}
+                        {product.sku && <div>SKU: {product.sku}</div>}
+                        {product.barcode && <div>Barcode: {product.barcode}</div>}
                       </div>
-                      {product.variant && (
-                        <div className="text-xs" style={{ color: '#FFFFFF' }}>
-                          {product.variant}
-                        </div>
-                      )}
-                      {product.sku && (
-                        <div className="text-xs" style={{ color: '#FFFFFF' }}>
-                          {product.sku}
-                        </div>
-                      )}
-                      {product.barcode && (
-                        <div className="text-xs" style={{ color: '#FFFFFF' }}>
-                          Bar code: {product.barcode}
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
