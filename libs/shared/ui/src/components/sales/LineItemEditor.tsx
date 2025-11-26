@@ -22,6 +22,7 @@ export interface ProductVariant {
 
 export interface LineItem {
   id: string;
+  name?: string; // Product name
   variantId: string;
   variant?: ProductVariant;
   salesPersonId?: string;
@@ -168,7 +169,7 @@ export function LineItemEditor({
                     className="font-medium text-sm truncate"
                     style={{ color: 'var(--color-text-primary)' }}
                   >
-                    {lineItem.variant?.product?.name || 'Unknown Product'}
+                    {lineItem.name || lineItem.variant?.product?.name || 'Unknown Product'}
                   </div>
                   <div
                     className="text-xs truncate"

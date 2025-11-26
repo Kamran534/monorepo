@@ -369,32 +369,18 @@ export function Orders({ salesOrderRepo }: OrdersProps = {}) {
                       <td className="px-4 py-3">{formatCurrency(order.totalAmount)}</td>
                       <td className="px-4 py-3">{order.status || '—'}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewDetails(order);
-                            }}
-                            className="text-xs flex items-center gap-1"
-                            style={{ color: 'var(--color-accent-blue)' }}
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            Detail
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePrintOrder(order);
-                            }}
-                            className="text-xs flex items-center gap-1"
-                            style={{ color: 'var(--color-accent-blue)' }}
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                            Print
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePrintOrder(order);
+                          }}
+                          className="text-xs flex items-center gap-1"
+                          style={{ color: 'var(--color-accent-blue)' }}
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Print
+                        </button>
                       </td>
                     </tr>
                   );

@@ -269,8 +269,6 @@ export class SalesOrderRepository {
           COALESCE(pv.productId, p.id) as productId,
           COALESCE(p_via_variant.name, p.name, pv.variantName) as productName,
           sp.name as salesPersonName,
-          sp.firstName as salesPersonFirstName,
-          sp.lastName as salesPersonLastName,
           sp.code as salesPersonCode
         FROM OrderLineItem oli
         LEFT JOIN ProductVariant pv ON oli.variantId = pv.id
@@ -290,11 +288,7 @@ export class SalesOrderRepository {
           variantId: row.variantId,
           productId: row.productId || undefined,
           salesPersonId: row.salesPersonId || undefined,
-          salesPersonName:
-            row.salesPersonName ||
-            [row.salesPersonFirstName, row.salesPersonLastName].filter(Boolean).join(' ').trim() ||
-            row.salesPersonCode ||
-            undefined,
+          salesPersonName: row.salesPersonName || row.salesPersonCode || undefined,
           quantity: row.quantity,
           unitPrice: row.unitPrice,
           lineTotal: row.lineTotal,
@@ -436,8 +430,11 @@ export class SalesOrderRepository {
 
   /**
    * Create a new sales order with line items and payments
+   * @param data Order data
+   * @param useServer Whether to sync with server
+   * @param existingOrderId Optional order ID to update existing order (for parked orders)
    */
-  async createOrder(data: CreateSalesOrderInput, useServer = true): Promise<CreateOrderResult> {
+  async createOrder(data: CreateSalesOrderInput, useServer = true, existingOrderId?: string): Promise<CreateOrderResult> {
     try {
       // Ensure payments array exists
       const payments = data.payments ?? [];
@@ -475,10 +472,11 @@ export class SalesOrderRepository {
 
       // ALWAYS save to local DB first (like desktop app)
       // This ensures orders are saved even if server is offline
+      // If existingOrderId is provided, update existing order instead of creating new one
       // console.log('[SalesOrderRepository] Saving order to local DB first...');
       let localOrder: SalesOrder;
       try {
-        localOrder = await this.saveOrderToLocalDb(null, normalizedData);
+        localOrder = await this.saveOrderToLocalDb(null, normalizedData, existingOrderId);
         // console.log('[SalesOrderRepository] Order saved to local DB:', localOrder.orderNumber);
       } catch (localDbError: any) {
         // console.error('[SalesOrderRepository] Failed to save order to local DB:', localDbError);
@@ -525,7 +523,8 @@ export class SalesOrderRepository {
               // console.log('[SalesOrderRepository] Order saved to server, updating local DB with server data...');
               // Update local DB with server order data (including server ID and orderNumber)
               // Pass existing order ID so it updates instead of creating duplicate
-              await this.saveOrderToLocalDb(serverOrder, normalizedData, localOrder.id);
+              // Use existingOrderId if provided (for parked orders), otherwise use localOrder.id
+              await this.saveOrderToLocalDb(serverOrder, normalizedData, existingOrderId || localOrder.id);
 
               return {
                 success: true,
@@ -571,7 +570,6 @@ export class SalesOrderRepository {
     return this.runWithForeignKeysDisabled(async () => {
       // Use existing order ID if provided (for updating), otherwise use server ID or generate new
       const orderId = existingOrderId || serverOrder?.id || this.generateId();
-      const orderNumber = serverOrder?.orderNumber || this.generateOrderNumber();
       const now = new Date().toISOString();
 
       const calculatedTotals = this.calculateOrderTotals(data);
@@ -582,6 +580,20 @@ export class SalesOrderRepository {
       await this.localDb.execute('BEGIN TRANSACTION');
 
       try {
+      // Check if order already exists and get its details
+      const existingOrder = existingOrderId ? await this.localDb.query<{ id: string; orderNumber: string; orderDate: string }>(
+        `SELECT id, orderNumber, orderDate FROM SaleOrder WHERE id = ?`,
+        [existingOrderId]
+      ) : [];
+
+      // Preserve existing orderNumber and orderDate when updating, otherwise use server values or generate new
+      const orderNumber = existingOrder.length > 0 && existingOrderId
+        ? existingOrder[0].orderNumber  // Preserve existing order number
+        : (serverOrder?.orderNumber || this.generateOrderNumber());
+      const originalOrderDate = existingOrder.length > 0 && existingOrderId
+        ? existingOrder[0].orderDate  // Preserve original order date
+        : (serverOrder?.orderDate || now);
+
       // console.log('[SalesOrderRepository] Saving order to local DB:', {
       //   orderId,
       //   orderNumber,
@@ -592,16 +604,14 @@ export class SalesOrderRepository {
       //   hasServerOrder: !!serverOrder,
       // });
 
-      // Check if order already exists
-      const existingOrder = existingOrderId ? await this.localDb.query<{ id: string }>(
-        `SELECT id FROM SaleOrder WHERE id = ?`,
-        [existingOrderId]
-      ) : [];
-
       const orderStatus = serverOrder?.status || 'Completed';
       const completedAt = orderStatus === 'Completed' ? now : null;
 
-      if (existingOrder.length > 0 && existingOrderId) {
+      if (existingOrderId) {
+        // If existingOrderId is provided, we must update, not create
+        if (existingOrder.length === 0) {
+          throw new Error(`Cannot update order: Order with ID ${existingOrderId} does not exist in database`);
+        }
         // Update existing order
         // console.log('[SalesOrderRepository] Updating existing order in local DB...');
         await this.localDb.execute(
@@ -620,7 +630,7 @@ export class SalesOrderRepository {
             data.customerId || null,
             data.cashierId,
             data.salesPersonId || null,
-            serverOrder?.orderDate || now,
+            originalOrderDate,  // Preserve original order date
             completedAt,
             orderStatus,
             calculatedTotals.subtotal,
@@ -704,7 +714,7 @@ export class SalesOrderRepository {
               data.customerId || null,
               data.cashierId,
               data.salesPersonId || null,
-              serverOrder?.orderDate || now,
+              originalOrderDate,  // Use preserved or server order date
               completedAt,
               orderStatus,
               calculatedTotals.subtotal,

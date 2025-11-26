@@ -136,6 +136,7 @@ export function Payments({
       address: string;
     };
     parkedOrderId?: string;
+    parkedOrderOriginalId?: string; // Original order ID to update instead of creating new
   } | null;
   const [capturedCustomer, setCapturedCustomer] = useState<CapturedCustomer | null>(
     navigationState?.customer
@@ -780,7 +781,9 @@ export function Payments({
             locationId: orderInput.locationId,
             cashierId: orderInput.cashierId,
           });
-          const result = await salesOrderRepo.createOrder(orderInput);
+          // If this is a parked order, pass the original order ID to update instead of creating new
+          const existingOrderId = navigationState?.parkedOrderOriginalId || undefined;
+          const result = await salesOrderRepo.createOrder(orderInput, true, existingOrderId);
           console.log('[Payments] Order creation result:', {
             success: result.success,
             hasOrder: !!result.order,
@@ -803,17 +806,16 @@ export function Payments({
 
             if (navigationState?.parkedOrderId && parkedOrderRepo) {
               try {
-                await parkedOrderRepo.completeParkedOrder(navigationState.parkedOrderId);
-              } catch (error) {
-          console.error('[Payments] Failed to complete parked order:', error);
+                const completeResult = await parkedOrderRepo.completeParkedOrder(navigationState.parkedOrderId);
+                if (!completeResult.success) {
+                  console.error('[Payments] Failed to complete parked order:', completeResult.error);
+                  show(`Warning: Parked order record may not have been removed: ${completeResult.error}`, 'error');
+                }
+              } catch (error: any) {
+                console.error('[Payments] Failed to complete parked order:', error);
+                show(`Warning: Failed to remove parked order record: ${error.message || 'Unknown error'}`, 'error');
               }
             }
-
-            const grossTotal = orderBreakdown.subtotal;
-            const itemDiscount = orderBreakdown.discountValue;
-            const netTotal = orderTotal;
-            const tendered = amountPaid;
-            const change = changeDue;
 
             const receiptLineItems = lineItems.map((item: any) => {
               const productName = item.name || 'Item';
@@ -857,6 +859,14 @@ export function Payments({
           sku,
         } as any;
       });
+
+            // Calculate sum of all line item discounts (from cart line items)
+            const totalLineItemDiscounts = receiptLineItems.reduce((sum, item) => sum + (item.lineDiscount || 0), 0);
+            const grossTotal = orderBreakdown.subtotal + totalLineItemDiscounts; // Add back discounts to get gross
+            const itemDiscount = totalLineItemDiscounts; // Use sum of all line item discounts
+            const netTotal = orderTotal;
+            const tendered = amountPaid;
+            const change = changeDue;
 
             const receiptPayments = payments.map((payment) => ({
               id: payment.id,
@@ -909,6 +919,7 @@ export function Payments({
               invoiceNumber,
               orderNumber: result.order.orderNumber || invoiceNumber,
               orderId: result.order.id,
+              orderDate: result.order.orderDate || result.order.completedAt,
               lineItems: receiptLineItems,
               payments: receiptPayments,
               customer: receiptCustomer,

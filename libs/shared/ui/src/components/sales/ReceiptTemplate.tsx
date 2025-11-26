@@ -44,6 +44,7 @@ export interface ReceiptData {
   orderNumber?: string;
   orderId?: string;
   dateTime: string;
+  orderDateIso?: string;
   cashier?: string;
 
   // Customer

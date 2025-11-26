@@ -65,7 +65,7 @@ export function ParkedOrderSearch({
       isOpen={isOpen}
       onClose={onClose}
       title="Parked orders"
-      width="420px"
+      width="320px"
     >
       <div className={`flex flex-col h-full ${className}`} style={style}>
         <div className="pb-3 border-b" style={{ borderColor: 'var(--color-border-light)' }}>

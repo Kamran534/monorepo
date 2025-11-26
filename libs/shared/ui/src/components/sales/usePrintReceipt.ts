@@ -108,6 +108,7 @@ export function usePrintReceipt({
       change: input.change,
       footerText: input.footerText,
       theme: input.theme,
+      orderDateIso: input.orderDate,
     };
 
     // Store in ref immediately for synchronous access
@@ -146,7 +147,7 @@ export function usePrintReceipt({
       const isElectron = navigator.userAgent.toLowerCase().includes('electron');
       
       // Auto-save PDF first (for both Electron and web)
-      const orderDateIso = input.orderDate || new Date().toISOString();
+      const orderDateIso = receiptData.orderDateIso || new Date().toISOString();
 
       if (isElectron && (window as any).electronAPI?.savePDF) {
         try {

@@ -45,11 +45,31 @@ export interface ParkedOrderListItem {
 }
 
 export interface ParkOrderInput {
-  orderId: string;
+  orderId?: string; // Optional - only needed if order already exists
   parkedBy: string;
   customerId?: string;
   notes?: string;
   expiryDate?: string;
+  // Order data to store when parking without creating SaleOrder
+  orderData?: {
+    locationId: string;
+    cashierId: string;
+    salesPersonId?: string;
+    lineItems: Array<{
+      variantId: string;
+      salesPersonId?: string;
+      quantity: number;
+      unitPrice: number;
+      saleDiscount?: { amount?: number; percent?: number };
+      customDiscount?: { amount?: number; percent?: number };
+    }>;
+    orderLevelDiscount?: { amount?: number; percent?: number };
+    adjustment?: { amount: number; reason?: string };
+    giftCardNumber?: string;
+    subtotal?: number;
+    taxAmount?: number;
+    totalAmount?: number;
+  };
 }
 
 export interface SearchParkedOrdersOptions {
@@ -125,15 +145,36 @@ export class ParkedOrderRepository {
       const parkNumber = this.generateParkNumber();
       const now = new Date().toISOString();
 
+      // If orderData is provided, store it as JSON in notes and use temporary orderId
+      // Otherwise, use the provided orderId (for backward compatibility)
+      let orderId: string;
+      let notes: string | null = input.notes || null;
+      
+      if (input.orderData && !input.orderId) {
+        // Store order data as JSON in notes
+        const orderDataJson = JSON.stringify({
+          ...input.orderData,
+          parkedAt: now,
+        });
+        notes = orderDataJson;
+        // Use temporary orderId that we can identify later
+        orderId = `PARKED-${parkNumber}`;
+      } else if (input.orderId) {
+        // Use provided orderId (existing order)
+        orderId = input.orderId;
+      } else {
+        throw new Error('Either orderId or orderData must be provided');
+      }
+
       const parkedOrderData = {
         id: parkedOrderId,
         parkNumber,
-        orderId: input.orderId,
+        orderId: orderId,
         customerId: input.customerId || null,
         parkedBy: input.parkedBy,
         parkedAt: now,
         expiryDate: input.expiryDate || null,
-        notes: input.notes || null,
+        notes: notes,
         createdAt: now,
       };
 
@@ -145,8 +186,10 @@ export class ParkedOrderRepository {
             // Also save to local DB
             await this.saveParkedOrderToLocalDb(response.data);
 
-            // Update order status to Parked
-            await this.updateOrderStatus(input.orderId, 'Parked');
+            // Only update order status if orderId is a real order (not temporary)
+            if (input.orderId && !orderId.startsWith('PARKED-')) {
+              await this.updateOrderStatus(input.orderId, 'Parked');
+            }
 
             return {
               success: true,
@@ -162,8 +205,10 @@ export class ParkedOrderRepository {
       // Fallback to local DB
       await this.saveParkedOrderToLocalDb(parkedOrderData);
 
-      // Update order status to Parked
-      await this.updateOrderStatus(input.orderId, 'Parked');
+      // Only update order status if orderId is a real order (not temporary)
+      if (input.orderId && !orderId.startsWith('PARKED-')) {
+        await this.updateOrderStatus(input.orderId, 'Parked');
+      }
 
       return {
         success: true,
@@ -213,6 +258,7 @@ export class ParkedOrderRepository {
       }
 
       // Fallback to local DB
+      // Use LEFT JOIN to include parked orders without SaleOrder records
       let query = `
         SELECT
           po.id,
@@ -221,17 +267,17 @@ export class ParkedOrderRepository {
           po.parkedAt,
           po.parkedBy,
           po.notes,
-          so.orderNumber,
-          so.totalAmount,
-          so.customerId,
+          COALESCE(so.orderNumber, po.parkNumber) as orderNumber,
+          COALESCE(so.totalAmount, 0) as totalAmount,
+          COALESCE(so.customerId, po.customerId) as customerId,
           CASE
             WHEN c.firstName IS NOT NULL THEN c.firstName || ' ' || c.lastName
             ELSE NULL
           END as customerName
         FROM ParkedOrder po
-        INNER JOIN SaleOrder so ON po.orderId = so.id
+        LEFT JOIN SaleOrder so ON po.orderId = so.id AND (so.status = 'Parked' OR po.orderId LIKE 'PARKED-%')
         LEFT JOIN Customer c ON po.customerId = c.id
-        WHERE so.status = 'Parked'
+        WHERE so.status = 'Parked' OR po.orderId LIKE 'PARKED-%'
       `;
 
       const params: any[] = [];
@@ -262,18 +308,31 @@ export class ParkedOrderRepository {
 
       const results = await this.localDb.query(query, params.length > 0 ? params : undefined);
 
-      const parkedOrders: ParkedOrderListItem[] = results.map((row: any) => ({
-        id: row.id,
-        parkNumber: row.parkNumber,
-        orderId: row.orderId,
-        orderNumber: row.orderNumber,
-        customerName: row.customerName,
-        customerId: row.customerId,
-        parkedAt: row.parkedAt,
-        parkedBy: row.parkedBy,
-        totalAmount: row.totalAmount,
-        notes: row.notes,
-      }));
+      const parkedOrders: ParkedOrderListItem[] = results.map((row: any) => {
+        // If orderId starts with PARKED-, extract totalAmount from notes JSON
+        let totalAmount = row.totalAmount || 0;
+        if (row.orderId && row.orderId.startsWith('PARKED-') && row.notes) {
+          try {
+            const orderData = JSON.parse(row.notes);
+            totalAmount = orderData.totalAmount || 0;
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+        
+        return {
+          id: row.id,
+          parkNumber: row.parkNumber,
+          orderId: row.orderId,
+          orderNumber: row.orderNumber,
+          customerName: row.customerName,
+          customerId: row.customerId,
+          parkedAt: row.parkedAt,
+          parkedBy: row.parkedBy,
+          totalAmount: totalAmount,
+          notes: row.notes,
+        };
+      });
 
       return {
         success: true,
@@ -326,20 +385,167 @@ export class ParkedOrderRepository {
 
       const parkedOrder = parkedOrderResults[0];
 
-      // Get order details
-      const orderResults = await this.localDb.query(
-        'SELECT * FROM SaleOrder WHERE id = ?',
-        [parkedOrder.orderId]
-      );
+      // Check if this is a parked order without a SaleOrder record (orderId starts with PARKED-)
+      let order: SalesOrder;
+      let lineItems: any[] = [];
+      let payments: any[] = [];
 
-      if (orderResults.length === 0) {
-        return {
-          success: false,
-          error: 'Order not found',
-        };
+      if (parkedOrder.orderId.startsWith('PARKED-')) {
+        // Reconstruct order from stored JSON data
+        try {
+          const orderData = JSON.parse(parkedOrder.notes || '{}');
+          if (!orderData.locationId) {
+            return {
+              success: false,
+              error: 'Invalid parked order data',
+            };
+          }
+
+          // Create a temporary order object from stored data
+          const now = new Date().toISOString();
+          order = {
+            id: parkedOrder.orderId,
+            orderNumber: parkedOrder.parkNumber,
+            locationId: orderData.locationId,
+            customerId: parkedOrder.customerId || undefined,
+            cashierId: orderData.cashierId,
+            salesPersonId: orderData.salesPersonId || undefined,
+            orderDate: orderData.parkedAt || now,
+            completedAt: undefined,
+            status: 'Parked',
+            subtotal: orderData.subtotal || 0,
+            taxAmount: orderData.taxAmount || 0,
+            discountAmount: orderData.orderLevelDiscount?.amount || 0,
+            discountPercent: orderData.orderLevelDiscount?.percent || 0,
+            adjustmentAmount: orderData.adjustment?.amount || 0,
+            adjustmentReason: orderData.adjustment?.reason || undefined,
+            giftCardNumber: orderData.giftCardNumber || undefined,
+            totalAmount: orderData.totalAmount || 0,
+            amountPaid: 0,
+            amountDue: orderData.totalAmount || 0,
+            changeAmount: 0,
+            notes: undefined,
+            customerNotes: undefined,
+          };
+
+          // Reconstruct line items from stored data
+          lineItems = (orderData.lineItems || []).map((item: any, index: number) => ({
+            id: `temp-${index}`,
+            orderId: parkedOrder.orderId,
+            variantId: item.variantId,
+            productId: item.variantId, // Use variantId as productId for now
+            salesPersonId: item.salesPersonId || undefined,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            lineDiscount: item.saleDiscount?.amount || 0,
+            lineDiscountPercent: item.saleDiscount?.percent || 0,
+            customDiscountAmount: item.customDiscount?.amount || 0,
+            customDiscountPercent: item.customDiscount?.percent || 0,
+            lineTax: 0,
+            lineTotal: (item.quantity * item.unitPrice) - (item.saleDiscount?.amount || 0) - (item.customDiscount?.amount || 0),
+            notes: undefined,
+            sku: undefined,
+            variantName: undefined,
+            productName: undefined,
+            image: undefined,
+          }));
+
+          // No payments for parked orders
+          payments = [];
+        } catch (parseError) {
+          return {
+            success: false,
+            error: 'Failed to parse parked order data',
+          };
+        }
+      } else {
+        // Get order details from SaleOrder table (existing order)
+        const orderResults = await this.localDb.query(
+          'SELECT * FROM SaleOrder WHERE id = ?',
+          [parkedOrder.orderId]
+        );
+
+        if (orderResults.length === 0) {
+          return {
+            success: false,
+            error: 'Order not found',
+          };
+        }
+
+        order = this.mapSalesOrder(orderResults[0]);
+
+        // Get line items
+        const lineItemResults = await this.localDb.query(
+          `SELECT
+            oli.*,
+            pv.sku,
+            pv.variantName,
+            pv.productId,
+            pv.image,
+            p.name as productName
+          FROM OrderLineItem oli
+          LEFT JOIN ProductVariant pv ON oli.variantId = pv.id
+          LEFT JOIN Product p ON pv.productId = p.id
+          WHERE oli.orderId = ?`,
+          [parkedOrder.orderId]
+        );
+
+        lineItems = lineItemResults.map((row: any) => ({
+          id: row.id,
+          orderId: row.orderId,
+          variantId: row.variantId,
+          productId: row.productId || undefined,
+          salesPersonId: row.salesPersonId,
+          quantity: row.quantity,
+          unitPrice: row.unitPrice,
+          lineDiscount: row.lineDiscount,
+          lineDiscountPercent: row.lineDiscountPercent,
+          customDiscountAmount: row.customDiscountAmount,
+          customDiscountPercent: row.customDiscountPercent,
+          lineTax: row.lineTax,
+          lineTotal: row.lineTotal,
+          notes: row.notes,
+          // Variant details
+          sku: row.sku,
+          variantName: row.variantName,
+          productName: row.productName,
+          image: row.image,
+        }));
+
+        // Get payments
+        const paymentResults = await this.localDb.query(
+          `SELECT
+            op.*,
+            pm.code as paymentMethodCode,
+            pm.name as paymentMethodName,
+            pm.type as paymentMethodType
+          FROM OrderPayment op
+          LEFT JOIN PaymentMethod pm ON op.paymentMethodId = pm.id
+          WHERE op.orderId = ?`,
+          [parkedOrder.orderId]
+        );
+
+        payments = paymentResults.map((row: any) => ({
+          id: row.id,
+          orderId: row.orderId,
+          paymentMethodId: row.paymentMethodId,
+          amount: row.amount,
+          status: row.status,
+          transactionId: row.transactionId,
+          authorizationCode: row.authorizationCode,
+          cardLast4: row.cardLast4,
+          cardBrand: row.cardBrand,
+          processedAt: row.processedAt,
+          createdAt: row.createdAt,
+          // Payment method details
+          paymentMethod: {
+            id: row.paymentMethodId,
+            code: row.paymentMethodCode,
+            name: row.paymentMethodName,
+            type: row.paymentMethodType,
+          },
+        }));
       }
-
-      const order = this.mapSalesOrder(orderResults[0]);
 
       // Get customer details (required for transaction hydration)
       let customer: LoadParkedOrderCustomer | undefined;
@@ -388,78 +594,6 @@ export class ParkedOrderRepository {
         }
       }
 
-      // Get line items
-      const lineItemResults = await this.localDb.query(
-        `SELECT
-          oli.*,
-          pv.sku,
-          pv.variantName,
-          pv.productId,
-          pv.image,
-          p.name as productName
-        FROM OrderLineItem oli
-        LEFT JOIN ProductVariant pv ON oli.variantId = pv.id
-        LEFT JOIN Product p ON pv.productId = p.id
-        WHERE oli.orderId = ?`,
-        [parkedOrder.orderId]
-      );
-
-      const lineItems = lineItemResults.map((row: any) => ({
-        id: row.id,
-        orderId: row.orderId,
-        variantId: row.variantId,
-        productId: row.productId || undefined,
-        salesPersonId: row.salesPersonId,
-        quantity: row.quantity,
-        unitPrice: row.unitPrice,
-        lineDiscount: row.lineDiscount,
-        lineDiscountPercent: row.lineDiscountPercent,
-        customDiscountAmount: row.customDiscountAmount,
-        customDiscountPercent: row.customDiscountPercent,
-        lineTax: row.lineTax,
-        lineTotal: row.lineTotal,
-        notes: row.notes,
-        // Variant details
-        sku: row.sku,
-        variantName: row.variantName,
-        productName: row.productName,
-        image: row.image,
-      }));
-
-      // Get payments
-      const paymentResults = await this.localDb.query(
-        `SELECT
-          op.*,
-          pm.code as paymentMethodCode,
-          pm.name as paymentMethodName,
-          pm.type as paymentMethodType
-        FROM OrderPayment op
-        LEFT JOIN PaymentMethod pm ON op.paymentMethodId = pm.id
-        WHERE op.orderId = ?`,
-        [parkedOrder.orderId]
-      );
-
-      const payments = paymentResults.map((row: any) => ({
-        id: row.id,
-        orderId: row.orderId,
-        paymentMethodId: row.paymentMethodId,
-        amount: row.amount,
-        status: row.status,
-        transactionId: row.transactionId,
-        authorizationCode: row.authorizationCode,
-        cardLast4: row.cardLast4,
-        cardBrand: row.cardBrand,
-        processedAt: row.processedAt,
-        createdAt: row.createdAt,
-        // Payment method details
-        paymentMethod: {
-          id: row.paymentMethodId,
-          code: row.paymentMethodCode,
-          name: row.paymentMethodName,
-          type: row.paymentMethodType,
-        },
-      }));
-
       return {
         success: true,
         data: {
@@ -481,7 +615,8 @@ export class ParkedOrderRepository {
   }
 
   /**
-   * Complete a parked order (change status from Parked to Completed)
+   * Complete a parked order (delete the ParkedOrder record)
+   * Note: This does not change the SaleOrder status - that is handled by createOrder
    */
   async completeParkedOrder(parkedOrderId: string, useServer = true): Promise<{ success: boolean; error?: string }> {
     try {
@@ -505,22 +640,61 @@ export class ParkedOrderRepository {
         try {
           const response = await this.apiClient.post<ApiResponse>(`/api/parked-orders/${parkedOrderId}/complete`);
           if (response.success) {
-            // Update local DB
-            await this.updateOrderStatus(parkedOrder.orderId, 'Completed');
+            // Server call succeeded, delete from local DB
             await this.deleteParkedOrderFromLocalDb(parkedOrderId);
-
+            
+            // Verify deletion
+            const verifyResults = await this.localDb.query<ParkedOrder>(
+              'SELECT * FROM ParkedOrder WHERE id = ?',
+              [parkedOrderId]
+            );
+            
+            if (verifyResults.length > 0) {
+              console.error('[ParkedOrderRepository] ParkedOrder still exists after deletion (server path), retrying...');
+              await this.deleteParkedOrderFromLocalDb(parkedOrderId);
+            }
+            
+            return {
+              success: true,
+            };
+          } else {
+            // Server call failed, but still delete from local DB
+            console.warn('[ParkedOrderRepository] Server complete returned failure, deleting from local DB anyway');
+            await this.deleteParkedOrderFromLocalDb(parkedOrderId);
             return {
               success: true,
             };
           }
         } catch (serverError) {
           console.warn('[ParkedOrderRepository] Server complete failed, falling back to local DB:', serverError);
+          // Continue to delete from local DB even if server call failed
         }
       }
 
-      // Fallback to local DB
-      await this.updateOrderStatus(parkedOrder.orderId, 'Completed');
+      // Always delete from local DB (either as primary action or fallback)
       await this.deleteParkedOrderFromLocalDb(parkedOrderId);
+      
+      // Verify deletion was successful
+      const verifyResults = await this.localDb.query<ParkedOrder>(
+        'SELECT * FROM ParkedOrder WHERE id = ?',
+        [parkedOrderId]
+      );
+      
+      if (verifyResults.length > 0) {
+        console.error('[ParkedOrderRepository] ParkedOrder still exists after deletion attempt, retrying...');
+        // Try one more time
+        await this.deleteParkedOrderFromLocalDb(parkedOrderId);
+        
+        // Verify again
+        const verifyResults2 = await this.localDb.query<ParkedOrder>(
+          'SELECT * FROM ParkedOrder WHERE id = ?',
+          [parkedOrderId]
+        );
+        
+        if (verifyResults2.length > 0) {
+          throw new Error('Failed to delete ParkedOrder record after multiple attempts');
+        }
+      }
 
       return {
         success: true,
@@ -616,7 +790,13 @@ export class ParkedOrderRepository {
    * Delete parked order from local database
    */
   private async deleteParkedOrderFromLocalDb(parkedOrderId: string): Promise<void> {
-    await this.localDb.execute('DELETE FROM ParkedOrder WHERE id = ?', [parkedOrderId]);
+    try {
+      await this.localDb.execute('DELETE FROM ParkedOrder WHERE id = ?', [parkedOrderId]);
+      console.log('[ParkedOrderRepository] Successfully deleted ParkedOrder:', parkedOrderId);
+    } catch (error: any) {
+      console.error('[ParkedOrderRepository] Error deleting ParkedOrder:', parkedOrderId, error);
+      throw error; // Re-throw to be caught by caller
+    }
   }
 
   /**

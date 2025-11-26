@@ -446,9 +446,14 @@ export function Transactions({
   const [parkedOrders, setParkedOrders] = useState<ParkedOrderListItem[]>([]);
   const [loadingParkedOrders, setLoadingParkedOrders] = useState(false);
   const [currentParkedOrderId, setCurrentParkedOrderId] = useState<string | null>(null);
+  const [currentParkedOrderOriginalId, setCurrentParkedOrderOriginalId] = useState<string | null>(null); // Original order ID for parked orders
   const [pendingResumeOrder, setPendingResumeOrder] = useState<ParkedOrderListItem | null>(null);
   const [pendingResumeIds, setPendingResumeIds] = useState<{ parkedOrderId: string; orderId: string } | null>(null);
   const [isResumeConfirmOpen, setIsResumeConfirmOpen] = useState(false);
+  
+  // Track if current transaction is from a recalled order (not a new order)
+  const [isRecalledOrder, setIsRecalledOrder] = useState(false);
+  const [recalledOrderId, setRecalledOrderId] = useState<string | null>(null);
 
   // Sales person state
   const [salesPersons, setSalesPersons] = useState<SalesPersonData[]>([]);
@@ -832,6 +837,10 @@ export function Transactions({
       setAppliedDiscount(null);
       setGiftCardData(null);
       setAppliedAdjustment(null);
+      
+      // Mark as recalled order (not a new order)
+      setIsRecalledOrder(true);
+      setRecalledOrderId(order?.id || order?.orderNumber || null);
 
       for (const item of orderLineItems) {
         let resolvedName = '';
@@ -1094,7 +1103,13 @@ export function Transactions({
             : undefined,
         });
 
+        // Parked orders are not completed, so don't mark as recalled (returns not allowed)
+        setIsRecalledOrder(false);
+        setRecalledOrderId(null);
         setCurrentParkedOrderId(parkedOrderId);
+        // Store the original order ID only if it's a real order (not a temporary PARKED- ID)
+        // If orderId starts with PARKED-, there's no SaleOrder yet, so we'll create one on completion
+        setCurrentParkedOrderOriginalId(order.id.startsWith('PARKED-') ? null : order.id);
 
         // Close modal and show success
         handleCloseParkedOrdersModal();
@@ -1287,20 +1302,29 @@ export function Transactions({
 
     try {
       const salesPersonId = assignedSalesPerson?.id ?? undefined;
-      // Create the order with status 'Open' (will be changed to 'Parked')
-      const orderResult = await effectiveSalesOrderRepo.createOrder(
-        {
+      
+      // Calculate order totals for storage
+      const lineItemsData = lineItems.map((item) => ({
+        variantId: item.productId || item.id,
+        salesPersonId: item.salesPersonId || undefined,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        saleDiscount: (item as any).lineDiscount 
+          ? { amount: (item as any).lineDiscount }
+          : undefined,
+        customDiscount: undefined,
+      }));
+
+      // Park the order without creating a SaleOrder record
+      const parkResult = await effectiveParkedOrderRepo.parkOrder({
+        parkedBy: currentUserId,
+        customerId: customer?.id,
+        notes: appliedAdjustment?.reason,
+        orderData: {
           locationId: currentLocationId,
           cashierId: currentUserId,
           salesPersonId,
-          customerId: customer?.id,
-          lineItems: lineItems.map((item) => ({
-            variantId: item.productId || item.id,
-            salesPersonId: item.salesPersonId || undefined,
-            quantity: item.quantity,
-            unitPrice: item.price,
-          })),
-          payments: [], // No payments yet
+          lineItems: lineItemsData,
           orderLevelDiscount: appliedDiscount
             ? appliedDiscount.type === 'percent'
               ? { percent: appliedDiscount.value }
@@ -1310,21 +1334,10 @@ export function Transactions({
             ? { amount: appliedAdjustment.amount, reason: appliedAdjustment.reason }
             : undefined,
           giftCardNumber: giftCardData?.cardNumber,
+          subtotal: orderTotals.subtotal,
+          taxAmount: orderTotals.taxValue,
+          totalAmount: orderTotals.total,
         },
-        false // Create locally first, don't try server for park operation
-      );
-
-      if (!orderResult.success || !orderResult.order) {
-        show(orderResult.error || 'Failed to create order for parking', 'error');
-        return;
-      }
-
-      // Now park the order
-      const parkResult = await effectiveParkedOrderRepo.parkOrder({
-        orderId: orderResult.order.id,
-        parkedBy: currentUserId,
-        customerId: customer?.id,
-        notes: appliedAdjustment?.reason,
       });
 
       if (parkResult.success && parkResult.parkedOrder) {
@@ -1478,6 +1491,11 @@ export function Transactions({
 
   const handleAddProduct = (product: Product) => {
     const price = parsePriceValue(product.price ?? null) ?? 0;
+    // If adding a new item and we have a recalled order, clear the recalled state (new transaction)
+    if (isRecalledOrder && lineItems.length === 0) {
+      setIsRecalledOrder(false);
+      setRecalledOrderId(null);
+    }
     // Add product to cart with default quantity of 1
     addItem({
       id: product.id,
@@ -1489,6 +1507,14 @@ export function Transactions({
     });
     setActiveTab('lines');
   };
+  
+  // Clear recalled order state when lineItems becomes empty (new transaction)
+  useEffect(() => {
+    if (lineItems.length === 0 && isRecalledOrder) {
+      setIsRecalledOrder(false);
+      setRecalledOrderId(null);
+    }
+  }, [lineItems.length, isRecalledOrder]);
   const recallTransactionByOrderCode = useCallback(
     async (orderCode: string) => {
       if (!effectiveParkedOrderRepo) {
@@ -2118,7 +2144,9 @@ export function Transactions({
         //   locationId: orderData.locationId,
         //   cashierId: orderData.cashierId,
         // });
-        const result = await repo.createOrder(orderData);
+        // If this is a parked order, pass the original order ID to update instead of creating new
+        const existingOrderId = currentParkedOrderOriginalId || undefined;
+        const result = await repo.createOrder(orderData, true, existingOrderId);
         // console.log('[Transactions] createOrder result:', {
         //   success: result.success,
         //   hasOrder: !!result.order,
@@ -2130,22 +2158,31 @@ export function Transactions({
           // console.log('[Transactions] Order completed successfully, clearing transaction state...');
           show(`Order completed! Order #: ${result.order.orderNumber}`, 'success');
 
+          // Always delete the ParkedOrder record after successful order completion
           if (currentParkedOrderId && effectiveParkedOrderRepo) {
             try {
-              await effectiveParkedOrderRepo.completeParkedOrder(currentParkedOrderId);
+              console.log('[Transactions] Deleting ParkedOrder record:', currentParkedOrderId);
+              const completeResult = await effectiveParkedOrderRepo.completeParkedOrder(currentParkedOrderId);
+              if (completeResult.success) {
+                console.log('[Transactions] ParkedOrder record deleted successfully');
+                setCurrentParkedOrderId(null);
+                setCurrentParkedOrderOriginalId(null);
+                handleSearchParkedOrders(''); // Refresh parked orders list
+              } else {
+                console.error('[Transactions] Failed to delete ParkedOrder record:', completeResult.error);
+                show(`Warning: Parked order record may not have been removed: ${completeResult.error}`, 'error');
+                // Still clear the state even if deletion failed
+                setCurrentParkedOrderId(null);
+                setCurrentParkedOrderOriginalId(null);
+              }
+            } catch (err: any) {
+              console.error('[Transactions] Error deleting ParkedOrder record:', err);
+              show(`Warning: Failed to remove parked order record: ${err.message || 'Unknown error'}`, 'error');
+              // Still clear the state even if deletion failed
               setCurrentParkedOrderId(null);
-              handleSearchParkedOrders('');
-            } catch (err) {
-              // console.error('[Transactions] Failed to complete parked order:', err);
+              setCurrentParkedOrderOriginalId(null);
             }
           }
-
-          // Calculate receipt totals before resetting state
-          const grossTotal = orderTotals.subtotal;
-          const itemDiscount = orderTotals.discountValue + orderTotals.giftCardValue;
-          const netTotal = orderTotals.total;
-          const tendered = payments.reduce((sum, p) => sum + p.amount, 0);
-          const change = Math.max(0, tendered - netTotal);
 
           // Convert cart items to receipt line items
           const receiptLineItems = lineItems.map(item => ({
@@ -2159,9 +2196,18 @@ export function Transactions({
             saleDiscount: (item as any).discount ? { amount: (item as any).discount } : undefined,
             customDiscount: undefined,
             lineSubtotal: item.price * item.quantity,
-            lineDiscount: (item as any).discount || 0,
-            lineTotal: (item.price * item.quantity) - ((item as any).discount || 0),
+            lineDiscount: (item as any).discount || item.lineDiscount || 0,
+            lineTotal: (item.price * item.quantity) - ((item as any).discount || item.lineDiscount || 0),
           }));
+
+          // Calculate receipt totals before resetting state
+          // Sum of all line item discounts (from cart line items)
+          const totalLineItemDiscounts = receiptLineItems.reduce((sum, item) => sum + (item.lineDiscount || 0), 0);
+          const grossTotal = orderTotals.subtotal + totalLineItemDiscounts; // Add back discounts to get gross
+          const itemDiscount = totalLineItemDiscounts; // Use sum of all line item discounts
+          const netTotal = orderTotals.total;
+          const tendered = payments.reduce((sum, p) => sum + p.amount, 0);
+          const change = Math.max(0, tendered - netTotal);
 
           // Convert payment entries to receipt payments
           const receiptPayments = payments.map(payment => {
@@ -2196,6 +2242,7 @@ export function Transactions({
             invoiceNumber,
             orderNumber: result.order.orderNumber || invoiceNumber,
             orderId: result.order.id,
+            orderDate: result.order.orderDate || result.order.completedAt,
             lineItems: receiptLineItems,
             payments: receiptPayments,
             customer: customer ? {
@@ -2218,6 +2265,9 @@ export function Transactions({
           // Reset state after a short delay to allow print dialog to show
           setTimeout(() => {
             resetTransactionState();
+            // Clear recalled order state when transaction is completed
+            setIsRecalledOrder(false);
+            setRecalledOrderId(null);
             // console.log('[Transactions] Transaction state cleared');
           }, 500);
 
@@ -2236,6 +2286,7 @@ export function Transactions({
     [
       buildOrderInput,
       currentParkedOrderId,
+      currentParkedOrderOriginalId,
       handleSearchParkedOrders,
       lineItems,
       effectiveParkedOrderRepo,
@@ -2347,6 +2398,7 @@ export function Transactions({
               }
             : undefined,
           parkedOrderId: currentParkedOrderId, // Pass parked order ID if resuming
+          parkedOrderOriginalId: currentParkedOrderOriginalId, // Pass original order ID to update instead of create
         },
       });
     },
@@ -2611,6 +2663,14 @@ export function Transactions({
           show('Select an item to return', 'error');
           return;
         }
+        
+        // TODO: Re-enable this check after scanner is available for order recall
+        // Only allow returns for recalled orders (not new orders that haven't been completed)
+        // if (!isRecalledOrder) {
+        //   show('Returns are only available for recalled orders. Please recall an order first.', 'error');
+        //   return;
+        // }
+        
         const itemToReturn = lineItems.find((item) => item.id === selectedItem);
         if (!itemToReturn) {
           show('Selected item not found', 'error');
@@ -2640,7 +2700,7 @@ export function Transactions({
                 originalPrice: (itemToReturn as any).originalPrice || itemToReturn.price,
               },
             ],
-            originalOrderId: currentParkedOrderId,
+            originalOrderId: recalledOrderId || currentParkedOrderId,
           },
         });
       },

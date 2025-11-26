@@ -24,13 +24,23 @@ export interface OrderDetailProps {
   };
 }
 
-const formatCurrency = (value?: number) => {
+const formatCurrency = (value?: number | null) => {
   const numberValue = typeof value === 'number' ? value : 0;
   const formatted = new Intl.NumberFormat('en-PK', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(numberValue);
   return `Rs ${formatted}`;
+};
+
+const formatDiscountValue = (amount?: number | null, percent?: number | null) => {
+  if (percent !== undefined && percent !== null && percent > 0) {
+    return `${percent}%`;
+  }
+  if (amount !== undefined && amount !== null && amount !== 0) {
+    return formatCurrency(amount);
+  }
+  return '—';
 };
 
 const formatDate = (value?: string) => {
@@ -301,11 +311,11 @@ export function OrderDetail({ salesOrderRepo }: OrderDetailProps = {}) {
                         <td className="px-4 py-3 text-center">{item.quantity}</td>
                         <td className="px-4 py-3 text-right">{formatCurrency(item.unitPrice)}</td>
                         <td className="px-4 py-3 text-right">
-                          {item.lineDiscountPercent !== undefined && item.lineDiscountPercent !== null
-                            ? `${item.lineDiscountPercent}%`
-                            : formatCurrency(item.lineDiscount)}
+                          {formatDiscountValue(item.lineDiscount, item.lineDiscountPercent)}
                         </td>
-                        <td className="px-4 py-3 text-right">{formatCurrency(item.customDiscountAmount)}</td>
+                        <td className="px-4 py-3 text-right">
+                          {formatDiscountValue(item.customDiscountAmount, item.customDiscountPercent)}
+                        </td>
                         <td className="px-4 py-3 text-right">{formatCurrency(item.lineTotal)}</td>
                       </tr>
                       {expandedLineId === item.id && (
@@ -337,13 +347,12 @@ export function OrderDetail({ salesOrderRepo }: OrderDetailProps = {}) {
                                 <DetailItem label="Original price" value={formatCurrency(item.unitPrice)} />
                                 <DetailItem
                                   label="Line discount"
-                                  value={
-                                    item.lineDiscountPercent !== undefined && item.lineDiscountPercent !== null
-                                      ? `${item.lineDiscountPercent}%`
-                                      : formatCurrency(item.lineDiscount)
-                                  }
+                                  value={formatDiscountValue(item.lineDiscount, item.lineDiscountPercent)}
                                 />
-                                <DetailItem label="Custom discount" value={formatCurrency(item.customDiscountAmount)} />
+                                <DetailItem
+                                  label="Custom discount"
+                                  value={formatDiscountValue(item.customDiscountAmount, item.customDiscountPercent)}
+                                />
                                 <DetailItem label="Line tax" value={formatCurrency(item.lineTax)} />
                                 <DetailItem label="Quantity" value={String(item.quantity)} />
                                 <DetailItem label="Notes" value={item.notes || '—'} />
