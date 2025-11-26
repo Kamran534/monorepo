@@ -53,6 +53,19 @@ export interface CreateSalesOrderInput {
   customerNotes?: string;
   taxAmountOverride?: number;
   totalAmountOverride?: number;
+  // Return-related fields
+  isReturn?: boolean;
+  originalOrderId?: string;
+  returnType?: 'Full' | 'Partial';
+  returnReason?: string;
+  returnLineItems?: Array<{
+    originalLineItemId: string;
+    variantId: string;
+    quantityReturned: number;
+    refundAmount: number;
+    condition: 'New' | 'Used' | 'Damaged';
+    restockable?: boolean;
+  }>;
 }
 
 export interface SalesOrder {
@@ -159,6 +172,47 @@ export interface CreateOrderResult {
   order?: SalesOrder;
   error?: string;
   isOffline?: boolean;
+}
+
+// ============================================
+// Order Modification & Return Interfaces
+// ============================================
+
+export interface ReturnLineItemInput {
+  originalLineItemId: string;
+  variantId: string;
+  quantityReturned: number;
+  refundAmount: number;
+  condition: 'New' | 'Used' | 'Damaged';
+  restockable?: boolean;
+}
+
+export interface ModifyOrderForReturnInput {
+  originalOrderId: string;
+  processedBy: string; // User ID who processed the return
+  returnType: 'Full' | 'Partial';
+  returnReason?: string;
+  returnLineItems: ReturnLineItemInput[];
+  refundMethod: string; // e.g., 'Cash', 'Card', 'Original'
+  restockFee?: number;
+  notes?: string;
+  // If customer owes more or gets refund
+  paymentAdjustment?: {
+    amount: number; // Negative for refund, positive for additional charge
+    paymentMethodId: string;
+    transactionId?: string;
+  };
+}
+
+export interface ModifyOrderResult {
+  success: boolean;
+  returnOrder?: {
+    id: string;
+    returnNumber: string;
+    refundAmount: number;
+  };
+  updatedOrder?: SalesOrder;
+  error?: string;
 }
 
 export class SalesOrderRepository {
@@ -372,6 +426,33 @@ export class SalesOrderRepository {
       return {
         success: false,
         error: error.message || 'Failed to load order',
+      };
+    }
+  }
+
+  async getOrderById(orderId: string): Promise<{ success: boolean; order?: SalesOrder; error?: string }> {
+    try {
+      const normalizedId = orderId?.trim();
+      if (!normalizedId) {
+        return { success: false, error: 'Order ID is required' };
+      }
+
+      const rows = await this.localDb.query<any>(
+        `SELECT * FROM SaleOrder WHERE id = ? LIMIT 1`,
+        [normalizedId],
+      );
+
+      if (rows.length === 0) {
+        return { success: false, error: `Order ${normalizedId} not found` };
+      }
+
+      const order = this.mapOrderFromDb(rows[0]);
+      return { success: true, order };
+    } catch (error: any) {
+      console.error('[SalesOrderRepository] Failed to load order by ID:', error);
+      return {
+        success: false,
+        error: error?.message || 'Failed to load order',
       };
     }
   }
@@ -591,8 +672,18 @@ export class SalesOrderRepository {
       const now = new Date().toISOString();
 
       const calculatedTotals = this.calculateOrderTotals(data);
-      const amountPaid = data.payments.reduce((sum, p) => sum + p.amount, 0);
-      const changeAmount = Math.max(0, amountPaid - calculatedTotals.totalAmount);
+
+      // For return orders (negative total):
+      // - amountPaid should be 0 (user didn't pay us)
+      // - changeAmount should be the absolute refund amount (what we paid back to user)
+      // For regular orders (positive total):
+      // - amountPaid is sum of all payments
+      // - changeAmount is overpayment given back as change
+      const isReturnOrder = calculatedTotals.totalAmount < 0;
+      const amountPaid = isReturnOrder ? 0 : data.payments.reduce((sum, p) => sum + p.amount, 0);
+      const changeAmount = isReturnOrder
+        ? Math.abs(calculatedTotals.totalAmount)  // For returns: absolute refund amount
+        : Math.max(0, amountPaid - calculatedTotals.totalAmount);  // For sales: change given back
 
       // Start transaction (ignored for IndexedDB, but kept for SQLite compatibility)
       await this.localDb.execute('BEGIN TRANSACTION');
@@ -659,7 +750,7 @@ export class SalesOrderRepository {
             data.adjustment?.reason || null,
             calculatedTotals.totalAmount,
             amountPaid,
-            Math.max(0, calculatedTotals.totalAmount - amountPaid),
+            calculatedTotals.totalAmount < 0 ? 0 : Math.max(0, calculatedTotals.totalAmount - amountPaid),  // amountDue is 0 for returns
             changeAmount,
             data.notes || null,
             data.customerNotes || null,
@@ -743,7 +834,7 @@ export class SalesOrderRepository {
               data.adjustment?.reason || null,
               calculatedTotals.totalAmount,
               amountPaid,
-              Math.max(0, calculatedTotals.totalAmount - amountPaid),
+              calculatedTotals.totalAmount < 0 ? 0 : Math.max(0, calculatedTotals.totalAmount - amountPaid),  // amountDue is 0 for returns
               changeAmount,
               data.notes || null,
               data.customerNotes || null,
@@ -868,6 +959,67 @@ export class SalesOrderRepository {
         }
       }
 
+      // If this is a return order, create ReturnOrder and ReturnLineItem records
+      if (data.isReturn && data.originalOrderId && data.returnLineItems && data.returnLineItems.length > 0) {
+        const returnId = this.generateId();
+        const returnNumber = this.generateReturnNumber();
+        const refundMethod = data.payments.length > 0 ? data.payments[0].paymentMethodId : null;
+        const totalRefundAmount = Math.abs(calculatedTotals.totalAmount);
+
+        try {
+          // Insert ReturnOrder
+          await this.localDb.execute(
+            `INSERT INTO ReturnOrder (
+              id, returnNumber, originalOrderId, locationId, customerId, processedBy,
+              returnDate, returnType, returnReason, notes, refundMethod, refundAmount,
+              restockFee, status, createdAt, updatedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              returnId,
+              returnNumber,
+              data.originalOrderId,
+              data.locationId,
+              data.customerId || null,
+              data.cashierId, // processedBy = cashier who processed the return
+              now,
+              data.returnType || 'Partial',
+              data.returnReason || null,
+              data.notes || null,
+              refundMethod,
+              totalRefundAmount,
+              0, // restockFee
+              'Completed',
+              now,
+              now,
+            ]
+          );
+
+          // Insert ReturnLineItem records
+          for (const returnLineItem of data.returnLineItems) {
+            const returnLineId = this.generateId();
+            await this.localDb.execute(
+              `INSERT INTO ReturnLineItem (
+                id, returnId, originalLineItemId, variantId, quantityReturned,
+                refundAmount, condition, restockable
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                returnLineId,
+                returnId,
+                returnLineItem.originalLineItemId,
+                returnLineItem.variantId,
+                returnLineItem.quantityReturned,
+                returnLineItem.refundAmount,
+                returnLineItem.condition,
+                returnLineItem.restockable !== false ? 1 : 0,
+              ]
+            );
+          }
+        } catch (returnError: any) {
+          console.error('[SalesOrderRepository] Failed to insert return records:', returnError);
+          // Don't throw - allow the order to be saved even if return records fail
+        }
+      }
+
       // Commit transaction (ignored for IndexedDB, but kept for SQLite compatibility)
       await this.localDb.execute('COMMIT');
 
@@ -975,7 +1127,8 @@ export class SalesOrderRepository {
       lineItemDiscount,
       orderDiscount,
       taxAmount,
-      totalAmount: Math.max(0, totalAmount),
+      // Allow negative totals for returns (when subtotal is negative)
+      totalAmount: totalAmount,
     };
   }
 
@@ -1069,6 +1222,15 @@ export class SalesOrderRepository {
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     return `ORD-${timestamp}-${random}`;
+  }
+
+  /**
+   * Generate return number
+   */
+  private generateReturnNumber(): string {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `RET-${timestamp}-${random}`;
   }
 
   /**
@@ -1333,5 +1495,207 @@ export class SalesOrderRepository {
     }
 
     return order;
+  }
+
+  /**
+   * Modify order for return - updates original order and creates return records
+   * This method handles:
+   * 1. Creating ReturnOrder and ReturnLineItem records
+   * 2. Updating OrderLineItem quantities and refund status
+   * 3. Updating SaleOrder totals
+   * 4. Handling payment adjustments (refunds or additional charges)
+   */
+  async modifyOrderForReturn(input: ModifyOrderForReturnInput): Promise<ModifyOrderResult> {
+    try {
+      const now = new Date().toISOString();
+
+      // Generate IDs
+      const returnOrderId = this.generateId();
+      const returnNumber = `RTN-${Date.now()}`;
+
+      // Calculate total refund amount
+      const totalRefundAmount = input.returnLineItems.reduce((sum, item) => sum + item.refundAmount, 0);
+      const restockFee = input.restockFee || 0;
+      const netRefundAmount = totalRefundAmount - restockFee;
+
+      console.log('[SalesOrderRepository] Creating return order:', {
+        returnOrderId,
+        returnNumber,
+        originalOrderId: input.originalOrderId,
+        totalRefundAmount,
+        restockFee,
+        netRefundAmount,
+      });
+
+      // 1. Create ReturnOrder
+      await this.localDb.execute(
+        `INSERT INTO ReturnOrder (
+          id, returnNumber, originalOrderId, locationId, customerId,
+          processedBy, returnDate, returnType, returnReason, notes,
+          refundMethod, refundAmount, restockFee, status, createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          returnOrderId,
+          returnNumber,
+          input.originalOrderId,
+          null, // locationId - get from original order if needed
+          null, // customerId - get from original order if needed
+          input.processedBy,
+          now,
+          input.returnType,
+          input.returnReason || null,
+          input.notes || null,
+          input.refundMethod,
+          netRefundAmount,
+          restockFee,
+          'Completed',
+          now,
+          now,
+        ]
+      );
+
+      console.log('[SalesOrderRepository] ReturnOrder created successfully');
+
+      // 2. Create ReturnLineItem records and update OrderLineItem
+      for (const returnLine of input.returnLineItems) {
+        const returnLineItemId = this.generateId();
+
+        // Insert ReturnLineItem
+        await this.localDb.execute(
+          `INSERT INTO ReturnLineItem (
+            id, returnId, originalLineItemId, variantId,
+            quantityReturned, refundAmount, condition, restockable
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            returnLineItemId,
+            returnOrderId,
+            returnLine.originalLineItemId,
+            returnLine.variantId,
+            returnLine.quantityReturned,
+            returnLine.refundAmount,
+            returnLine.condition,
+            returnLine.restockable !== false ? 1 : 0,
+          ]
+        );
+
+        // Update OrderLineItem - mark refund status and quantity
+        await this.localDb.execute(
+          `UPDATE OrderLineItem
+           SET isRefunded = 1,
+               refundedQuantity = refundedQuantity + ?
+           WHERE id = ?`,
+          [returnLine.quantityReturned, returnLine.originalLineItemId]
+        );
+
+        console.log('[SalesOrderRepository] ReturnLineItem created and OrderLineItem updated:', {
+          returnLineItemId,
+          originalLineItemId: returnLine.originalLineItemId,
+          quantityReturned: returnLine.quantityReturned,
+        });
+      }
+
+      // 3. Update SaleOrder totals
+      // Recalculate order totals after return
+      const orderLines = await this.localDb.query<any>(
+        `SELECT quantity, unitPrice, lineDiscount, lineTax, lineTotal, refundedQuantity
+         FROM OrderLineItem
+         WHERE orderId = ?`,
+        [input.originalOrderId]
+      );
+
+      let newSubtotal = 0;
+      let newTaxAmount = 0;
+      let newTotalDiscount = 0;
+
+      for (const line of orderLines) {
+        const activeQuantity = line.quantity - (line.refundedQuantity || 0);
+        const lineSubtotal = line.unitPrice * activeQuantity;
+        const lineDiscount = (line.lineDiscount || 0) * (activeQuantity / line.quantity);
+        const lineTax = (line.lineTax || 0) * (activeQuantity / line.quantity);
+
+        newSubtotal += lineSubtotal;
+        newTotalDiscount += lineDiscount;
+        newTaxAmount += lineTax;
+      }
+
+      const newTotalAmount = newSubtotal - newTotalDiscount + newTaxAmount;
+
+      await this.localDb.execute(
+        `UPDATE SaleOrder
+         SET subtotal = ?,
+             taxAmount = ?,
+             discountAmount = ?,
+             totalAmount = ?,
+             updatedAt = ?
+         WHERE id = ?`,
+        [
+          newSubtotal,
+          newTaxAmount,
+          newTotalDiscount,
+          newTotalAmount,
+          now,
+          input.originalOrderId,
+        ]
+      );
+
+      console.log('[SalesOrderRepository] SaleOrder updated with new totals:', {
+        newSubtotal,
+        newTaxAmount,
+        newTotalDiscount,
+        newTotalAmount,
+      });
+
+      // 4. Handle payment adjustment if needed
+      if (input.paymentAdjustment) {
+        const paymentId = this.generateId();
+        const { amount, paymentMethodId, transactionId } = input.paymentAdjustment;
+
+        // Negative amount = refund, positive = additional charge
+        const paymentStatus = amount < 0 ? 'Refunded' : 'Completed';
+
+        await this.localDb.execute(
+          `INSERT INTO OrderPayment (
+            id, orderId, paymentMethodId, amount, status,
+            transactionId, processedAt, refundedAmount, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            paymentId,
+            input.originalOrderId,
+            paymentMethodId,
+            Math.abs(amount),
+            paymentStatus,
+            transactionId || null,
+            now,
+            amount < 0 ? Math.abs(amount) : 0,
+            now,
+          ]
+        );
+
+        console.log('[SalesOrderRepository] Payment adjustment recorded:', {
+          paymentId,
+          amount,
+          status: paymentStatus,
+        });
+      }
+
+      // 5. Return success with return order details
+      const updatedOrder = await this.getOrderById(input.originalOrderId);
+
+      return {
+        success: true,
+        returnOrder: {
+          id: returnOrderId,
+          returnNumber,
+          refundAmount: netRefundAmount,
+        },
+        updatedOrder: updatedOrder.success ? updatedOrder.order : undefined,
+      };
+    } catch (error: any) {
+      console.error('[SalesOrderRepository] Error modifying order for return:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to process return',
+      };
+    }
   }
 }

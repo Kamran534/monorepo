@@ -1139,6 +1139,7 @@ export function Transactions({
             (item as any).productSize ??
             undefined,
           initialTotal: finalLineTotal,
+          // Don't automatically mark as return - user will manually mark items
         });
       }
 
@@ -3168,6 +3169,7 @@ export function Transactions({
             salesPersons={salesPersons}
             payments={paymentEntries}
             linesMissingSalesPerson={missingSalesPersonLineIds}
+            isRecalledOrder={isRecalledOrder}
           />
         </div>
 

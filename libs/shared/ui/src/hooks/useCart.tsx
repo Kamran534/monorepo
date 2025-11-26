@@ -55,8 +55,10 @@ const recalcLineTotals = (line: LineItem): LineItem => {
     discountAmount > 0 ? Number((Math.max(discountedSubtotal, 0) * LINE_TAX_RATE).toFixed(2)) : 0;
   const finalLineTax = providedLineTax ?? computedLineTax;
 
-  const providedTotal = parseNumeric(line.initialTotal ?? line.total ?? (line as unknown as { total?: number }).total);
-  const finalTotal = providedTotal ?? discountedSubtotal;
+  // Only use providedTotal if initialTotal is set or if total is a non-zero value
+  // This allows passing total: 0 to force recalculation
+  const providedTotal = parseNumeric(line.initialTotal);
+  const finalTotal = (providedTotal !== undefined && providedTotal !== 0) ? providedTotal : discountedSubtotal;
 
   return {
     ...line,
@@ -164,8 +166,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           customDiscountAmount: item.customDiscountAmount,
           customDiscountPercent: item.customDiscountPercent,
           lineTax: item.lineTax,
-          total: price * availableQty,
-        })];
+          total: 0, // Pass 0 to force recalcLineTotals to calculate from price * quantity
+        } as LineItem)];
       }
 
       const id = item.id ?? Math.random().toString(36).slice(2, 9);
@@ -187,8 +189,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         customDiscountAmount: item.customDiscountAmount,
         customDiscountPercent: item.customDiscountPercent,
         lineTax: item.lineTax,
-        total: price * qtyToAdd,
-      })];
+        total: 0, // Pass 0 to force recalcLineTotals to calculate from price * quantity
+      } as LineItem)];
     });
   }, []);
 

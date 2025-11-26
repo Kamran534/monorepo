@@ -69,6 +69,8 @@ export interface TransactionLinesProps extends ComponentProps {
   payments?: TransactionPaymentEntry[];
   /** Available sales persons for per-line assignment */
   salesPersons?: SalesPersonData[];
+  /** Flag to indicate if this is a recalled order (hides quantity controls) */
+  isRecalledOrder?: boolean;
 }
 
 /**
@@ -89,6 +91,7 @@ export function TransactionLines({
   paymentMethods = [],
   payments = [],
   salesPersons = [],
+  isRecalledOrder = false,
   className = '',
 }: TransactionLinesProps) {
   const [expandedItemId, setExpandedItemId] = React.useState<string | null>(null);
@@ -203,8 +206,15 @@ export function TransactionLines({
   const adjustmentValue = summary.adjustment ?? 0;
   const taxValue = summary.tax ?? 0;
   const amountPaid = summary.paid ?? 0;
-  // Allow negative amount due for returns (don't clamp to 0)
-  const amountDue = summary.total - amountPaid;
+
+  // Calculate net amount (total - paid)
+  const netAmount = summary.total - amountPaid;
+
+  // For display purposes:
+  // - Amount due: Always shows positive amount customer needs to pay (0 if return/overpaid)
+  // - Change: Shows refund amount when we owe customer (returns or overpayment)
+  const amountDue = netAmount > 0 ? netAmount : 0;
+  const changeAmount = netAmount < 0 ? Math.abs(netAmount) : 0;
 
   return (
     <div
@@ -610,7 +620,22 @@ export function TransactionLines({
             <span>Tax</span>
             <span>{formatCurrency(taxValue)}</span>
           </div>
+
+          {/* Total line - shows gross total (subtotal - discounts + adjustments + tax) */}
+          <div className="flex justify-between">
+            <span>Total</span>
+            <span>{formatCurrency(summary.total)}</span>
+          </div>
+
+          {/* Show Change line when we owe customer money (returns or overpayment) */}
+          {changeAmount > 0 && (
+            <div className="flex justify-between">
+              <span>Change</span>
+              <span>{formatCurrency(changeAmount)}</span>
+            </div>
+          )}
         </div>
+
         <div
           className="flex justify-between text-base md:text-lg font-bold pt-2"
           style={{
@@ -624,9 +649,7 @@ export function TransactionLines({
               color:
                 amountDue > 0
                   ? 'var(--color-accent-blue)'
-                  : amountDue < 0
-                    ? 'var(--color-success)'
-                    : 'var(--color-text-secondary)',
+                  : 'var(--color-text-secondary)',
             }}
           >
             {formatCurrency(amountDue)}
